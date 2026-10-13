@@ -1,0 +1,91 @@
+<div class="cn-statblock">
+  @if (showName()) {
+    <h2 class="cn-sb-name">{{ entity().name }}</h2>
+  }
+  @if (isSubclass()) {
+    <div class="cn-sb-sub">
+      <cn-inline [text]="'{@class ' + c()['className'] + '|' + c()['classSource'] + '} subclass'" />
+    </div>
+  } @else {
+    <div class="cn-sb-rule"></div>
+    @if (hitDie()) {
+      <div><span class="cn-sb-label">Hit Die:</span>&ngsp;{{ hitDie() }}</div>
+    }
+    @if (saves()) {
+      <div><span class="cn-sb-label">Saving Throws:</span>&ngsp;{{ saves() }}</div>
+    }
+    @if (armor()) {
+      <div><span class="cn-sb-label">Armor:</span>&ngsp;<cn-inline [text]="armor()" /></div>
+    }
+    @if (weapons()) {
+      <div><span class="cn-sb-label">Weapons:</span>&ngsp;<cn-inline [text]="weapons()" /></div>
+    }
+    @if (tools()) {
+      <div><span class="cn-sb-label">Tools:</span>&ngsp;<cn-inline [text]="tools()" /></div>
+    }
+    @if (skills()) {
+      <div><span class="cn-sb-label">Skills:</span>&ngsp;<cn-inline [text]="skills()" /></div>
+    }
+
+    <div class="cn-prose mt-3 overflow-x-auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Level</th>
+            <th>PB</th>
+            <th>Features</th>
+            @for (col of tableColumns(); track $index) {
+              <th><cn-inline [text]="col" /></th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of levelRows(); track row.level) {
+            <tr>
+              <td>{{ row.level }}</td>
+              <td>{{ row.pb }}</td>
+              <td>{{ row.features }}</td>
+              @for (cell of row.cells; track $index) {
+                <td><cn-inline [text]="cell" /></td>
+              }
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    @if (subclasses().length) {
+      <div class="mt-3">
+        <div class="cn-sb-label mb-1">{{ c()['subclassTitle'] ?? 'Subclass' }}</div>
+        <div class="flex flex-wrap gap-1.5">
+          @for (sc of subclasses(); track sc.uid) {
+            <button
+              type="button"
+              class="rounded-full border px-2.5 py-0.5 text-sm transition"
+              [class]="selectedSubclassUid() === sc.uid ? 'border-accent bg-accent text-accent-ink' : 'border-line hover:border-accent'"
+              (click)="selectedSubclassUid.set(selectedSubclassUid() === sc.uid ? null : sc.uid)"
+            >
+              {{ sc.name }} <span class="opacity-70">{{ sc.source }}</span>
+            </button>
+          }
+        </div>
+      </div>
+    }
+  }
+
+  <div class="cn-prose mt-2">
+    @for (f of allFeatures(); track f.uid) {
+      <h3>
+        <span class="text-muted">Level {{ f.level }}:</span> {{ f.name }}
+        @if (f.fromSubclass) {
+          <span class="cn-badge cn-badge-source ml-1 align-middle">subclass</span>
+        }
+      </h3>
+      @if (f.feature) {
+        <cn-entries [entries]="entriesOf(f)" [depth]="2" />
+      } @else {
+        <p class="cn-s-muted">Feature details unavailable.</p>
+      }
+    }
+  </div>
+</div>

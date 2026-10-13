@@ -1,0 +1,136 @@
+@if (error()) {
+  <p class="m-4 rounded-md border border-accent/50 bg-accent/5 px-3 py-2 text-sm" role="alert">{{ error() }}</p>
+}
+@if (enc(); as e) {
+  <div class="mx-auto w-full max-w-5xl p-4 sm:p-6">
+    <nav class="mb-1 text-xs text-muted"><a class="hover:text-accent" [routerLink]="['/c', store.id(), 'encounters']">Encounters</a> /</nav>
+    <header class="flex flex-wrap items-center gap-2">
+      <span class="text-3xl">⚔️</span>
+      <input class="min-w-0 flex-1 rounded-md bg-transparent font-display text-3xl font-bold outline-none hover:bg-panel-2/50 focus:bg-panel-2/50" [value]="e.name" aria-label="Encounter name" (input)="save({ name: $any($event.target).value || 'Encounter' })" />
+      <span class="text-xs text-muted" aria-live="polite">{{ status() }}</span>
+      <button type="button" class="rounded-md border border-line px-3 py-1.5 text-sm text-muted hover:border-accent hover:text-accent" (click)="remove()">Delete</button>
+    </header>
+
+    <div class="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <section aria-label="Creatures">
+        <div class="overflow-x-auto rounded-xl border border-line bg-panel">
+          <table class="w-full text-sm">
+            <thead class="text-left text-xs text-muted">
+              <tr><th class="px-3 py-2">Creature</th><th class="px-2">CR</th><th class="px-2">XP each</th><th class="px-2">Count</th><th class="px-2" title="Starts hidden from the player view">Hidden</th><th></th></tr>
+            </thead>
+            <tbody>
+              @for (c of creatures(); track c.id) {
+                @let r = resolvedById().get(c.id);
+                <tr class="border-t border-line">
+                  <td class="px-3 py-1.5">
+                    <span class="font-medium">{{ r?.name ?? c.name }}</span>
+                    @if (c.kind === 'npc') {<span class="ml-1 text-xs text-muted">NPC</span>}
+                    @if (r?.missing) {<span class="ml-1 cn-badge cn-badge-legacy" title="Not found in this campaign's sources">missing</span>}
+                    @if (r?.hasLairXp) {
+                      <label class="ml-2 text-xs text-muted"><input type="checkbox" [checked]="c.lair" (change)="patchCreature(c.id, { lair: $any($event.target).checked })" /> in its lair</label>
+                    }
+                  </td>
+                  <td class="px-2">{{ r?.cr ?? '—' }}</td>
+                  <td class="px-2">{{ r?.xp ?? c.xp ?? '—' }}</td>
+                  <td class="px-2">
+                    <span class="inline-flex items-center gap-1">
+                      <button type="button" class="rounded border border-line px-1.5" (click)="c.count > 1 ? patchCreature(c.id, { count: c.count - 1 }) : removeCreature(c.id)" [attr.aria-label]="'One fewer ' + (r?.name ?? c.name)">−</button>
+                      <span class="w-6 text-center">{{ c.count }}</span>
+                      <button type="button" class="rounded border border-line px-1.5" (click)="patchCreature(c.id, { count: Math.min(50, c.count + 1) })" [attr.aria-label]="'One more ' + (r?.name ?? c.name)">+</button>
+                    </span>
+                  </td>
+                  <td class="px-2 text-center"><input type="checkbox" [checked]="c.hidden" (change)="patchCreature(c.id, { hidden: $any($event.target).checked })" [attr.aria-label]="'Hidden: ' + (r?.name ?? c.name)" /></td>
+                  <td class="px-2 text-right"><button type="button" class="text-muted hover:text-accent" (click)="removeCreature(c.id)" [attr.aria-label]="'Remove ' + (r?.name ?? c.name)">✕</button></td>
+                </tr>
+              } @empty {
+                <tr><td colspan="6" class="px-3 py-4 text-center text-muted">No creatures yet.</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <div class="mt-2 flex flex-wrap gap-2 text-sm">
+          <button type="button" class="rounded-md border border-line px-3 py-1.5 hover:border-accent" [class.border-accent]="adding() === 'monster'" (click)="adding.set(adding() === 'monster' ? null : 'monster')">+ Monster</button>
+          <button type="button" class="rounded-md border border-line px-3 py-1.5 hover:border-accent" [class.border-accent]="adding() === 'npc'" (click)="adding.set(adding() === 'npc' ? null : 'npc')">+ NPC</button>
+          <button type="button" class="rounded-md border border-line px-3 py-1.5 hover:border-accent" [class.border-accent]="adding() === 'custom'" (click)="adding.set(adding() === 'custom' ? null : 'custom')">+ Custom</button>
+        </div>
+        @switch (adding()) {
+          @case ('monster') {
+            <div class="mt-2"><cn-ref-picker kind="monster" placeholder="Search the bestiary…" (selected)="addMonster($event)" /></div>
+          }
+          @case ('npc') {
+            <div class="mt-2"><cn-page-picker pageType="npc" (selected)="addNpc($event)" /></div>
+          }
+          @case ('custom') {
+            <form class="mt-2 flex flex-wrap items-end gap-2 text-sm" (submit)="$event.preventDefault(); addCustom(cname.value, ccr.value, chp.value, cac.value)">
+              <label class="flex flex-col gap-1"><span class="text-xs text-muted">Name</span><input #cname class="cn-prop-input" required /></label>
+              <label class="flex flex-col gap-1"><span class="text-xs text-muted">CR</span>
+                <select #ccr class="cn-prop-input">@for (cr of crs; track cr) {<option [value]="cr" [selected]="cr === '1'">{{ cr }}</option>}</select>
+              </label>
+              <label class="flex flex-col gap-1"><span class="text-xs text-muted">HP</span><input #chp type="number" class="cn-prop-input w-20" /></label>
+              <label class="flex flex-col gap-1"><span class="text-xs text-muted">AC</span><input #cac type="number" class="cn-prop-input w-16" /></label>
+              <button type="submit" class="rounded-md bg-accent px-3 py-1.5 font-semibold text-white">Add</button>
+            </form>
+          }
+        }
+
+        <label class="mt-4 block text-sm">
+          <span class="mb-1 block text-xs text-muted">Notes</span>
+          <textarea class="cn-prop-input w-full" rows="3" [value]="e.notes" (input)="save({ notes: $any($event.target).value })" placeholder="Tactics, terrain, what they want…"></textarea>
+        </label>
+      </section>
+
+      <aside class="flex flex-col gap-4">
+        <section class="rounded-xl border border-line bg-panel p-3" aria-label="Difficulty">
+          <h2 class="mb-1 text-xs font-semibold tracking-wide text-muted uppercase">{{ context.ruleset().terminology.encounterDifficulty }}</h2>
+          @if (result(); as r) {
+            <p class="font-display text-2xl font-bold capitalize" data-testid="difficulty">{{ r.difficulty }}</p>
+            <div class="my-2 h-2 overflow-hidden rounded-full bg-panel-2" role="meter" [attr.aria-valuenow]="meter()" aria-valuemin="0" aria-valuemax="100" aria-label="Difficulty">
+              <div class="h-full bg-accent" [style.width.%]="meter()"></div>
+            </div>
+            <dl class="grid grid-cols-2 gap-x-2 text-sm">
+              <dt class="text-muted">Total XP</dt><dd>{{ r.totalXp }}</dd>
+              @if (r.multiplier !== 1) {
+                <dt class="text-muted">× {{ r.multiplier }} ({{ r.creatureCount }} creatures)</dt><dd>{{ r.adjustedXp }}</dd>
+              }
+              <dt class="text-muted">Per character</dt><dd>{{ r.partySize ? Math.floor(r.totalXp / r.partySize) : '—' }}</dd>
+            </dl>
+            <ul class="mt-2 text-xs">
+              @for (t of r.tiers; track t.id) {
+                <li class="flex justify-between" [class.font-semibold]="t.id === r.difficulty"><span>{{ t.label }}</span><span>{{ t.threshold }}</span></li>
+              }
+            </ul>
+          }
+        </section>
+
+        <section class="rounded-xl border border-line bg-panel p-3 text-sm" aria-label="Party">
+          <h2 class="mb-1 text-xs font-semibold tracking-wide text-muted uppercase">Party</h2>
+          <label class="flex items-center gap-1"><input type="radio" name="party" [checked]="e.party.mode === 'campaign'" (change)="setPartyMode('campaign')" /> The campaign's characters</label>
+          @if (e.party.mode === 'campaign') {
+            <ul class="mt-1 ml-5 text-xs text-muted">
+              @for (m of e.partyMembers; track m.pageId) {<li>{{ m.name }} (level {{ m.level }})</li>} @empty {<li>No player characters yet.</li>}
+            </ul>
+          }
+          <label class="mt-1 flex items-center gap-1"><input type="radio" name="party" [checked]="e.party.mode === 'custom'" (change)="setPartyMode('custom')" /> Levels</label>
+          @if (e.party.mode === 'custom') {
+            <input class="cn-prop-input mt-1 w-full" [value]="e.party.levels.join(', ')" placeholder="4, 4, 5, 5" (change)="setLevels($any($event.target).value)" aria-label="Party levels" />
+          }
+        </section>
+
+        <section class="rounded-xl border border-line bg-panel p-3 text-sm" aria-label="Run">
+          <label class="flex items-center gap-1"><input type="checkbox" [checked]="includeParty()" (change)="includeParty.set($any($event.target).checked)" /> Add the party to the tracker</label>
+          <button type="button" class="mt-2 w-full rounded-md bg-accent px-3 py-2 font-semibold text-white disabled:opacity-50" [disabled]="!creatures().length" (click)="run()">Run encounter</button>
+          @if (runs().length) {
+            <h3 class="mt-3 text-xs font-semibold tracking-wide text-muted uppercase">Runs</h3>
+            <ul class="text-xs">
+              @for (t of runs(); track t.id) {
+                <li><a class="cn-link" [routerLink]="['/c', store.id(), 'trackers', t.id]">{{ t.status === 'active' ? 'Running' : 'Ended' }} · round {{ t.round }}</a></li>
+              }
+            </ul>
+          }
+        </section>
+      </aside>
+    </div>
+  </div>
+} @else if (!error()) {
+  <p class="p-8 text-center text-muted">Loading…</p>
+}

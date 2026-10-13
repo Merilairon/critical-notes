@@ -1,0 +1,108 @@
+@if (tracker(); as t) {
+  <div class="mx-auto w-full max-w-5xl p-4 sm:p-6">
+    <nav class="mb-1 text-xs text-muted"><a class="hover:text-accent" [routerLink]="['/c', store.id(), 'encounters']">Encounters</a> /</nav>
+    <header class="flex flex-wrap items-center gap-2">
+      <h1 class="min-w-0 flex-1 truncate font-display text-3xl font-bold">{{ t.name }}</h1>
+      <span class="rounded-full border border-line px-3 py-1 text-sm" aria-live="polite">{{ ended() ? 'Ended' : started() ? 'Round ' + t.state.round : 'Not started' }}</span>
+      <a class="rounded-md border border-line px-3 py-1.5 text-sm hover:border-accent" [routerLink]="playerViewLink()" target="_blank">Player view ↗</a>
+      <button type="button" class="rounded-md border border-line px-3 py-1.5 text-sm text-muted hover:border-accent hover:text-accent" (click)="remove()">Delete</button>
+    </header>
+    @if (error()) {<p class="mt-2 text-sm text-accent" role="alert">{{ error() }}</p>}
+
+    @if (!ended()) {
+      <div class="sticky top-0 z-10 mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-panel/95 p-2 text-sm backdrop-blur" role="toolbar" aria-label="Combat">
+        @if (started()) {
+          <button type="button" class="rounded-md border border-line px-3 py-1.5" (click)="act({ type: 'prev' })" title="Previous turn (p)">◀ Prev</button>
+          <button type="button" class="rounded-md bg-accent px-4 py-1.5 font-semibold text-white" (click)="act({ type: 'next' })" title="Next turn (n)">Next turn ▶</button>
+        } @else {
+          <button type="button" class="rounded-md bg-accent px-4 py-1.5 font-semibold text-white" (click)="act({ type: 'start' })" title="Start (n)">Start combat</button>
+        }
+        <button type="button" class="rounded-md border border-line px-3 py-1.5" (click)="act({ type: 'rollInitiative', which: 'missing' })" title="Roll for everyone without initiative (r)">🎲 Roll missing</button>
+        <button type="button" class="rounded-md border border-line px-3 py-1.5" (click)="act({ type: 'rollInitiative', which: 'npcs' })">🎲 Reroll monsters</button>
+        <span class="mx-1 h-5 border-l border-line"></span>
+        <button type="button" class="rounded-md border border-line px-3 py-1.5" [class.border-accent]="adding() === 'monster'" (click)="adding.set(adding() === 'monster' ? null : 'monster')">+ Monster</button>
+        <button type="button" class="rounded-md border border-line px-3 py-1.5" [class.border-accent]="adding() === 'pc'" (click)="adding.set(adding() === 'pc' ? null : 'pc')">+ Character</button>
+        <button type="button" class="rounded-md border border-line px-3 py-1.5" [class.border-accent]="adding() === 'custom'" (click)="adding.set(adding() === 'custom' ? null : 'custom')">+ Other</button>
+        <button type="button" class="ml-auto rounded-md border border-line px-3 py-1.5 text-muted hover:border-accent hover:text-accent" (click)="end()">End combat</button>
+      </div>
+      @switch (adding()) {
+        @case ('monster') {<div class="mt-2"><cn-ref-picker kind="monster" placeholder="Search the bestiary…" (selected)="addMonster($event)" /></div>}
+        @case ('pc') {
+          <div class="mt-2 flex flex-wrap gap-2 text-sm">
+            @for (pc of pcs(); track pc.id) {<button type="button" class="rounded-md border border-line px-3 py-1.5 hover:border-accent" (click)="addPc(pc.id)">{{ pc.title }}</button>} @empty {<span class="text-muted">No player characters in this campaign.</span>}
+          </div>
+        }
+        @case ('custom') {
+          <form class="mt-2 flex flex-wrap items-end gap-2 text-sm" (submit)="$event.preventDefault(); addCustom(n.value, hp.value, ac.value, init.value)">
+            <label class="flex flex-col gap-1"><span class="text-xs text-muted">Name</span><input #n class="cn-prop-input" required /></label>
+            <label class="flex flex-col gap-1"><span class="text-xs text-muted">HP</span><input #hp type="number" class="cn-prop-input w-20" /></label>
+            <label class="flex flex-col gap-1"><span class="text-xs text-muted">AC</span><input #ac type="number" class="cn-prop-input w-16" /></label>
+            <label class="flex flex-col gap-1"><span class="text-xs text-muted">Initiative</span><input #init type="number" class="cn-prop-input w-20" /></label>
+            <button type="submit" class="rounded-md bg-accent px-3 py-1.5 font-semibold text-white">Add</button>
+          </form>
+        }
+      }
+    } @else {
+      <p class="mt-3 rounded-md border border-line bg-panel px-3 py-2 text-sm">This combat has ended. Player characters' hit points were saved to their pages.</p>
+    }
+
+    <ol class="mt-3 flex flex-col gap-2" aria-label="Initiative order">
+      @for (c of order(); track c.id) {
+        <li class="rounded-xl border bg-panel p-2 sm:p-3" [class.border-accent]="c.id === t.state.activeId" [class.ring-2]="c.id === t.state.activeId" [class.ring-accent]="c.id === t.state.activeId" [class.opacity-60]="c.hp === 0" [attr.aria-current]="c.id === t.state.activeId ? 'true' : null">
+          <div class="flex flex-wrap items-center gap-2">
+            <input type="number" class="cn-prop-input w-16 text-center font-bold" [value]="c.initiative ?? ''" placeholder="init" [attr.aria-label]="'Initiative of ' + c.name" (change)="setInitiative(c, $any($event.target).value)" />
+            <span class="min-w-0 flex-1">
+              <span class="font-semibold">{{ c.name }}</span>
+              <span class="ml-1 text-xs text-muted">{{ c.kind === 'pc' ? 'PC' : c.kind }}{{ c.initBonus ? ' · ' + (c.initBonus > 0 ? '+' : '') + c.initBonus : '' }}</span>
+              @if (c.hidden) {<span class="ml-1 cn-badge cn-badge-legacy" title="Not shown in the player view">hidden</span>}
+            </span>
+            @if (c.ac !== null) {<span class="rounded border border-line px-2 py-0.5 text-sm" title="Armor class">🛡 {{ c.ac }}</span>}
+            @if (c.hp !== null) {
+              <span class="flex items-center gap-2 text-sm">
+                <span class="w-28">
+                  <span class="font-mono">{{ c.hp }}</span><span class="text-muted">/{{ c.hpMax ?? '?' }}</span>
+                  @if (c.tempHp) {<span class="ml-1 text-xs text-accent">+{{ c.tempHp }} temp</span>}
+                  <span class="mt-0.5 block h-1.5 overflow-hidden rounded-full bg-panel-2"><span class="block h-full bg-accent" [style.width.%]="hpPercent(c)"></span></span>
+                </span>
+                <input class="cn-prop-input w-20" placeholder="-7 / +5" [attr.aria-label]="'Change hit points of ' + c.name" title="-7 damage · +5 heal · =20 set · t5 temporary" (keydown.enter)="applyHp(c, $any($event.target))" />
+              </span>
+            }
+            <button type="button" class="px-1 text-lg" [title]="c.hidden ? 'Show to players' : 'Hide from players'" [attr.aria-pressed]="c.hidden" (click)="act({ type: 'update', id: c.id, patch: { hidden: !c.hidden } })">{{ c.hidden ? '🙈' : '👁' }}</button>
+            <button type="button" class="px-1 text-muted hover:text-accent" (click)="act({ type: 'remove', id: c.id })" [attr.aria-label]="'Remove ' + c.name">✕</button>
+          </div>
+          <div class="mt-1 flex flex-wrap items-center gap-1 text-xs">
+            @for (cond of c.conditions; track cond.name) {
+              <span class="inline-flex items-center gap-1 rounded-full bg-panel-2 px-2 py-0.5">
+                {{ cond.name }}@if (cond.rounds !== null) { ({{ cond.rounds }}) }
+                <button type="button" class="text-muted hover:text-accent" (click)="act({ type: 'removeCondition', id: c.id, name: cond.name })" [attr.aria-label]="'Remove ' + cond.name">✕</button>
+              </span>
+            }
+            @if (conditionFor() === c.id) {
+              <form class="inline-flex items-center gap-1" (submit)="$event.preventDefault(); addCondition(c, cn.value, cr.value)">
+                <input #cn class="cn-prop-input w-36" list="cn-conditions" placeholder="Condition" aria-label="Condition" />
+                <input #cr type="number" min="1" class="cn-prop-input w-16" placeholder="rounds" aria-label="Rounds" />
+                <button type="submit" class="rounded border border-line px-2">Add</button>
+              </form>
+            } @else {
+              <button type="button" class="rounded-full border border-dashed border-line px-2 py-0.5 text-muted hover:border-accent" (click)="conditionFor.set(c.id)">+ condition</button>
+            }
+            <button type="button" class="rounded-full border border-dashed border-line px-2 py-0.5 text-muted hover:border-accent" (click)="notesFor.set(notesFor() === c.id ? null : c.id)">{{ c.notes ? '📝 notes' : '+ notes' }}</button>
+          </div>
+          @if (notesFor() === c.id) {
+            <textarea class="cn-prop-input mt-1 w-full text-sm" rows="2" [value]="c.notes" [attr.aria-label]="'Notes for ' + c.name" (change)="act({ type: 'update', id: c.id, patch: { notes: $any($event.target).value } })"></textarea>
+          }
+        </li>
+      } @empty {
+        <li class="rounded-xl border border-dashed border-line p-6 text-center text-muted">No combatants yet.</li>
+      }
+    </ol>
+    <datalist id="cn-conditions">
+      @for (cond of conditions; track cond) {<option [value]="cond"></option>}
+    </datalist>
+    <p class="mt-3 text-xs text-muted">Keys: <kbd>n</kbd> next turn · <kbd>p</kbd> previous · <kbd>r</kbd> roll missing initiative. Hit points: <code>-7</code> damage, <code>+5</code> heal, <code>=20</code> set, <code>t5</code> temporary.</p>
+  </div>
+} @else if (error()) {
+  <p class="p-8 text-center text-muted">{{ error() }}</p>
+} @else {
+  <p class="p-8 text-center text-muted">Loading…</p>
+}

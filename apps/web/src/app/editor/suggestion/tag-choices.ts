@@ -1,0 +1,23 @@
+/** Tags offered by "{@". Entity tags autocomplete; roll tags take a free expression. */
+export const TAG_CHOICES: { tag: string; label: string; free?: string }[] = [
+  { tag: 'spell', label: 'Spell' },
+  { tag: 'creature', label: 'Creature' },
+  { tag: 'item', label: 'Item' },
+  { tag: 'condition', label: 'Condition' },
+  { tag: 'feat', label: 'Feat' },
+  { tag: 'race', label: 'Species / race' },
+  { tag: 'background', label: 'Background' },
+  { tag: 'class', label: 'Class' },
+  { tag: 'variantrule', label: 'Rule' },
+  { tag: 'action', label: 'Action' },
+  { tag: 'skill', label: 'Skill' },
+  { tag: 'sense', label: 'Sense' },
+  { tag: 'hazard', label: 'Hazard' },
+  { tag: 'trap', label: 'Trap' },
+  { tag: 'deity', label: 'Deity' },
+  { tag: 'dice', label: 'Dice roll', free: '1d20' },
+  { tag: 'damage', label: 'Damage roll', free: '2d6' },
+  { tag: 'dc', label: 'Difficulty class', free: '15' },
+  { tag: 'hit', label: 'To-hit bonus', free: '5' },
+  { tag: 'chance', label: 'Percent chance', free: '50' },
+];

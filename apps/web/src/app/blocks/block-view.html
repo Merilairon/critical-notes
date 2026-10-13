@@ -1,0 +1,121 @@
+@for (n of nodes(); track $index) {
+  @switch (n.type) {
+    @case ('paragraph') {
+      <p [style.text-align]="n.attrs?.['textAlign'] || null"><cn-inline-content [nodes]="n.content ?? []" /></p>
+    }
+    @case ('heading') {
+      @switch (n.attrs?.['level']) {
+        @case (1) { <h2><cn-inline-content [nodes]="n.content ?? []" /></h2> }
+        @case (3) { <h4><cn-inline-content [nodes]="n.content ?? []" /></h4> }
+        @case (4) { <h5><cn-inline-content [nodes]="n.content ?? []" /></h5> }
+        @default { <h3><cn-inline-content [nodes]="n.content ?? []" /></h3> }
+      }
+    }
+    @case ('blockquote') { <blockquote><cn-block-nodes [nodes]="n.content ?? []" [pageId]="pageId()" /></blockquote> }
+    @case ('bulletList') { <ul><cn-block-nodes [nodes]="n.content ?? []" [pageId]="pageId()" /></ul> }
+    @case ('orderedList') { <ol [attr.start]="n.attrs?.['start'] ?? 1"><cn-block-nodes [nodes]="n.content ?? []" [pageId]="pageId()" /></ol> }
+    @case ('listItem') { <li><cn-block-nodes [nodes]="n.content ?? []" [pageId]="pageId()" /></li> }
+    @case ('taskList') { <ul class="cn-list-plain"><cn-block-nodes [nodes]="n.content ?? []" [pageId]="pageId()" /></ul> }
+    @case ('taskItem') {
+      <li class="flex gap-2"><input type="checkbox" disabled [checked]="!!n.attrs?.['checked']" /><div class="flex-1"><cn-block-nodes [nodes]="n.content ?? []" [pageId]="pageId()" /></div></li>
+    }
+    @case ('horizontalRule') { <hr /> }
+    @case ('callout') {
+      <div class="cn-callout" [attr.data-tone]="n.attrs?.['tone']"><span class="cn-callout-icon">{{ n.attrs?.['icon'] || '📝' }}</span><div class="cn-callout-body"><cn-block-nodes [nodes]="n.content ?? []" [pageId]="pageId()" /></div></div>
+    }
+    @case ('readAloud') { <div class="cn-readaloud"><cn-block-nodes [nodes]="n.content ?? []" [pageId]="pageId()" /></div> }
+    @case ('secret') {
+      <div class="cn-secret" [class.cn-secret-revealed]="!!n.attrs?.['revealed']">@if (!n.attrs?.['revealed']) {<div class="cn-secret-head"><span>🔒 DM secret</span></div>}<cn-block-nodes [nodes]="n.content ?? []" [pageId]="pageId()" /></div>
+    }
+    @case ('table') {
+      <div class="overflow-x-auto">
+        <table>
+          @if (tableRoll(n); as roll) {
+            <caption><cn-roll [expr]="roll" label="Table roll">🎲 roll {{ n.attrs?.['roll'] }}</cn-roll></caption>
+          }
+          <tbody>
+            @for (row of n.content ?? []; track $index) {
+              <tr>
+                @for (cell of row.content ?? []; track $index) {
+                  @if (cell.type === 'tableHeader') {
+                    <th [attr.colspan]="cell.attrs?.['colspan'] ?? null"><cn-block-nodes [nodes]="cell.content ?? []" [pageId]="pageId()" /></th>
+                  } @else {
+                    <td [attr.colspan]="cell.attrs?.['colspan'] ?? null"><cn-block-nodes [nodes]="cell.content ?? []" [pageId]="pageId()" /></td>
+                  }
+                }
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+    @case ('statGrid') {
+      <div class="cn-stat-grid" [style.grid-template-columns]="'repeat(' + (n.attrs?.['columns'] ?? 2) + ', minmax(0, 1fr))'">
+        @for (item of items(n); track $index) {
+          <div class="cn-stat-item"><span class="cn-stat-label">{{ item.label }}</span><span class="cn-stat-value">{{ item.value }}</span></div>
+        }
+      </div>
+    }
+    @case ('image') {
+      @if (imageUrl(n.attrs?.['src']); as url) {
+        <figure class="cn-image-block" [attr.data-style]="n.attrs?.['style']">
+          <img [src]="url" [alt]="n.attrs?.['alt'] ?? ''" loading="lazy" referrerpolicy="no-referrer" />
+          @if (n.attrs?.['caption']) {<figcaption>{{ n.attrs['caption'] }}</figcaption>}
+        </figure>
+      }
+    }
+    @case ('gallery') {
+      <div class="cn-gallery">
+        @for (img of galleryImages(n); track $index) {
+          @if (imageUrl(img.src); as url) {
+            <figure><img [src]="url" [alt]="img.caption" loading="lazy" referrerpolicy="no-referrer" /><figcaption>{{ img.caption }}</figcaption></figure>
+          }
+        }
+      </div>
+    }
+    @case ('refEmbed') {
+      @if (n.attrs?.['uid']) {<cn-ref-embed-block [uid]="$any(n.attrs['uid'])" [compact]="n.attrs['display'] === 'compact'" />}
+    }
+    @case ('pageEmbed') {
+      @if (page(n); as p) {
+        <a class="cn-embed cn-page-card" [routerLink]="['/c', store?.id(), 'p', p.id]"><span class="text-2xl">{{ p.icon || icons[p.type] }}</span><span class="font-semibold">{{ p.title }}</span></a>
+      }
+    }
+    @case ('query') { <cn-query-block [filter]="n.attrs?.['filter']" [title]="$any(n.attrs?.['title'] ?? '')" [pageId]="pageId()" /> }
+    @case ('columns') {
+      <div class="cn-columns">
+        @for (col of n.content ?? []; track $index) {<div><cn-block-nodes [nodes]="col.content ?? []" [pageId]="pageId()" /></div>}
+      </div>
+    }
+    @case ('details') {
+      <details class="cn-inset" [open]="!!n.attrs?.['open']">
+        <summary class="cursor-pointer font-semibold"><cn-inline-content [nodes]="summary(n)" /></summary>
+        <cn-block-nodes [nodes]="detailsBody(n)" [pageId]="pageId()" />
+      </details>
+    }
+    @case ('tabs') { <cn-tabs-block [tabs]="n.content ?? []" [pageId]="pageId()" /> }
+    @case ('templateInstance') { <cn-block-nodes [nodes]="n.content ?? []" [pageId]="pageId()" /> }
+    @case ('encounter') {
+      <!-- Players never receive encounter blocks; the DM sees a link -->
+      @if (n.attrs?.['encounterId']) {
+        <a class="cn-embed cn-page-card" [routerLink]="['/c', store?.id(), 'encounters', n.attrs['encounterId']]"><span class="text-2xl">⚔️</span><span class="font-semibold">Encounter</span></a>
+      }
+    }
+    @case ('loot') {
+      <div class="cn-embed">
+        <div class="font-semibold">💰 Loot</div>
+        <ul>
+          @for (it of lootItems(n); track $index) {<li>{{ it.qty > 1 ? it.qty + ' × ' : '' }}{{ it.name }}@if (it.note) { <span class="text-muted">({{ it.note }})</span>}</li>}
+        </ul>
+        @if (lootCoins(n); as coins) {<p class="text-sm">{{ coins }}</p>}
+      </div>
+    }
+    @default {
+      @if (n.content?.length) {
+        <cn-block-nodes [nodes]="n.content" [pageId]="pageId()" />
+      } @else {
+        <div class="cn-unsupported">Unsupported block ({{ n.type }})</div>
+      }
+    }
+  }
+}

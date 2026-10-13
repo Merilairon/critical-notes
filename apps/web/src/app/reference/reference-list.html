@@ -1,0 +1,110 @@
+<div class="flex min-h-0 w-full flex-1">
+  <!-- List column -->
+  <section class="flex min-h-0 w-full flex-col border-line lg:w-[28rem] lg:shrink-0 lg:border-r xl:w-[32rem]">
+    <div class="flex flex-col gap-2 border-b border-line p-3">
+      <div class="flex items-baseline justify-between gap-2">
+        <h1 class="font-display text-xl font-bold">{{ label() }}</h1>
+        <span class="text-sm text-muted">{{ filtered().length.toLocaleString() }} / {{ all().length.toLocaleString() }}</span>
+      </div>
+      <input
+        type="search"
+        class="w-full rounded-md border border-line bg-panel px-3 py-2 text-sm outline-none focus:border-accent"
+        [placeholder]="'Filter ' + label().toLowerCase() + '…'"
+        [value]="query()"
+        (input)="onSearch($any($event.target).value)"
+        (keydown)="onKey($event)"
+        aria-label="Filter by name"
+      />
+      <div class="flex flex-wrap gap-1.5">
+        @for (def of filterDefs(); track def.key) {
+          <details class="relative">
+            <summary
+              class="cursor-pointer list-none rounded-full border px-2.5 py-0.5 text-xs select-none"
+              [class]="activeCount(def) ? 'border-accent text-accent' : 'border-line text-muted hover:border-accent'"
+            >
+              {{ def.label }}{{ activeCount(def) ? ' · ' + activeCount(def) : '' }} ▾
+            </summary>
+            <div class="absolute z-20 mt-1 max-h-72 w-56 overflow-auto rounded-md border border-line bg-panel p-1 shadow-lg">
+              @for (opt of options(def); track opt.value) {
+                <label class="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-panel-2">
+                  <input type="checkbox" [checked]="isActive(def, opt.value)" (change)="toggle(def, opt.value)" />
+                  <span class="truncate">{{ opt.label }}</span>
+                </label>
+              } @empty {
+                <p class="px-2 py-1 text-sm text-muted">No options</p>
+              }
+            </div>
+          </details>
+        }
+        @if (query() || anyActive()) {
+          <button type="button" class="text-xs text-muted underline" (click)="clearFilters()">clear</button>
+        }
+      </div>
+    </div>
+
+    <div class="grid border-b border-line px-3 py-1 text-xs font-semibold tracking-wide text-muted uppercase" [style.grid-template-columns]="gridTemplate()">
+      <button type="button" class="text-left" (click)="setSort('name')">Name {{ sortKey() === 'name' ? (sortDir() === 1 ? '↑' : '↓') : '' }}</button>
+      @for (col of columns(); track col.label) {
+        @if (col.sort; as key) {
+          <button type="button" class="text-left" (click)="setSort(key)">{{ col.label }} {{ sortKey() === key ? (sortDir() === 1 ? '↑' : '↓') : '' }}</button>
+        } @else {
+          <span>{{ col.label }}</span>
+        }
+      }
+      <button type="button" class="text-left" (click)="setSort('source')">Source</button>
+    </div>
+
+    @if (items.isLoading() && !all().length) {
+      <p class="p-4 text-sm text-muted">Loading…</p>
+    } @else if (items.error()) {
+      <p class="p-4 text-sm text-accent">Could not load this list.</p>
+    }
+
+    <cdk-virtual-scroll-viewport itemSize="40" class="min-h-0 flex-1" role="listbox" [attr.aria-label]="label()">
+      <button
+        *cdkVirtualFor="let item of filtered(); trackBy: trackUid"
+        type="button"
+        role="option"
+        class="grid h-10 w-full items-center gap-2 border-b border-line/60 px-3 text-left text-sm hover:bg-panel-2"
+        [class.bg-panel-2]="item.uid === selectedUid()"
+        [attr.aria-selected]="item.uid === selectedUid()"
+        [style.grid-template-columns]="gridTemplate()"
+        (click)="open(item)"
+      >
+        <span class="flex min-w-0 items-center gap-1.5">
+          <span class="truncate font-medium">{{ item.name }}</span>
+          @if (badgeLabel(item.badge); as b) {
+            <span class="cn-badge" [class.cn-badge-legacy]="item.badge === 'legacy'" [class.cn-badge-modern]="item.badge === 'modern'">{{ b }}</span>
+          }
+          @if (item.origin === 'homebrew') {
+            <span class="cn-badge cn-badge-homebrew">HB</span>
+          }
+        </span>
+        @for (col of columns(); track col.label) {
+          <span class="truncate text-muted capitalize">{{ col.value(item) }}</span>
+        }
+        <span class="truncate text-xs text-muted">{{ item.source }}</span>
+      </button>
+    </cdk-virtual-scroll-viewport>
+  </section>
+
+  <!-- Detail column (wide screens) -->
+  <section class="hidden min-h-0 flex-1 overflow-y-auto p-4 lg:block xl:p-6">
+    @if (selectedUid()) {
+      @if (selected.hasValue()) {
+        <div class="mx-auto max-w-3xl">
+          <div class="mb-2 flex justify-end">
+            <a class="cn-link text-sm" [routerLink]="[...context.referenceBase(), kind(), selectedUid()]">Open page ↗</a>
+          </div>
+          <cn-entity-view [entity]="selected.value()" />
+        </div>
+      } @else if (selected.error()) {
+        <p class="text-muted">Not found.</p>
+      } @else {
+        <p class="text-muted">Loading…</p>
+      }
+    } @else {
+      <div class="flex h-full items-center justify-center text-muted">Select an entry to see its details.</div>
+    }
+  </section>
+</div>

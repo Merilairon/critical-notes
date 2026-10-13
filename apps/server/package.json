@@ -1,0 +1,43 @@
+{
+  "name": "@cn/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false --ignore '../../5etools-data/**' --ignore '../../var/**' src/main.ts",
+    "build": "node scripts/build.mjs",
+    "start": "tsx src/main.ts",
+    "start:dist": "node dist/main.mjs",
+    "index": "tsx src/cli/index.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "db:generate": "drizzle-kit generate && drizzle-kit generate --config drizzle.pg.config.ts"
+  },
+  "dependencies": {
+    "5etools-utils": "0.17.21",
+    "@cn/blocks": "workspace:*",
+    "@cn/fivetools": "workspace:*",
+    "@cn/shared": "workspace:*",
+    "@cn/templates": "workspace:*",
+    "@hono/node-server": "^2.1.4",
+    "@hono/zod-validator": "^0.9.1",
+    "@modelcontextprotocol/server": "2.3.1",
+    "@node-rs/argon2": "^2.2.2",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "better-sqlite3": "^13.0.3",
+    "drizzle-orm": "^0.45.4",
+    "fflate": "^0.8.3",
+    "fractional-indexing": "^4.0.0",
+    "hono": "^4.13.13",
+    "sharp": "^0.35.5",
+    "uuidv7": "^1.2.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.9",
+    "@modelcontextprotocol/client": "2.3.1",
+    "@types/better-sqlite3": "^9.6.0",
+    "drizzle-kit": "^0.31.11",
+    "esbuild": "^0.28.2"
+  }
+}

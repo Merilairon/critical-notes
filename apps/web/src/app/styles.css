@@ -1,0 +1,21 @@
+
+/* ---------- Editor ---------- */
+.cn-editor .ProseMirror {
+  min-height: 12rem;
+}
+.cn-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+.cn-editor .ProseMirror a {
+  color: var(--link);
+  text-decoration: underline;
+}
+.cn-editor .ProseMirror blockquote {
+  border-left: 3px solid var(--line);
+  padding-left: 0.8em;
+  font-style: italic;
+}

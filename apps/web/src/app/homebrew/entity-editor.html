@@ -1,0 +1,159 @@
+@if (loadError()) {
+  <div class="m-auto p-8 text-center text-muted">{{ loadError() }}</div>
+} @else if (source(); as src) {
+  <div class="mx-auto w-full max-w-7xl p-4 sm:p-6">
+    <nav class="mb-1 flex flex-wrap items-center gap-1 text-xs text-muted" aria-label="Breadcrumb">
+      <a class="hover:text-accent" routerLink="/homebrew">Homebrew</a><span>/</span>
+      <a class="hover:text-accent" [routerLink]="['/homebrew/s', src.id]">{{ src.fullName }}</a><span>/</span>
+      <span>{{ typeLabel() }}</span>
+    </nav>
+
+    <header class="flex flex-wrap items-center gap-2">
+      <h1 class="min-w-0 flex-1 truncate font-display text-2xl font-bold sm:text-3xl">{{ data()['name'] || 'Untitled' }}</h1>
+      @if (entity()?.deleted) {
+        <span class="cn-badge cn-badge-legacy">Deleted</span>
+        @if (canEdit()) {<button type="button" class="rounded-md border border-line px-3 py-1.5 text-sm hover:border-accent" (click)="restore()">Restore</button>}
+      }
+      <span class="text-xs text-muted" aria-live="polite">
+        @switch (status()) {
+          @case ('saving') { Saving… }
+          @case ('saved') { Saved }
+          @default { @if (dirty()) { Unsaved changes } }
+        }
+      </span>
+      @if (referenceLink(); as link) {
+        <a class="rounded-md border border-line px-3 py-1.5 text-sm text-muted hover:border-accent" [routerLink]="link">View in reference</a>
+      }
+      @if (canEdit() && !entity()?.deleted) {
+        @if (entity()) {
+          <button type="button" class="rounded-md border border-line px-3 py-1.5 text-sm text-muted hover:border-accent hover:text-accent" (click)="remove()">Delete</button>
+        }
+        <button type="button" class="rounded-md bg-accent px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50" [disabled]="status() === 'saving' || (!dirty() && !isNew())" (click)="save()">
+          {{ isNew() ? 'Create' : 'Save' }}
+        </button>
+      }
+    </header>
+
+    @if (!canEdit()) {
+      <p class="mt-2 rounded-md border border-line bg-panel px-3 py-2 text-sm text-muted">This source is read-only for you.</p>
+    }
+    @if (status() === 'conflict') {
+      <div class="mt-2 flex items-center gap-3 rounded-md border border-accent/50 bg-accent/5 px-3 py-2 text-sm" role="alert">
+        This entity was changed elsewhere. Your changes were not saved.
+        <button type="button" class="rounded border border-accent px-2 py-0.5 text-accent" (click)="reload()">Reload</button>
+      </div>
+    }
+    @if (error()) {
+      <div class="mt-2 flex flex-wrap items-center gap-3 rounded-md border border-accent/50 bg-accent/5 px-3 py-2 text-sm" role="alert">
+        {{ error() }}
+        @if (canForce()) {
+          <button type="button" class="rounded border border-accent px-2 py-0.5 text-accent" (click)="save(true)">Save anyway</button>
+          <span class="text-xs text-muted">Only 5etools schema problems: the app can use it, but other 5etools tools may not.</span>
+        }
+      </div>
+    }
+    @if (copyOf(); as c) {
+      <p class="mt-2 rounded-md border border-line bg-panel px-3 py-2 text-sm">
+        Variant of <strong>{{ c.name }}</strong> ({{ c.source }}): only your changes are stored. Fields you leave empty are inherited.
+      </p>
+    }
+
+    <div class="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <section aria-label="Editor" [class.pointer-events-none]="!canEdit()" [class.opacity-80]="!canEdit()">
+        <div class="mb-3 flex gap-1 border-b border-line text-sm" role="tablist">
+          @if (hasForm()) {
+            <button type="button" role="tab" class="px-3 py-1.5" [class.border-b-2]="view() === 'form'" [class.border-accent]="view() === 'form'" [class.font-semibold]="view() === 'form'" [attr.aria-selected]="view() === 'form'" (click)="view.set('form')">Form</button>
+          }
+          <button type="button" role="tab" class="px-3 py-1.5" [class.border-b-2]="view() === 'json'" [class.border-accent]="view() === 'json'" [class.font-semibold]="view() === 'json'" [attr.aria-selected]="view() === 'json'" (click)="view.set('json')">JSON</button>
+          <button type="button" role="tab" class="px-3 py-1.5" [class.border-b-2]="view() === 'lore'" [class.border-accent]="view() === 'lore'" [class.font-semibold]="view() === 'lore'" [attr.aria-selected]="view() === 'lore'" (click)="view.set('lore')">Lore</button>
+        </div>
+        @switch (view()) {
+          @case ('form') {
+            <cn-entity-form [type]="entityType()" [data]="data()" [searchParams]="searchParams()" (changed)="onPatch($event)" />
+          }
+          @case ('json') {
+            <cn-json-editor [value]="data()" [issues]="allIssues()" (changed)="onData($event)" />
+            <p class="mt-1 text-xs text-muted">5etools format. The source is set automatically.</p>
+          }
+          @case ('lore') {
+            <p class="mb-2 text-sm text-muted">Background text shown below the statblock (5etools "fluff").</p>
+            <cn-entries-editor [entries]="$any(fluff()?.['entries'] ?? [])" [searchParams]="searchParams()" (changed)="onLore($event)" />
+          }
+        }
+      </section>
+
+      <aside class="flex flex-col gap-4" aria-label="Preview and checks">
+        @if (allIssues().length) {
+          <section class="rounded-xl border border-line bg-panel p-3" aria-label="Problems">
+            <h2 class="mb-1 text-xs font-semibold tracking-wide text-muted uppercase">Checks</h2>
+            <ul class="flex flex-col gap-1 text-sm">
+              @for (issue of allIssues(); track $index) {
+                <li class="flex gap-2">
+                  <span [class.text-accent]="issue.level === 'error'" [class.text-muted]="issue.level === 'warning'">{{ issue.level === 'error' ? '✖' : '⚠' }}</span>
+                  <span class="min-w-0 flex-1">
+                    {{ issue.message }}
+                    @if (issue.path) {
+                      <button type="button" class="ml-1 font-mono text-xs text-muted hover:text-accent" (click)="focusIssue()" title="Show in JSON">{{ issue.path }}</button>
+                    }
+                  </span>
+                </li>
+              }
+            </ul>
+          </section>
+        }
+        <section class="rounded-xl border border-line bg-panel p-3 sm:p-4" aria-label="Preview">
+          <h2 class="mb-2 text-xs font-semibold tracking-wide text-muted uppercase">Preview</h2>
+          @if (preview(); as p) {
+            <cn-entity-view [entity]="p" />
+          } @else {
+            <p class="text-sm text-muted">The preview appears once the entity can be resolved.</p>
+          }
+        </section>
+
+        @if (entity(); as e) {
+          <details class="rounded-xl border border-line bg-panel p-3" (toggle)="$any($event.target).open && !revisions() && loadRevisions()">
+            <summary class="cursor-pointer text-sm font-semibold">History (revision {{ e.currentRevision }})</summary>
+            @if (revisions(); as revs) {
+              <ul class="mt-2 flex flex-col gap-1 text-sm">
+                @for (r of revs; track r.revNo) {
+                  <li class="flex flex-wrap items-center gap-2">
+                    <span class="font-mono text-xs">#{{ r.revNo }}</span>
+                    <span class="text-xs text-muted">{{ r.createdAt | date: 'medium' }}{{ r.authorName ? ' · ' + r.authorName : '' }}</span>
+                    <span class="min-w-0 flex-1 truncate">{{ r.message || (r.changes ? r.changes + ' change' + (r.changes === 1 ? '' : 's') : '') }}</span>
+                    <button type="button" class="text-xs text-muted hover:text-accent" (click)="showRevision(r.revNo)">View</button>
+                    @if (canEdit() && r.revNo !== e.currentRevision) {
+                      <button type="button" class="text-xs text-muted hover:text-accent" (click)="restoreRevision(r.revNo)">Restore</button>
+                    }
+                  </li>
+                }
+              </ul>
+              @if (revisionView(); as rv) {
+                <div class="mt-2">
+                  <div class="mb-1 flex items-center text-xs text-muted">Revision #{{ rv.revNo }}<button type="button" class="ml-auto hover:text-accent" (click)="revisionView.set(null)">Close</button></div>
+                  <pre class="max-h-80 overflow-auto rounded-md border border-line bg-bg p-2 text-xs">{{ rv.json }}</pre>
+                </div>
+              }
+            }
+          </details>
+          <details class="rounded-xl border border-line bg-panel p-3" (toggle)="$any($event.target).open && !usage() && loadUsage()">
+            <summary class="cursor-pointer text-sm font-semibold">Used in</summary>
+            @if (usage(); as used) {
+              <ul class="mt-2 flex flex-col gap-1 text-sm">
+                @for (u of used; track u.pageId + u.via) {
+                  <li>
+                    <a class="cn-link" [routerLink]="['/c', u.campaignId, 'p', u.pageId]">{{ u.pageTitle }}</a>
+                    <span class="text-xs text-muted"> · {{ u.campaignName }} · {{ u.via }}</span>
+                  </li>
+                } @empty {
+                  <li class="text-muted">Not used on any page in your campaigns.</li>
+                }
+              </ul>
+            }
+          </details>
+        }
+      </aside>
+    </div>
+  </div>
+} @else {
+  <p class="p-8 text-center text-muted">Loading…</p>
+}

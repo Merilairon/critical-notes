@@ -1,0 +1,17 @@
+{
+  "name": "@cn/fivetools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Framework-agnostic 5etools data model: loading, _copy resolution, expansion, editions, rulesets, tags, dice.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "5etools-utils": "0.17.21"
+  }
+}

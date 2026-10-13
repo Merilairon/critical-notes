@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": []
+  },
+  "include": ["src/**/*.ts", "../../packages/fivetools/src/**/*.ts", "../../packages/shared/src/**/*.ts", "../../packages/blocks/src/**/*.ts", "../../packages/templates/src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts", "../../packages/fivetools/src/node/**"]
+}

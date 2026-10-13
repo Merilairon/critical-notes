@@ -1,0 +1,170 @@
+import { DatePipe } from '@angular/common';
+import { HttpClient } from '@angular/common/http';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import type { ApiTokenDto, CreatedApiTokenDto } from '@cn/shared';
+import { firstValueFrom } from 'rxjs';
+import { AuthService } from '../core/auth.service';
+import { errorMessage } from '../core/http.interceptor';
+
+/** Ready-to-paste setup for the common kinds of MCP clients. */
+function setups(origin: string, token: string) {
+  const url = `${origin}/mcp`;
+  return [
+    { label: 'Claude Code', text: `claude mcp add --transport http critical-notes ${url} --header "Authorization: Bearer ${token}"` },
+    {
+      label: 'Clients that connect over HTTP (JSON settings)',
+      text: JSON.stringify({ mcpServers: { 'critical-notes': { type: 'http', url, headers: { Authorization: `Bearer ${token}` } } } }, null, 2),
+    },
+    {
+      label: 'Clients that only start local programs, such as Claude Desktop (needs Node.js)',
+      text: JSON.stringify(
+        { mcpServers: { 'critical-notes': { command: 'npx', args: ['-y', 'mcp-remote', url, '--header', 'Authorization:${AUTH_HEADER}'], env: { AUTH_HEADER: `Bearer ${token}` } } } },
+        null,
+        2,
+      ),
+    },
+  ];
+}
+
+/** The signed-in user's account: API tokens for AI assistants (MCP). */
+@Component({
+  selector: 'cn-account-page',
+  imports: [DatePipe],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `<div class="mx-auto max-w-3xl p-4 sm:p-6">
+    <h1 class="font-display text-3xl font-bold">Account</h1>
+    <p class="mt-1 text-muted">Signed in as {{ auth.user()?.displayName }} ({{ auth.user()?.username }}).</p>
+
+    <section class="mt-6 rounded-xl border border-line bg-panel p-4" aria-label="AI assistants">
+      <h2 class="font-semibold">AI assistants (MCP)</h2>
+      <p class="mt-1 text-sm text-muted">
+        An AI assistant that supports MCP (such as Claude) can read and write your campaigns: create NPCs and locations, write session notes,
+        plan encounters, add homebrew. Give it an access token. It acts as you, with exactly your rights in each campaign: as a player it sees
+        only what is shared with you and can edit only your own character.
+      </p>
+
+      <form class="mt-3 flex flex-wrap items-end gap-2 text-sm" (submit)="$event.preventDefault(); create(name.value, scope.value, days.value)">
+        <label class="flex min-w-48 flex-1 flex-col gap-1"
+          ><span class="text-xs text-muted">Name</span><input #name class="cn-prop-input" required maxlength="60" placeholder="Claude on my laptop" aria-label="Token name"
+        /></label>
+        <label class="flex flex-col gap-1"
+          ><span class="text-xs text-muted">Access</span>
+          <select #scope class="cn-prop-input" aria-label="Access">
+            <option value="write" selected>Read and write</option>
+            <option value="read">Read only</option>
+          </select>
+        </label>
+        <label class="flex flex-col gap-1"
+          ><span class="text-xs text-muted">Valid for</span>
+          <select #days class="cn-prop-input" aria-label="Valid for">
+            <option value="30">30 days</option>
+            <option value="90" selected>90 days</option>
+            <option value="365">1 year</option>
+            <option value="">No limit</option>
+          </select>
+        </label>
+        <button type="submit" class="rounded-md bg-accent px-3 py-1.5 font-semibold text-white" [disabled]="busy()">Create token</button>
+      </form>
+
+      @if (created(); as c) {
+        <div class="mt-3 rounded-md border border-accent/50 bg-accent/5 p-3 text-sm" role="status">
+          <p class="font-medium">Token “{{ c.name }}” created. Copy it now: it is shown only once.</p>
+          <div class="mt-2 flex gap-2">
+            <input class="cn-prop-input min-w-0 flex-1 font-mono text-xs" [value]="c.token" readonly aria-label="New token" (focus)="$any($event.target).select()" />
+            <button type="button" class="rounded border border-line px-2 py-0.5" (click)="copy(c.token, 'token')">{{ copied() === 'token' ? 'Copied' : 'Copy' }}</button>
+          </div>
+          @for (s of setupFor(c.token); track s.label) {
+            <div class="mt-3">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-xs font-medium text-muted">{{ s.label }}</span>
+                <button type="button" class="rounded border border-line px-2 py-0.5 text-xs" (click)="copy(s.text, s.label)">{{ copied() === s.label ? 'Copied' : 'Copy' }}</button>
+              </div>
+              <pre class="mt-1 overflow-x-auto rounded bg-panel-2 p-2 font-mono text-xs" [attr.aria-label]="s.label">{{ s.text }}</pre>
+            </div>
+          }
+          <p class="mt-2 text-xs text-muted">The address is {{ endpoint }}. Anyone with the token can act as you: keep it like a password, and revoke it here if it leaks.</p>
+        </div>
+      }
+
+      <h3 class="mt-5 mb-1 text-sm font-semibold">Your tokens</h3>
+      @if (tokens().length) {
+        <table class="w-full text-sm">
+          <thead class="text-left text-xs text-muted">
+            <tr><th class="py-1">Name</th><th>Access</th><th>Created</th><th>Last used</th><th>Expires</th><th></th></tr>
+          </thead>
+          <tbody>
+            @for (t of tokens(); track t.id) {
+              <tr class="border-t border-line">
+                <td class="py-1.5 pr-2 font-medium">{{ t.name }}</td>
+                <td class="pr-2">{{ t.scope === 'write' ? 'Read and write' : 'Read only' }}</td>
+                <td class="pr-2 text-muted">{{ t.createdAt | date: 'mediumDate' }}</td>
+                <td class="pr-2 text-muted">{{ t.lastUsedAt ? (t.lastUsedAt | date: 'short') : 'Never' }}</td>
+                <td class="pr-2" [class.text-accent]="expired(t)">{{ t.expiresAt ? (expired(t) ? 'Expired' : (t.expiresAt | date: 'mediumDate')) : 'Never' }}</td>
+                <td class="text-right"><button type="button" class="text-muted hover:text-accent" (click)="revoke(t)" [attr.aria-label]="'Revoke ' + t.name">Revoke</button></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      } @else {
+        <p class="text-sm text-muted">No tokens yet.</p>
+      }
+      @if (error()) {<p class="mt-2 text-sm text-accent" role="alert">{{ error() }}</p>}
+    </section>
+  </div>`,
+})
+export class AccountPage {
+  protected readonly auth = inject(AuthService);
+  private readonly http = inject(HttpClient);
+  protected readonly tokens = signal<ApiTokenDto[]>([]);
+  protected readonly created = signal<CreatedApiTokenDto | null>(null);
+  protected readonly copied = signal<string | null>(null);
+  protected readonly busy = signal(false);
+  protected readonly error = signal('');
+  protected readonly endpoint = `${location.origin}/mcp`;
+  private readonly now = signal(Date.now());
+  protected readonly expired = (t: ApiTokenDto) => t.expiresAt !== null && t.expiresAt <= this.now();
+  protected readonly setupFor = (token: string) => setups(location.origin, token);
+
+  constructor() {
+    void this.reload();
+  }
+
+  private async reload() {
+    try {
+      this.tokens.set((await firstValueFrom(this.http.get<{ tokens: ApiTokenDto[] }>('/api/auth/tokens'))).tokens);
+      this.now.set(Date.now());
+    } catch (err) {
+      this.error.set(errorMessage(err));
+    }
+  }
+
+  protected async create(name: string, scope: string, days: string) {
+    this.busy.set(true);
+    this.error.set('');
+    try {
+      this.created.set(await firstValueFrom(this.http.post<CreatedApiTokenDto>('/api/auth/tokens', { name, scope, expiresInDays: days ? Number(days) : null })));
+      this.copied.set(null);
+      await this.reload();
+    } catch (err) {
+      this.error.set(errorMessage(err));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  protected async copy(text: string, what: string) {
+    await navigator.clipboard?.writeText(text).catch(() => undefined);
+    this.copied.set(what);
+  }
+
+  protected async revoke(t: ApiTokenDto) {
+    if (!confirm(`Revoke "${t.name}"? Assistants using it stop working at once.`)) return;
+    try {
+      await firstValueFrom(this.http.delete(`/api/auth/tokens/${t.id}`));
+      if (this.created()?.id === t.id) this.created.set(null);
+      await this.reload();
+    } catch (err) {
+      this.error.set(errorMessage(err));
+    }
+  }
+}

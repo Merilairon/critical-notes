@@ -1,0 +1,27 @@
+{
+  "name": "@cn/blocks",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Block document model: registry, validation/sanitization, visibility projection, text and link extraction.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./markdown": "./src/markdown/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cn/fivetools": "workspace:*",
+    "mdast-util-directive": "3.1.1",
+    "mdast-util-from-markdown": "2.1.0",
+    "mdast-util-gfm": "3.1.0",
+    "mdast-util-to-markdown": "2.2.0",
+    "micromark-extension-directive": "4.0.0",
+    "micromark-extension-gfm": "3.0.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/mdast": "4.0.4"
+  }
+}

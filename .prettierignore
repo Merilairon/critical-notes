@@ -1,0 +1,8 @@
+5etools-data
+var
+**/dist
+**/.angular
+pnpm-lock.yaml
+playwright-report
+test-results
+apps/server/drizzle*/meta

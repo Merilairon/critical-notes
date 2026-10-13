@@ -1,0 +1,541 @@
+# Critical Notes: D&D 5e campaign manager. Plan
+
+## Context
+`/home/baetensjan/Projects/critical-notes` is empty: no git repo, no code. The goal is a self-hostable, TypeScript campaign manager for DMs and players, with these parts:
+- Official rules content read at runtime from local 5etools clones, never bundled.
+- Campaigns locked to the 2014 or 2024 rules.
+- Homebrew in the 5etools format.
+- A Notion-style page/block system with block and page templates.
+- Encounters and initiative.
+- Server-enforced DM/player visibility.
+
+**Decisions you made (Oct 8, 2026):**
+1. **Typed pages = page + 1:1 typed facet.** One record per NPC/location/session/etc.
+2. **Fresh shallow clones** of both repos in a folder inside the project, `critical-notes/5etools-data/{5etools-src,5etools-img}`. The old v2.7.0 copies in the Obsidian folder stay untouched.
+   - The folder is never committed, never sent to Docker builds, and never scanned by the dev tools: it's in `.gitignore` and `.dockerignore`, and excluded from tsconfig, ESLint, Vitest, Vite `server.watch.ignored`, and `.vscode/settings.json` (`files.watcherExclude` and `search.exclude`). The 11 GB of images would otherwise overload file watchers.
+   - pnpm workspace globs cover only `apps/*` and `packages/*`, so the `package.json` inside 5etools-src is never picked up.
+   - The app reads the paths from `FIVETOOLS_SRC_PATH` / `FIVETOOLS_IMG_PATH`, which default to `./5etools-data/...`, so the data can also live anywhere else.
+   - App runtime data (DB, index, uploads) goes in a separate gitignored `DATA_DIR`, which defaults to `./var/`.
+3. **SQLite first.** The Postgres schema and migrations come in the final milestone.
+4. **Continuous milestones.** I run the tests and post a summary after each one, and stop only on a real blocker or design ambiguity.
+5. **Angular for the web frontend.** All rendering and editing logic that doesn't depend on a framework lives in shared TS packages. The Angular app only adds components.
+
+Git: I'll `git init` locally. I won't commit unless you ask, and commits never carry Co-Authored-By lines.
+
+---
+
+## Step 0: Data findings (the draft for DATA_NOTES.md)
+I read the existing v2.7.0 clone in full. Upstream is now **v2.37.0** (an earlier tag listing sorted versions as text and showed v2.9.1), and I spot-checked it over HTTP. After approval, I clone fresh, re-run the survey scripts, and write `DATA_NOTES.md` with any differences. If something contradicts the design, I stop and flag it.
+
+**Layout (`data/`)**
+- Multi-file categories with `index.json` (source → file):
+  - `bestiary/` (`bestiary-<src>.json`, `fluff-index.json`, `legendarygroups.json`, `template.json` = `monsterTemplate`)
+  - `spells/` (plus `sources.json`: spell → class lists)
+  - `class/` (`class-<name>.json` holds `class`, `subclass`, `classFeature`, `subclassFeature`)
+- Single files:
+  - Character options: `races.json` (`race` + `subrace`), `backgrounds.json`, `feats.json`, `optionalfeatures.json`
+  - Items: `items.json` (`item`, `itemGroup`), `items-base.json` (`baseitem`, `itemProperty`, `itemType`, `itemMastery`, …), `magicvariants.json`, `loot.json`
+  - Rules and reference: `conditionsdiseases.json` (`condition`, `disease`, `status`), `actions.json`, `variantrules.json`, `tables.json`, `skills.json`, `senses.json`, `languages.json`
+  - Other entity files: `deities.json`, `trapshazards.json`, `objects.json`, `vehicles.json`, `rewards.json`, `cultsboons.json`, `decks.json`, `bastions.json`, `recipes.json`, `encounters.json`, `names.json`
+  - New upstream: `homecrafts.json`, `encounterbuilder.json`, `converter.json`
+- Books and adventures:
+  - `books.json` / `adventures.json` hold the metadata (66 books and 101 adventures upstream).
+  - `book/book-<id>.json` and `adventure/adventure-<id>.json` hold the content.
+- `generated/` holds derived lookups (`gendata-tag-redirects.json`, `gendata-spell-source-lookup.json`, …).
+- `foundry-*.json` files are VTT-specific; we ignore them.
+
+**Sources and editions (verified, not assumed)**
+- Book and adventure metadata has `id`, `source`, `group`, `published`, `author`, `cover`, `parentSource`. **There is no `edition` field on books, even upstream.**
+- 5etools decides the edition at source level: `SourceUtil.isClassicSource` = `published` date earlier than XPHB's (2024-09-17).
+- `Parser.SOURCES_LEGACY_WOTC` = PHB, DMG, MM, SCREEN, EEPC, VGM, MTF.
+- The **authoritative list** is in npm `5etools-utils` (MIT), file `schema/site/sources-5etools.json`. Its `$defs.sourcesClassic`, `sourcesModern` (XPHB, XDMG, XMM, XSAC, FRHoF, EFA, …) and `sourcesLegacy` enums are what 5etools' own edition tests use.
+- Entity-level `edition: "classic" | "one"` exists on `background`, `baseitem`, `class`, `subclass`, `race`, `magicvariant`, and it overrides the source's edition. For example, `items-base.json` mixes classic and one base items.
+- Rules-availability flags:
+  - Older: `srd`, `basicRules`.
+  - Newer: `srd52` and `basicRules2024`. These were named `freeRules2024` in v2.7.0, so we read both names.
+  - Upstream uses `referenceSources` (an array of source ids) where v2.7.0 had `otherSources`.
+- `reprintedAs` is an array of `"Name|SOURCE"` or `{uid, tag}`.
+  - The object form is a cross-type reprint, e.g. optionalfeature → feat, variantrule → hazard.
+  - A chain can stay inside one edition (VGM→MPMM) or cross editions (PHB→XPHB).
+  - One entity can have several targets (Aasimar → MPMM, XPHB).
+- Default tag sources stay classic: spell/feat/race/class → PHB, creature → MM, item/table/hazard → DMG. 2024 data therefore always writes `|XPHB`, `|XMM` and so on explicitly. Our autocomplete must always insert explicit sources.
+
+**Inheritance**
+- `_copy: {name, source, _mod?, _templates?, _preserve?}` on monsters (1,103 in v2.7.0), races, subclasses, items, fluff, and more.
+- Mod modes (utils.js): `replaceTxt`, `prependArr`, `appendArr`, `replaceArr`, `replaceOrAppendArr`, `appendIfNotExistsArr`, `insertArr`, `removeArr`, `remove`, `replaceName`, `calculateProp`, `scalarAddProp`, `scalarMultProp`, `setProp`, `prefixSuffixStringProp`, `addSenses`, `addSaves`, `addSkills`, `addAllSaves`, `addAllSkills`, `addSpells`, `removeSpells`, `replaceSpells`, `maxSize`, `scalarMultXp`, `scalarAddHit`, `scalarAddDc`.
+- A `"*"` key applies a mod to all props.
+- Dynamic text uses `<$name$>`, `<$short_name$>`, `<$title_short_name$>` and ability variants.
+- Props that are **not inherited** unless `_preserve`d: `page`, `otherSources`/`referenceSources`, `srd`, `srd52`, `basicRules`, `basicRules2024`, `reprintedAs`, `hasFluff`, `hasFluffImages`, `hasToken`, `tokenCredit`, `tokenCustom`, `foundryTokenScale`, `altArt`, `_versions`.
+- `_templates` applies `monsterTemplate.apply._mod/_root`.
+- ⚠ 5etools uses `eval` for `calculateProp`. We use a safe arithmetic evaluator instead.
+- Other runtime expansions to port:
+  - `_versions` (e.g. "Aasimar; Necrotic Shroud", XMM "Animal Lord; Forager")
+  - subrace merging into races
+  - generic magic variants × base items (`magicvariants.json`, with edition matching)
+  - `classFeatures` refs `Name|Class|ClassSrc|Level|Src` resolved to `classFeature` entries
+- Official files also carry `_meta.internalCopies` / `dependencies`.
+
+**Fluff**
+- `fluff-*.json` (`monsterFluff`, `itemFluff`, `raceFluff`, …) is keyed by name+source. Fluff can also `_copy`.
+- Each fluff entry has `entries` and `images: [{type:"image", href:{type:"internal", path}}]`. Paths are relative to the img root, and `external` hrefs carry a `url`.
+- Entities flag `hasFluff` / `hasFluffImages`.
+
+**Entries and tags**
+- The entries tree has these object types:
+  - Structure: `entries`, `section`, `chapter`, `list` (with styles), `table`/`tableGroup`, `row`/`cell` (with roll ranges)
+  - Callouts and quoted text: `inset`, `insetReadaloud`, `quote`, `variant`/`variantInner`/`variantSub`
+  - Media and embeds: `image`, `gallery`, `statblock`, `statblockInline`, `spellcasting`
+  - Item lists: `item`/`itemSub`
+  - References: `refClassFeature`, `refSubclassFeature`, `refOptionalfeature`, `refFeat`
+  - Flow and layout: `options`, `hr`, `flowchart`/`flowBlock`, `inline`/`inlineBlock`, `link`
+  - Dice and ability blocks: `dice`, `abilityDc`, `abilityAttackMod`, `abilityGeneric`
+  - Misc: `actions`, `attack`, `homebrew`, `code`, …
+- Inline tags use the form `{@tag arg|arg|…}` and can nest. There are 121 tag types in the renderer.
+- Frequency in the data:
+  - Most common: creature, spell, item, dc, dice, damage, condition, book, area, skill, b/i, hit, h, adventure, atk, variantrule, filter
+  - Also present: `atkr`, `actSave*`, `scaledamage`, `itemMastery`, `5etoolsImg`, and others
+- Each tag has a `defaultSource` and a target page.
+
+**Images (5etools-img, 11 GB)**
+- Art: `bestiary/<SRC>/<Name>.webp`. Tokens: `bestiary/tokens/<SRC>/<nameToTokenName(name)>.webp`, where `nameToTokenName` = toAscii, strip `"`.
+- `token: {name, source}` reuses another creature's token (e.g. XMM Goblin Warrior uses the MM Goblin token).
+- Other folders: `items/<SRC>/`, `spells/<SRC>/`, `races/`, `backgrounds/`, `classes/`, `feats/`, `conditionsdiseases/`, `covers/<SRC>.webp`, `book/<SRC>/…`, `adventure/<SRC>/…`, `objects/tokens/`, `vehicles/tokens/`.
+- Fluff and book image paths are relative to this root.
+
+**Schemas and homebrew**
+- 5etools-src ships **no** schemas. Its `test/test-json.js` imports them from npm `5etools-utils`, which has `schema/{site,brew,ua}` plus `-fast` variants (MIT).
+- `brew/homebrew.json` requires `_meta` with `sources[]`, `dateAdded`, `dateLastModified`, `edition`.
+  - Each source entry has `json`, `abbreviation`, `full`, `authors`, `convertedBy`, `version`, `url`, `color`/`colorNight`.
+  - Optional `_meta` fields: `spellSchools`, `optionalFeatureTypes`, `featCategories`, `dependencies`, `includes`, `internalCopies`, …
+  - After `_meta` come per-type arrays (`monster`, `spell`, `item`, `baseitem`, `race`, `subrace`, `background`, `feat`, `class`, `subclass`, `classFeature`, `subclassFeature`, `condition`, `variantrule`, `table`, …).
+- `_meta.edition` is `"classic"` or `"one"`. The schema says "if ambiguous, classic", and BrewUtil defaults to classic.
+- Homebrew entities reference their source by its `json` key, exactly like official sources.
+
+**Encounter rules (verified in 5etools' encounter builder)**
+- **2014 (DMG p.82):** per-character Easy/Medium/Hard/Deadly XP thresholds, plus a monster-count multiplier [1, 1.5, 2×4, 2.5×4, 3×4, 4]. Fewer than 3 PCs → next multiplier up; 6 or more PCs → next one down (0.5 for a single monster). A daily XP budget also applies.
+- **2024 (XDMG p.114):** per-character Low/Moderate/High XP budgets with **no multiplier**. Level 1: 50/75/100 … level 20: 6400/13200/22000.
+- CR→XP is shared. Monster `cr` can be `{cr, lair, coven, xp, xpLair}`.
+
+---
+
+## Stack (recommended)
+| Layer | Choice | Why |
+|---|---|---|
+| Repo | pnpm workspaces, TS strict, Node 24, Vitest, ESLint + Prettier | One language, shared packages for client and server |
+| Server | **Hono** on Node (`@hono/node-server`), zod validators using the shared DTO schemas | Small, explicit API boundary. Visibility enforcement is easy to audit, and image/upload/SSE routes are easy to write. One long-lived process keeps the index warm. |
+| Web | **Angular** (latest stable, checked at install): standalone components, signals + `resource`/`httpResource`, zoneless change detection, new control flow, Angular Router (lazy routes), Angular CLI application builder (esbuild/Vite dev server with a proxy to Hono). UI: Tailwind v4 + Angular CDK (overlay, drag-drop, virtual scroll, a11y, listbox), plus `@angular/aria` headless widgets if stable at install, otherwise Angular Material. Forms: typed Reactive Forms, or Signal Forms if stable. Tests: Vitest (Angular's default runner). | You chose Angular. It's a client-rendered SPA behind a login, so SSR isn't needed. The server serves the production build as static files. CDK covers hover previews, drag-reorder, virtual lists and the Cmd-K palette without extra libraries. |
+| API client | A typed Angular `ApiService` over HttpClient. Request/response types come from shared zod DTOs in `packages/shared`, the same ones the Hono validators use. An interceptor handles auth/401. | A single source of types for client and server, and it fits Angular's idioms (interceptors, `httpResource`). |
+| App DB | **Drizzle ORM + better-sqlite3**, drizzle-kit migrations; Postgres schema in the final milestone | Typed, lightweight, SQLite by default. App tables use only portable types. |
+| Search/reference index | Separate rebuildable `DATA_DIR/index.sqlite` with **FTS5** | A derived cache: official + homebrew entities, plus page text (DM and player variants). It stays SQLite even when the app DB is on Postgres. |
+| Schemas | `5etools-utils` (MIT) brew-fast schemas + Ajv 2020 | Exact 5etools validation, plus the edition source lists |
+| Misc | CodeMirror 6 (JSON + entries strings), fast-json-patch (revision diffs), fractional-indexing, file-type + sharp (uploads), @node-rs/argon2 | |
+
+**Block editor evaluation → TipTap v3 (ProseMirror) with `ngx-tiptap`**
+
+Angular rules out two candidates: BlockNote and Plate are React-only.
+- **TipTap/ProseMirror (chosen).**
+  - The core has no framework dependency. `ngx-tiptap` (MIT) provides the Angular editor directive and `AngularNodeViewRenderer`, so custom blocks are Angular components.
+  - If `ngx-tiptap` lags behind the current Angular version, the fallback is plain ProseMirror NodeViews that mount Angular components via `createComponent`.
+  - MIT core. TipTap open-sourced DragHandle, UniqueID and Details in 2025; I'll confirm at install, and if any is still paid I'll write a small ProseMirror plugin instead.
+  - Its strict schema content expressions (`columns: column{2,4}`, `tabs: tab+`, a `secret` container with `block+`) handle our nested layout blocks robustly.
+  - The same schema runs headless on the server, so we can validate stored docs.
+  - The most mature collaboration path: Yjs via y-prosemirror/Hocuspocus, both MIT.
+  - Cost: we build the slash menu (Suggestion util + CDK overlay) and the block side menu ourselves.
+- **BlockNote, Plate:** React-only, so they're ruled out for Angular. BlockNote's multi-column is also GPL-3.0/commercial.
+- **Lexical:** the core has no framework dependency, but there are no maintained Angular bindings. Columns and collapsibles exist only as React playground code.
+- **Editor.js:** framework-agnostic and stores block JSON, but nesting is weak and it has no collaboration story.
+- **Plain JSON + our own editor:** contenteditable, selection, IME and undo would take months.
+
+---
+
+## Architecture
+```
+apps/server   Hono API, auth, Drizzle (app DB), indexer runner, /img + /uploads routes, SSE (tracker)
+apps/web      Angular SPA (Angular CLI project inside the pnpm workspace; packages consumed via TS path mappings):
+                core/ (auth, ApiService, RulesetService, CampaignContext), reference/ (browser + renderer
+                components: entries AST, tags, statblocks classic + 2024, hover previews via CDK overlay),
+                pages/ (TipTap editor, block NodeView components, properties, backlinks), homebrew/,
+                templates/, encounters/, tracker/
+packages/fivetools  framework-agnostic TS: loader, copy resolver (_copy/_mod/_templates/_versions, safe calc),
+                    subrace merge, magic-variant expansion, class-feature refs, tag tokenizer → AST,
+                    entry normalization (render model), dice parser, edition resolver, rulesets (2014/2024),
+                    CR/XP + encounter math. The server and the Angular renderer use the same code.
+packages/blocks     block-doc zod schema, block registry core (framework-agnostic half), visibility projection,
+                    text/link/entity-ref extraction, unknown-block preservation
+packages/templates  template schema + migrations, {{var}} parser, typed substitution, inheritance, linked render
+packages/shared     DTOs, ids (uuidv7), errors
+scripts/            data-clone.sh, data-update.sh (git pull --depth 1 --ff-only, then `pnpm index`)
+```
+
+**Edition resolver** (`packages/fivetools/src/edition/`)
+- `classifySource(src)` checks, in order:
+  1. A homebrew source's declared edition.
+  2. The `5etools-utils` sourcesClassic/sourcesModern lists.
+  3. The `published` date against XPHB's.
+  4. Otherwise classic, with a warning.
+- An optional `edition-overrides.json` corrects individual sources.
+- `entityEdition(e)` = `e.edition ?? classifySource(e.source)`.
+- The campaign policy is `{ruleset, sourceOverrides, crossEdition}`.
+  - Sources in the campaign's edition are enabled by default. Overrides are stored, so sources added in a data update get defaults automatically.
+  - `crossEdition` is labelled "Allow legacy (2014) content" in 2024 campaigns and "Allow 2024 content" in 2014 campaigns. When it's on, the other edition's sources become toggleable, and their items show a "Legacy" or "2024" badge.
+  - Homebrew marked `any` is always edition-compatible.
+- **Reprint groups** are the connected components over `reprintedAs`, both string and `{uid, tag}` forms.
+  - List and search show one member per group: in-edition first, then the newest.
+  - The others stay reachable by link or tag and show "Also printed as X (XPHB) →".
+  - Example: a 2014 campaign shows PHB Fireball and hides XPHB Fireball even when cross-edition is on.
+
+**Ruleset abstraction** (`packages/fivetools/src/ruleset/`)
+- A `Ruleset` interface:
+  - terminology (Race vs Species, …)
+  - `characterOptions` (background ability scores and feat, species ASI)
+  - `features.weaponMastery`, exhaustion model
+  - `encounter.computeDifficulty(party, creatures)`
+  - `xpForCr`, `canonicalRef(key)` (e.g. `condition:poisoned` → PHB or XPHB uid)
+  - `statblockStyle`
+- The UI injects `RulesetService` (a signal of the current campaign's `Ruleset`). An ESLint `no-restricted-syntax` rule bans `'2014'`/`'2024'` literals outside `ruleset/` and `edition/`, and angular-eslint template rules apply too.
+- The "Migrate edition" action does a dry run first:
+  - It lists every reference: refEmbeds, tags in pages, NPC statblocks, encounters, inventory, character refs.
+  - It proposes a mapping through the reprint groups and flags anything unmapped.
+  - On confirmation it rewrites the references, resets source defaults, and logs the migration.
+
+**Indexing pipeline** (`pnpm index`, also run at startup and from the admin "Re-index" button)
+1. Fingerprint every data file (size+mtime, then sha1 if changed) and compare with `file_state` plus the indexer version. If nothing changed, skip (target < 1 s).
+2. If something changed, load all raw JSON into memory.
+3. Expand `_versions`, subraces and magic variants, then resolve `_copy` lazily with memoization and cycle detection. A missing parent keeps the raw entity and logs a warning.
+4. Resolve fluff the same way.
+5. Compute the summary columns (CR, type, level, school, rarity, …), the image and token path, and the edition.
+6. Diff-upsert `entity` rows by resolved-hash, then update `entity_fts`.
+7. Homebrew entities go through the same resolver against official + homebrew data. They're re-indexed on save, together with their dependents (entities whose `_copy` targets them).
+
+`index.sqlite` tables:
+- `meta`, `file_state`
+- `source(id, name, abbr, group, published, edition, legacy, kind, origin, homebrew_source_id)`
+- `entity(uid, kind, name, source, page, edition, flags, reprint_group, summary_json, data_json, raw_json, fluff_json, image_path, token_path, origin, homebrew_entity_id)`
+- `entity_fts`, `entity_alias`
+- `page_search(campaign_id, page_id, title, text_dm, text_player, visibility…)` + FTS
+
+**Reference rendering**
+- The tag tokenizer turns strings into an AST. Recursive Angular components (`cn-entry`, `cn-inline`) render that AST through template interpolation only. A lint rule bans `[innerHTML]` and `bypassSecurityTrust*` everywhere in the app.
+- Entity-link tags become router links with hover popovers (`/api/ref/:kind/:source/:name`).
+- `{@filter}` opens the browser with those filters applied.
+- `{@book}`/`{@adventure}` render as a source/section badge. A book reader is out of scope for v1.
+- Unknown tags render their display text. Unknown entry types render a labelled placeholder plus their best-effort child text. Neither ever crashes.
+
+**Images:** `GET /img/*` serves only from `FIVETOOLS_IMG_PATH`.
+- Path safety: resolve the path and check the prefix, `realpath` it and re-check the prefix (blocks symlink escape), and allow only image extensions.
+- SVG is served with `CSP: sandbox` and `nosniff`.
+- Caching: ETag plus `Cache-Control: public, max-age=86400`.
+- If an image is missing, the client shows a placeholder.
+
+**Uploads:** stored at `DATA_DIR/uploads/<id>`.
+- Checked by magic bytes (png/jpeg/webp/gif, no SVG), with a configurable size limit.
+- sharp strips metadata and makes thumbnails.
+- Served via `/api/uploads/:id` to campaign members only. IDs are unguessable and appear only in content the viewer is already allowed to see.
+
+---
+
+## Data model (app DB)
+```
+user(id, username, display_name, password_hash, is_admin, created_at)
+session(id, user_id, expires_at)
+campaign(id, name, description, cover, ruleset, cross_edition, house_rules_doc, status, created_by, …)
+campaign_member(campaign_id, user_id, role dm|player)          campaign_invite(token_hash, campaign_id, role, expires_at, max_uses, uses)
+campaign_source_override(campaign_id, source_kind official|homebrew, source_ref, enabled)
+campaign_template_default(campaign_id, page_type, page_template_id)    edition_migration(campaign_id, from, to, report_json, by, at)
+
+page(id, campaign_id, parent_id, sort_key, type, title, icon, cover, visibility dm|all|selected,
+     body_doc json, revision, from_page_template_id, from_page_template_version, created_by, updated_at, deleted_at)
+page_viewer(page_id, user_id)           page_tag(page_id, tag)
+property_def(id, campaign_id, key, label, type text|number|select|multiselect|date|checkbox|pageLink|refLink|url,
+             options_json, applies_to_types, dm_only, sort)
+page_property_value(page_id, property_def_id, idx, value_text, value_num, value_bool, value_date, value_page_id, value_ref_json)
+page_link(from_page_id, to_page_id, block_id, kind mention|embed|property)          -- derived on save → backlinks
+entity_reference(target_uid, target_homebrew_entity_id, referrer_kind, referrer_id, block_id)  -- derived → "used in"
+
+-- typed facets (1:1, PK = page_id); their fields are exposed as built-in properties to the property panel + query engine
+npc_facet(page_id, statblock_uid, statblock_homebrew_entity_id, faction_page_id, location_page_id, status, attitude)
+location_facet(page_id, parent_location_page_id, kind world|region|settlement|site|room|other, map_upload_id)
+session_facet(page_id, number, date, status planned|played, summary)
+quest_facet(page_id, status rumor|active|completed|failed|abandoned, giver_page_id, priority)
+faction_facet(page_id, status, attitude, headquarters_page_id)
+character_facet(page_id, player_user_id, player_name, classes_json[{class_uid, subclass_uid, level}], species_uid,
+                background_uid, hp_max, hp_current, hp_temp, ac, speed, abilities_json, passive_perception, inspiration)
+item_facet(page_id, item_uid, item_homebrew_entity_id)
+
+inventory_item(id, campaign_id, owner_kind party|character, owner_page_id, item_uid, homebrew_entity_id, custom_name,
+               quantity, attuned_to_page_id, identified, awarded_session_page_id, notes)
+currency(campaign_id, owner_kind, owner_page_id, cp, sp, ep, gp, pp)
+encounter(id, campaign_id, name, notes_doc, location_page_id, creatures_json[{uid|homebrew_entity_id|npc_page_id, count, overrides}],
+          party_json{mode campaign|custom, character_page_ids, levels})
+initiative_tracker(id, campaign_id, encounter_id, status, state_json{round, turn, combatants[{id, kind, ref, name, init,
+                   hp, hp_max, temp, ac, conditions[{uid, rounds}], hidden_from_players, notes}]}, updated_at)
+
+homebrew_source(id, json_id, abbreviation, full_name, authors_json, version, edition 2014|2024|any, color, url,
+                meta_extra_json /* spellSchools, featCategories… for round-trip */, scope private|campaigns|instance,
+                owner_user_id, campaign_id /* auto "campaign-only" source */, deleted_at)
+homebrew_source_share(source_id, campaign_id)
+homebrew_entity(id, source_id, entity_type, name, data_json /* raw 5etools shape, may contain _copy */, fluff_json,
+                current_revision, created_by, updated_at, deleted_at)        UNIQUE(source_id, entity_type, lower(name)) live rows
+homebrew_revision(id, entity_id, rev_no, data_json, fluff_json, diff_json /* RFC6902 */, author_user_id, created_at, message)
+
+block_template(id, scope global|user|campaign, owner_user_id, campaign_id, builtin_key, name, description, icon, tags_json,
+               version, schema_version, variables_json, content_json, duplicated_from_id, deleted_at)
+block_template_version(template_id, version, variables_json, content_json, created_at)
+page_template(id, scope, owner_user_id, campaign_id, builtin_key, name, description, icon, page_type, extends_template_id,
+              version, schema_version, defaults_json{icon, cover, visibility, tags}, properties_json[{key, label, type, options,
+              required, default, dm_only}], variables_json, body_json, children_json[{title, page_template_id | inline}])
+page_template_version(...)
+template_usage(template_kind, template_id, page_id, block_id, version, mode linked|copy)
+upload(id, campaign_id, owner_user_id, filename, mime, size, sha256, width, height, created_at)
+```
+- Campaign-only homebrew goes into an auto-created hidden source per campaign, so a one-off monster takes a single "Quick create" click.
+- An NPC built by "clone & customize" a bestiary statblock becomes a `_copy` homebrew entity in that source, and `npc_facet.statblock_homebrew_entity_id` points at it.
+- References from app data store both the uid (kind|name|source) and the `homebrew_entity_id`.
+  - Renaming a homebrew entity adds an `entity_alias` and offers "update references".
+  - Deleting is soft: references keep resolving, with a "deleted" badge.
+
+---
+
+## Block document schema (v1, ProseMirror JSON of our own schema)
+```jsonc
+{ "schemaVersion": 1, "type": "doc", "content": [ Block… ] }
+Block  = { "type": "<registered>", "attrs": { "id": "blk_…", "visibility": "inherit"|"dm", "revealed": false, …typeAttrs },
+           "content"?: [Block | Inline] }
+Inline = {"type":"text","text":"…","marks":[{"type":"bold"|"italic"|"underline"|"strike"|"code"|"highlight"}|
+                                            {"type":"link","attrs":{"href":"https://…"}}]}   // http/https/mailto only
+       | {"type":"pageLink","attrs":{"pageId":"…","label":"…"}}                             // [[page]]
+       | {"type":"refTag","attrs":{"tag":"spell","uid":"fireball|xphb","display":null}}     // {@spell …}
+       | {"type":"dice","attrs":{"kind":"dice|damage|hit|dc|d20","expr":"2d6+3","display":null}}
+       | {"type":"placeholder","attrs":{"var":"dc","valueType":"number"}}                  // unfilled template field
+       | {"type":"hardBreak"}
+```
+**Block types**
+- Text: `paragraph`, `heading{level}`, `bulletList`/`orderedList`/`listItem`, `taskList`/`taskItem{checked}`, `blockquote`, `divider`, `callout{tone, icon}`
+- Callouts and secrets: `readAloud`, `secret` (container, always DM)
+- Tables: `table{roll?:{dice, column}}` with rows/cells (a roll button picks a row by range), `statGrid{items[{label, value: Inline[]}]}`
+- Media: `image{src:{upload id | 5etools path | url}, caption}`, `gallery`
+- Embeds: `refEmbed{ref:{kind, uid, homebrewEntityId?}, display full|compact}`, `pageEmbed{pageId, mode card|inline}`, `query{filter{types, tags, props[{key, op, value | {$ctx:"currentPage"}}], parent}, sort, view list|table|cards, columns}`
+- Layout: `columns > column` (2–4), `details{open}` (summary + body), `tabs > tab{title}`
+- Game: `encounter{encounterId}`, `loot{items[{uid|homebrewId|custom, qty, note}], currency}`
+- Templates: `templateInstance{templateId, version, values, detached}` (a linked block template, read-only in the editor; edit the values or detach)
+- `unknownBlock{raw}` keeps any unrecognized JSON losslessly.
+
+**Registry contract** (`packages/blocks` plus the web half):
+- Each `BlockType` has two halves.
+  - The framework-agnostic half (`packages/blocks`): `{name, attrsSchema (zod), pmSpec (TipTap node config), project(viewer) → keep | strip | transform, extractText, extractLinks, substitute(values)}`.
+  - The Angular half (`apps/web`): `{editorComponent (NodeView via ngx-tiptap), rendererComponent (read-only), slashItem}`.
+- New block types register with the registry; the core never changes.
+
+**Visibility projection** (`projectPageForViewer`, server only)
+- This one function backs every endpoint that returns page content: page GET, embeds, query results, search snippets, backlinks, exports.
+- What players never receive:
+  - pages they can't see
+  - blocks with `visibility:"dm"` and `revealed:false`, and their whole subtree
+  - DM-only properties and facet fields
+  - links to invisible pages (sent as plain label text instead)
+  - hidden tracker combatants (monster HP shown as status words)
+
+---
+
+## Template engine (`packages/templates`)
+**Placeholders**
+- Syntax: `{{name}}`, `{{dc: number = 13}}`, `{{creature: reference<monster>}}`.
+- Types: text, number, boolean, select(…), date, dice, pageLink, `reference<kind>`.
+- The first declaration of a variable normalizes into `variables_json`. `\{{` escapes.
+- There are no expressions and no code: a single regex-free tokenizer does the substitution.
+- Attribute bindings use `{"$var":"creature"}` inside block attrs (e.g. a `refEmbed.ref`).
+- `{"$rulesetRef":"condition:poisoned"}` resolves per campaign ruleset, which is what makes the starter templates edition-aware.
+
+**Insert modes**
+- Fill now: values are validated and typed, then substituted.
+- Leave as fields: values become `placeholder` inline nodes.
+- Insert as copy: plain blocks.
+- Insert as linked: a `templateInstance` block, recorded in `template_usage`.
+
+**Template updates**
+- Editing a template bumps its `version` and stores a `*_version` row.
+- Linked instances re-render from the new version plus their stored values.
+- The editor shows the "used in" pages before you save.
+
+**Page templates**
+- Resolution walks the `extends` chain: properties merge by key, and the body is appended or replaced.
+- Then: prompt for variables and required properties, create the page with its facet defaults, and create child pages recursively (depth limit and cycle guard).
+- "Apply template" to an existing page adds missing properties and appends blocks without overwriting anything.
+
+**Library and migrations**
+- Scopes: global (built-in, read-only), user, campaign. "Duplicate to user/campaign" copies down.
+- Export format: `{"format":"critical-notes/template"|"…/template-library", "schemaVersion":1, …}`, with a `migrations[n→n+1]` registry. Imports from a future version are rejected with a clear message.
+
+**Built-ins** (JSON in the repo, upserted at startup by `builtin_key` and version): NPC, Location, Settlement, Dungeon room, Quest, Faction, Session prep, Session recap, Shop, Trap, Random encounter table, Magic item handout, Player handout.
+
+---
+
+## Homebrew
+**Types:**
+- First: monster, spell, item, baseitem, feat, race/subrace (shown as "Species" in 2024 campaigns), background.
+- Then: condition, variantrule, table.
+- Later: class/subclass/classFeature/subclassFeature.
+
+**Save pipeline**
+1. Light zod check.
+2. Ajv validation against `homebrew.json` (from 5etools-utils brew-fast), using a synthetic `{_meta, <type>:[entity]}`. Errors are mapped to JSON paths.
+3. App-level checks: required fields, valid CR, a valid dice grammar, source exists.
+4. Broken `{@tag}` targets come back as **warnings**.
+5. A name collision with official or other homebrew content in a different source is a warning. The same source+type+name is an error.
+6. Resolve `_copy`, write a revision with a JSON-patch diff, re-index the entity and its dependents.
+
+**Editors**
+- A form editor per type, driven by a field spec, with a live preview through the real renderer. The client resolves `_copy` against the fetched base entity.
+- A CodeMirror JSON editor with schema errors. Toggling form↔JSON keeps unknown fields.
+- The **entries editor** is a structured card list (string paragraph / entries / list / table / inset / readaloud / quote / raw-JSON card).
+  - Strings are edited in CodeMirror with a toolbar (b/i, dice, damage, dc, hit, reference).
+  - Typing `{@` triggers autocomplete: tag type first, then an entity search that always inserts an explicit `|SOURCE`.
+  - Round-trips are lossless.
+- "Start from existing" either clones in full, or creates a `_copy` variant that stores only the diff.
+
+**Import/export**
+- Import accepts a file, multiple files or folder (directory picker), or a URL.
+  - URL fetching is server-side, http/https only, blocks private IPs, and has size and time limits.
+  - Edition: `_meta.edition` classic → 2014, one → 2024; if it's missing, the user picks (default classic).
+  - Unknown types and fields are reported and kept where possible. Each entity is wrapped in its own try/catch, so one bad entity never crashes the import.
+- Export is valid 5etools homebrew: `_meta.sources/dateAdded/dateLastModified/edition` (`any` → `classic`), merged with `meta_extra_json`. Tests validate it against the schema.
+
+**Sharing:** private (owner), shared with specific campaigns, instance-wide (admin only), or campaign-only.
+
+---
+
+## Milestones
+Each milestone ends with `pnpm -r typecheck && pnpm lint && pnpm test`, then a summary of what works and what's left. Tests use a **synthetic mini 5etools fixture** (invented entities, no copied content). The optional real-data smoke tests run when `FIVETOOLS_SRC_PATH` is set: index everything, resolve every `_copy`, render every entity without throwing.
+
+- **Step 0.**
+  - **First action after approval:** save this plan to `docs/PLAN.md` in the project, unchanged. After each milestone, update its status there (done / what's left), so the repo always carries the current plan.
+  - Create `5etools-data/` in the project.
+  - Write the ignore files first (`.gitignore`, `.dockerignore`, `.vscode/settings.json` watcher and search excludes), then `git init`.
+  - Clone `5etools-src` and `5etools-img` (`--depth 1`) into `5etools-data/`.
+  - Re-run the survey scripts against the fresh clones and write `DATA_NOTES.md`.
+  - Show it to you.
+  - Add `.env.example` (FIVETOOLS_SRC_PATH=./5etools-data/5etools-src, FIVETOOLS_IMG_PATH=./5etools-data/5etools-img, DATA_DIR=./var, APP_SECRET, PUBLIC_URL).
+  - `scripts/data-clone.sh` and `scripts/data-update.sh` target the same folder by default.
+- **(a) Scaffold + indexing + edition resolver.**
+  - Workspace, lint rules (including the edition-literal ban), `packages/fivetools`: loader, copy resolver (all mod modes, safe `calculateProp`, `_templates`, `_preserve`, variables), `_versions`, subraces, magic variants, class-feature refs, fluff, edition resolver, reprint groups, rulesets (skeleton), `index.sqlite` builder with incremental diffing.
+  - Scripts: `pnpm data:clone|data:update|index`.
+  - Tests: resolver matrix (2014/2024 × cross-edition × source toggles × homebrew `any`), reprint grouping, every mod mode, homebrew `_copy` of an official entity, cycles and missing parents, no-op re-index speed.
+- **(b) Reference browser.**
+  - Tag tokenizer and renderer (all entry types and tags, with graceful unknowns).
+  - Statblocks: classic and 2024 monster, spell, item, species, background, feat, condition, class/subclass with features by level, plus a generic fallback.
+  - Hover previews, virtualized filtered lists per kind, detail pages, images with fallback, `/img` route.
+  - Cmd-K search (reference-only for now). A temporary "campaign context" picker drives edition filtering.
+  - Tests: tag parsing and rendering snapshots, path-traversal tests.
+- **(c) Core app: auth basics + campaigns + page core + facets.**
+  - Login/session, first-run admin, campaign CRUD/archive, ruleset choice, source toggles, house rules.
+  - Page tree (nested, drag-reorder, fractional keys), page types, facets, and the dedicated views (NPC list, location tree, session log, quests, factions, party/character summary sheet). These are views over the same records.
+  - NPC "clone statblock from bestiary → customize" (campaign `_copy`).
+  - The page body uses a basic TipTap editor (text blocks) at this stage.
+- **(d) Block editor + properties + backlinks.**
+  - Full registry and every block type above.
+  - Slash menu, drag handle, nesting, keyboard shortcuts.
+  - `[[` autocomplete with page creation, `{@` reference inline nodes, inline dice.
+  - Property defs and values UI, query block engine (SQL compiled from the filter DSL), backlinks panel, page search indexing (DM and player text), optimistic concurrency (revision → 409 + reload/merge prompt).
+- **(e) Homebrew.**
+  - Sources, scopes and sharing, campaign-only quick create.
+  - Form, JSON and entries editors with live preview, start-from-existing, validation, revisions and restore, used-in + soft delete, import (file/folder/URL) and export.
+  - Tests: import/export round-trip, schema-validity of the export, never-crash import on malformed files, collision warnings.
+- **(f) Templates.**
+  - Block and page templates, variables, both insert modes, linked propagation with used-in, detach, inheritance, child pages, apply-to-existing, per-type campaign defaults, library UI, import/export with migrations, the 13 built-ins working in both editions.
+  - Tests: substitution, typed validation, propagation, inheritance merge, migration.
+- **(g) Encounters + initiative.**
+  - Builder: add monsters, NPCs and PCs, with difficulty from the ruleset (both methods, including multipliers and party-size adjustments, 2024 lair XP).
+  - Encounter block "send to tracker".
+  - Tracker: turn order, HP/temp HP, conditions with durations, hidden combatants, keyboard controls, SSE player view.
+  - Loot block → award to inventory with a session link; party inventory and attunement (3 slots).
+- **(h) Roles, visibility, invites, export/import.**
+  - Campaign roles (DM, co-DM, player), invite links, players can edit their own PC.
+  - `projectPageForViewer` applied everywhere, plus a **sentinel crawl test**: seed DM-only strings across pages, blocks, properties, facets, tracker and homebrew, then GET every player-reachable endpoint and assert none of the strings appear.
+  - Campaign export/import as a zip: `campaign.json` (pages, characters, encounters, templates, homebrew sources as 5etools docs) + uploads, with ID remapping.
+  - The "migrate edition" flow.
+- **(i) Docker + docs + Postgres.**
+  - Multi-stage Dockerfile (non-root).
+  - docker-compose: the app, plus read-only mounts `./5etools-data/5etools-src:/data/5etools-src:ro` and `./5etools-data/5etools-img:/data/5etools-img:ro`, plus a data volume. A `tools` profile adds a `data-update` service that mounts the same folders read-write.
+  - Postgres Drizzle schema + migrations, with a table/column parity test.
+  - Playwright smoke flows.
+  - README: setup, cloning data, config, updating data, writing homebrew, using templates, an architecture overview, and **licensing**. 5etools code is MIT. Content and art belong to WotC and the artists and are not redistributed; SRD 5.1/5.2 portions are CC-BY-4.0; users must own their books.
+  - `docs/ARCHITECTURE.md` with the ER diagram (mermaid).
+
+---
+
+## Verification
+- `pnpm -r typecheck && pnpm lint && pnpm test` passes after every milestone.
+- `pnpm index` on the real v2.37.x data completes, and a second run is a no-op in under 1 s. Every entity resolves and renders in the smoke test, and warnings are counted, not thrown.
+- Manual checks with `pnpm dev`:
+  - In a 2014 campaign, `PHB Fireball` is shown, not XPHB.
+  - A 2024 campaign shows "Species".
+  - Turning cross-edition on adds badges.
+  - The encounter difficulty matches hand-computed DMG and XDMG examples.
+- As a player account:
+  - A secret block is absent from the network response (check DevTools), from search and from the export.
+  - A revealed block appears.
+- `docker compose up` serves the app, art loads through `/img`, and `data-update` followed by a re-index works.
+
+---
+
+## Status
+
+| Milestone | State | Notes |
+|---|---|---|
+| Step 0 | ✅ done (2026-10-08) | Fresh clones (src + img v2.37.0) in `5etools-data/`; `DATA_NOTES.md` written. Upstream was v2.37.0, not v2.9.1. |
+| (a) Indexing + edition resolver | ✅ done (2026-10-08) | `packages/fivetools` (copy resolver, versions, subraces, magic variants, edition policy, reprint groups, rulesets, tags) + `apps/server` indexer (`pnpm index`). Real data: 19,402 entities, cold build ≈6 s, no-op re-run ≈16 ms. 85 tests. |
+| (b) Reference browser | ✅ done (2026-10-08) | Reference API: lists with reprint de-duplication, entity detail with reprint group and preferred printing, FTS search, autocomplete, `/img` with traversal and symlink protection. Angular UI: renderer for every entry type and tag, 2014 and 2024 monster statblocks, spells, items, species, backgrounds, feats, class pages (feature table plus subclass picker). Also: hover previews, filterable virtual lists, Cmd-K search, preview rules context with source toggles, dice roller with log, dark mode, tablet layout. 120 + 7 tests. |
+| (c) Core app: auth, campaigns, pages, facets | ✅ done (2026-10-08) | Local accounts: first-run admin setup, argon2id, httpOnly session cookies, login rate limit, origin/JSON CSRF guard. Campaigns: ruleset chosen at creation, source overrides, cross-edition, archive, house rules, auto-created campaign-only homebrew source. Pages: tree with fractional sort keys, drag-and-drop, cycle-safe moves, soft-deleted subtrees, typed facets with validated page links, optimistic concurrency (409). Views over the same records: NPCs, locations tree, session log, quest board, factions, party. NPC statblocks: link a bestiary entry, or clone it as campaign homebrew (`_copy`) and edit it, with revision history and relinking on rename. Reference lookups follow the campaign's rules and its allowed homebrew. Basic TipTap body editor. 141 + 7 tests and an end-to-end browser run. |
+| (d) Block editor, properties, backlinks | ✅ done (2026-10-12) | `packages/blocks` (registry, sanitizer, player projection, link and text extraction, query DSL). TipTap v3 editor with Angular node views for every block, slash menu, `[[` links with page creation, `{@` reference tags, drag-handle block menu, DM-only and revealed shortcuts. Properties panel, backlinks, page search (DM and player text), image uploads, "Preview as player" through the server projection, campaign pages in Ctrl+K. 162 + 15 tests; browser runs for (c) and (d) pass. |
+| (e) Homebrew | ✅ done (2026-10-12) | Sources (private, instance, campaign-only) shared per campaign; validation with the 5etools brew-fast schemas plus app checks (broken `{@tag}` targets, dice, collisions); revisions with restore; soft delete that keeps references resolving; rename aliases; subraces; copy to homebrew (clone or `_copy` variant); import from files, folders or URLs (SSRF-safe) with a per-entity report; schema-valid export. Web: homebrew area, editor with per-type forms, CodeMirror JSON with schema problems at their paths, structured entries editor with `{@` autocomplete, live preview, history, used in. 180 + 22 tests; browser runs for (c), (d) and (e) pass. |
+| (f) Templates | ✅ done (2026-10-12) | `packages/templates`: `{{name: type = default}}` tokenizer, typed values, substitution (dice → `{@dice}`, references → tags, page links), `$var` / `$rulesetRef` / `$rulesetTag` bindings and `{{rules.*}}` terms per edition, page-template inheritance with cycle guard, export format with a migrations registry, 13 built-ins tested in both editions. Server: library (built-in, personal, campaign), versions with optimistic concurrency, linked instances re-rendered on template save, pages from page templates (properties, facet defaults, child pages), apply to an existing page, per-type campaign defaults, usage, import/export. Web: library, template editor (content in the block editor, live fields panel, page settings), "/ → Template…" insert (fill, fields or linked), "Edit values" and "Detach" on linked blocks, new page from template, apply template, defaults in campaign settings. 207 + 26 tests; browser runs for (c)–(f) pass. |
+| (g) Encounters, initiative, loot | ✅ done (2026-10-13) | Encounter builder (bestiary monsters, NPC statblocks, custom creatures, lair XP, the campaign's characters or custom levels) with difficulty from the ruleset (2014 multipliers and party-size steps, 2024 budgets). Initiative tracker: a pure, tested reducer (`@cn/shared`) applied in order on the server, turn order and rounds, HP and temporary HP, conditions with durations, hidden combatants, keyboard controls, live updates over SSE, and a full-screen player view that only ever receives the projection (no hidden creatures, notes or monster HP; health words instead). Ending combat writes PC hit points back. Encounter blocks (never sent to players) and loot blocks that award once to the party or a character; party and character inventories with coins, stacking, identification and the 3-item attunement limit. 224 + 29 tests; browser runs for (c)–(g) pass. |
+| (h) Roles, visibility, export | ✅ done (2026-10-13) | Roles (DM, co-DM, player), `VisibilityService`, the player projection on every content route, players editing their own PC (merged around hidden blocks), invites (hashed tokens, expiry, uses) and invite-only registration, members and roles, player inventory rules (unidentified items hidden), campaign export/import zip with id remapping, edition migration dry run and apply. Web: role-aware shell, routes (`gmGuard`), editor and settings; invite page; campaign import. Sentinel crawl test over 40+ player responses; `smoke-h.mjs` 11/11 checks every response the player's browser receives. Gate: 240 + 40 tests. Details in [STATUS.md](STATUS.md). |
+| (i) Delivery | ✅ done (2026-10-13) | Uploads re-encoded with sharp (metadata stripped, thumbnails). Bundled server build (esbuild). Multi-stage Dockerfile (non-root) and docker-compose with read-only 5etools mounts and a `tools` profile for data updates. Postgres schema and migrations with a parity test that applies both migration sets (PGlite). Playwright tests (52) in place of the smoke scripts, passing against the bundle and the Docker image. README with licensing, `docs/ARCHITECTURE.md` with the ER diagram. Details in [STATUS.md](STATUS.md). |
+| After the plan: MCP server | ✅ done (2026-10-13) | Personal API tokens (Account page), `/mcp` with 31 tools over the REST API in-process, page and template text as Markdown with lossless reconcile. Details in [STATUS.md](STATUS.md). |
+
+### Deviations and findings
+- TypeScript is pinned to 6.0.x: Angular 22 does not support TypeScript 7 yet.
+- pnpm 11 uses `allowBuilds` in `pnpm-workspace.yaml` instead of `onlyBuiltDependencies`.
+- `_copy` parents need a per-type identity key (subclass, class/subclass features, deity, card, item types/properties, subrace, magic variants). It lives in `packages/fivetools/src/kinds.ts`.
+- Generic magic variants carry their source in `inherits.source`. Specific variants get *derived* reprint links (e.g. `+1 Longsword|DMG` → `+1 Longsword|XDMG`) instead of inheriting the generic variant's link.
+- Class features are indexed as their own entities. The class detail API (milestone b) assembles them.
+- 22 of 3,545 reprint links point at entities that don't exist in the data (XDMG rules that exist only as book sections, MPMM cults). The UI shows them as unavailable.
+- `pnpm` scripts run on Node 24.15.0 through `devEngines.runtime` in the root `package.json`. The Angular CLI requires Node 24.15 or later, but Volta's pnpm shim ran an older Node.
+- Angular critical-CSS inlining is turned off. It uses an inline `onload` handler, which the CSP (`script-src 'self'`) blocks.
+- Rendering logic is UI-independent (`packages/fivetools/src/render`: inline render tree, dice, statblock formatters), so most of it is unit-tested without a browser.
+- `_versions` variants (e.g. "Mage (Familiar)") inherit `reprintedAs` but are excluded from reprint grouping. Otherwise they competed with their parent in lists, which an end-to-end run caught.
+- Homebrew visibility is part of `CampaignPolicy` (`homebrewSources`). Homebrew a campaign isn't allowed to use never shows up in lists, search, entity detail or the source list.
+- Reference routes and `/img` require a signed-in user (the content is copyrighted, so it is never served publicly).
+- (d) The query DSL is evaluated in memory over the campaign's live pages instead of being compiled to SQL. That is fine at campaign scale; revisit with Postgres in (i).
+- (d) The planned `refTag` and `dice` inline nodes are one `tag {markup}` inline node that reuses the 5etools tag renderer, so dice are `{@dice …}` tags. The `divider` block is TipTap's `horizontalRule`.
+- (d) Uploads are checked by magic bytes but not yet re-encoded with sharp (no metadata stripping or thumbnails). Planned for (e) or (i).
+- (d) The server runs from TypeScript through `tsx` (also with `NODE_ENV=production`). A bundled server build comes with the Docker work in (i).
+- (e) The editor's live preview resolves `_copy` on the server (`POST /api/homebrew/preview`) instead of in the browser, so it uses exactly the resolver and index the reference uses.
+- (e) Entry strings are edited in a textarea with a toolbar and `{@` autocomplete instead of a CodeMirror instance per string; CodeMirror is used for the JSON view.
+- (e) Source scopes are private, instance and campaign. "Shared with campaigns" is an explicit campaign list on a private source rather than a separate scope.
+- (e) New source ids follow the 5etools homebrew schema (at least 6 characters of `[-a-zA-Z0-9&+!]`, not starting with UA/XUA); the plan's looser format would have produced exports 5etools rejects.
+- (e) Outside a campaign, the reference shows the user's own and instance-wide homebrew. Campaign-only homebrew stays inside its campaign.
+- (e) Homebrew magic variants are indexed as single items (no expansion across base items).
+- (f) One `templates` table (with `kind` and a JSON `definition`) and one `template_versions` table instead of separate block and page template tables. The definitions are validated in code (`@cn/shared` zod schemas, `@cn/templates`).
+- (f) Insert modes: "fill" and "leave as fields" both insert plain copies; "linked" is filled and follows the template. Copies are not tracked in `template_usage`; linked instances (derived on page save) and pages created from a page template are.
+- (f) Linked instances are updated by rewriting the stored page bodies when the template is saved (so search, the player projection and exports always see current content). A page open in another editor gets the usual 409 on its next save.
+- (f) In attributes (stat grid values, captions), an unfilled variable becomes empty: attributes cannot hold field nodes.
+- (f) Besides `$rulesetRef`, templates have `$rulesetTag` (a `{@condition …}` tag for the campaign's edition) and `{{rules.*}}` (ruleset terms such as "Race"/"Species").
+- (f) The campaign's default template for a page type is applied by the normal page-create endpoint (fields mode); `?template=0` opts out.
+- (g) Tracker actions go through one pure reducer (`@cn/shared/tracker`) that the server applies in order, so two DM tabs never overwrite each other; the state is stored as JSON on the tracker row. Live updates use an in-process event hub (one server process; several would need a shared pub/sub).
+- (g) Attunement is a flag on an item a character owns (at most 3), not an `attuned_to_page_id`; coins are kept per owner ("party" or a character page); `loot_awards` records awarded loot blocks so the same loot is not handed out twice by accident.
+- (g) The encounter difficulty is computed in the browser with the ruleset code (the server resolves names, CR and XP). The DMG 2014 suggestion to ignore much weaker monsters is not applied (5etools' builder does not by default either).
+- (g) Ending a combat writes the player characters' hit points back to their pages. The player view is a full-screen route for a second screen; players themselves can open it once (h) lets them into campaigns.
+- (h) Roles are `dm` (the owner), `codm` and `player`. A co-DM can do everything a DM can, except manage members and roles, invite co-DMs, and change the edition.
+- (h) Players' reference leaves out the campaign-only homebrew source (it is the DM's prep). Homebrew sources shared with the campaign stay visible.
+- (h) A player's edit of their character page is merged around the blocks they can't see; a link they keep to a page they can't see stays as plain text.
+- (h) Unidentified items show to players as "Unidentified item" (no reference link, no notes); only game masters identify or rename them. Not in the plan; added because the item's identity is DM knowledge.
+- (h) The campaign export leaves out trackers. `selected` pages import as DM-only, because their viewers are users of the old instance.
+- (h) The edition migration rewrites simple `name|source` tags and uid fields; tags with other layouts (class features) are listed but keep their old target.
+- (i) Postgres: the schema, its migrations and the parity test are done, but the app runs on SQLite only. The services use better-sqlite3's synchronous API; running on Postgres needs an async data layer first.
+- (i) `APP_SECRET` is gone: nothing is signed (session tokens are random, stored as hashes). Session cookies are `Secure` when `PUBLIC_URL` is https (or `SECURE_COOKIES=1`), not whenever `NODE_ENV=production`, so plain-http LAN installs can sign in.
+- (i) The `data-update` service only pulls the clones (in a stock git image, as the user who owns them); the app re-indexes when it restarts, instead of the tools container running the indexer.
+- (i) The Playwright tests use the real 5etools data (not the synthetic fixture) and the system Chrome; unit and API tests keep using the fixture.
+- (i) The project's own license is not chosen; the README says so.
+- (after the plan) MCP server for AI assistants, at the user's request. Bearer tokens are accepted only on `/mcp`, never on the REST API; the tools call the REST API in-process as the token's user. Page and template text goes through a Markdown dialect (`:::secret`, `:::dm`, `{@tags}`, `[[links]]`…) with placeholder lines for blocks Markdown can't express. Homebrew sources can be created, changed and shared but not deleted through MCP (too much at stake for one tool call). No OAuth yet: clients paste a token.

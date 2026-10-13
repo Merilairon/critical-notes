@@ -1,0 +1,45 @@
+{
+  "name": "critical-notes",
+  "private": true,
+  "type": "module",
+  "description": "Self-hostable D&D 5e campaign manager powered by local 5etools data",
+  "packageManager": "pnpm@11.0.9",
+  "engines": {
+    "node": ">=24.15.0"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @cn/server --filter @cn/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck && tsc -p e2e",
+    "lint": "eslint . && node scripts/check-no-raw-html.mjs",
+    "test": "vitest run && pnpm --filter @cn/web test",
+    "test:watch": "vitest",
+    "e2e": "pnpm build && playwright test",
+    "index": "pnpm --filter @cn/server run index",
+    "data:clone": "bash scripts/data-clone.sh",
+    "data:update": "bash scripts/data-update.sh"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "@modelcontextprotocol/client": "2.3.1",
+    "@playwright/test": "1.63.0",
+    "@types/node": "^24.0.0",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.9",
+    "tsx": "^4.23.15",
+    "typescript": "6.0.3",
+    "typescript-eslint": "^8.71.1",
+    "vitest": "^5.0.3"
+  },
+  "volta": {
+    "node": "24.15.0"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "24.15.0",
+      "onFail": "download"
+    }
+  }
+}

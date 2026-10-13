@@ -1,0 +1,26 @@
+# 5etools data and images: never commit or redistribute (see README, Licensing)
+/5etools-data/
+
+# App runtime data (DB, search index, uploads)
+/var/
+
+# Dependencies and build output
+node_modules/
+dist/
+.angular/
+coverage/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+*.log
+
+# Browser tests
+e2e/.auth/
+playwright-report/
+test-results/

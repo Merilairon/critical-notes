@@ -1,0 +1,16 @@
+{
+  "files.watcherExclude": {
+    "**/5etools-data/**": true,
+    "**/var/**": true,
+    "**/node_modules/**": true,
+    "**/.angular/**": true
+  },
+  "search.exclude": {
+    "**/5etools-data": true,
+    "**/var": true,
+    "**/.angular": true
+  },
+  "files.exclude": {
+    "**/.angular": true
+  }
+}

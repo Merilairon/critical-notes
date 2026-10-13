@@ -1,0 +1,33 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "ES2022",
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "lib": ["ES2024", "dom", "dom.iterable"],
+    "paths": {
+      "@cn/fivetools": ["../../packages/fivetools/src/index.ts"],
+      "@cn/shared": ["../../packages/shared/src/index.ts"],
+      "@cn/shared/page-types": ["../../packages/shared/src/page-types.ts"],
+      "@cn/blocks": ["../../packages/blocks/src/index.ts"],
+      "@cn/templates": ["../../packages/templates/src/index.ts"]
+    }
+  },
+  "angularCompilerOptions": {
+    "enableI18nLegacyMessageIdFormat": false,
+    "strictInjectionParameters": true,
+    "strictInputAccessModifiers": true,
+    "strictTemplates": true,
+    "extendedDiagnostics": { "defaultCategory": "error" }
+  },
+  "files": [],
+  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.spec.json" }]
+}

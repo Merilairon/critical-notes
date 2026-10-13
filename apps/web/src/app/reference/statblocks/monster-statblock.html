@@ -1,0 +1,140 @@
+<div class="cn-statblock">
+  @if (showName()) {
+    <h2 class="cn-sb-name">{{ entity().name }}</h2>
+  }
+  <div class="cn-sb-sub"><cn-inline [text]="typeLine()" /></div>
+  <div class="cn-sb-rule"></div>
+
+  @if (modern()) {
+    <div class="flex flex-wrap gap-x-6">
+      <div><span class="cn-sb-label">AC</span>&ngsp;<cn-inline [text]="ac()" /></div>
+      @if (initiative(); as init) {
+        <div><span class="cn-sb-label">Initiative</span>&ngsp;{{ init }}</div>
+      }
+    </div>
+    <div><span class="cn-sb-label">HP</span>&ngsp;<cn-inline [text]="hp()" /></div>
+    <div><span class="cn-sb-label">Speed</span>&ngsp;<cn-inline [text]="speed()" /></div>
+    <div class="cn-sb-rule"></div>
+    <div class="cn-abilities-modern">
+      @for (row of abilityRows(); track $index) {
+        @for (a of row; track a.ability) {
+          <div class="flex items-baseline justify-between gap-1 rounded bg-panel-2/60 px-2 py-0.5 text-sm">
+            <span class="cn-sb-label">{{ a.label }}</span><span>{{ a.score }}</span><span class="text-muted">{{ a.mod }}</span
+            ><span title="Saving throw">{{ a.save }}</span>
+          </div>
+        }
+      }
+    </div>
+    <div class="cn-sb-rule"></div>
+    @if (skills()) {
+      <div><span class="cn-sb-label">Skills</span>&ngsp;<cn-inline [text]="skills()" /></div>
+    }
+    @if (vulnerable()) {
+      <div><span class="cn-sb-label">Vulnerabilities</span>&ngsp;<cn-inline [text]="vulnerable()" /></div>
+    }
+    @if (resist()) {
+      <div><span class="cn-sb-label">Resistances</span>&ngsp;<cn-inline [text]="resist()" /></div>
+    }
+    @if (immunitiesModern()) {
+      <div><span class="cn-sb-label">Immunities</span>&ngsp;<cn-inline [text]="immunitiesModern()" /></div>
+    }
+    @if (gear()) {
+      <div><span class="cn-sb-label">Gear</span>&ngsp;<cn-inline [text]="gear()" /></div>
+    }
+    <div><span class="cn-sb-label">Senses</span>&ngsp;<cn-inline [text]="senses()" /></div>
+    <div><span class="cn-sb-label">Languages</span>&ngsp;<cn-inline [text]="languages()" /></div>
+    <div><span class="cn-sb-label">CR</span>&ngsp;{{ cr() }}</div>
+  } @else {
+    <div><span class="cn-sb-label">Armor Class</span>&ngsp;<cn-inline [text]="ac()" /></div>
+    <div><span class="cn-sb-label">Hit Points</span>&ngsp;<cn-inline [text]="hp()" /></div>
+    <div><span class="cn-sb-label">Speed</span>&ngsp;<cn-inline [text]="speed()" /></div>
+    <div class="cn-sb-rule"></div>
+    <div class="cn-abilities">
+      @for (a of abilities(); track a.ability) {
+        <div>
+          <div class="cn-ab-label">{{ a.label }}</div>
+          <div>{{ a.score }} ({{ a.mod }})</div>
+        </div>
+      }
+    </div>
+    <div class="cn-sb-rule"></div>
+    @if (saves()) {
+      <div><span class="cn-sb-label">Saving Throws</span>&ngsp;<cn-inline [text]="saves()" /></div>
+    }
+    @if (skills()) {
+      <div><span class="cn-sb-label">Skills</span>&ngsp;<cn-inline [text]="skills()" /></div>
+    }
+    @if (vulnerable()) {
+      <div><span class="cn-sb-label">Damage Vulnerabilities</span>&ngsp;<cn-inline [text]="vulnerable()" /></div>
+    }
+    @if (resist()) {
+      <div><span class="cn-sb-label">Damage Resistances</span>&ngsp;<cn-inline [text]="resist()" /></div>
+    }
+    @if (immune()) {
+      <div><span class="cn-sb-label">Damage Immunities</span>&ngsp;<cn-inline [text]="immune()" /></div>
+    }
+    @if (conditionImmune()) {
+      <div><span class="cn-sb-label">Condition Immunities</span>&ngsp;<cn-inline [text]="conditionImmune()" /></div>
+    }
+    <div><span class="cn-sb-label">Senses</span>&ngsp;<cn-inline [text]="senses()" /></div>
+    <div><span class="cn-sb-label">Languages</span>&ngsp;<cn-inline [text]="languages()" /></div>
+    <div class="flex flex-wrap gap-x-6">
+      <div><span class="cn-sb-label">Challenge</span>&ngsp;{{ cr() }}</div>
+      @if (pb(); as pb) {
+        <div><span class="cn-sb-label">Proficiency Bonus</span>&ngsp;{{ pb }}</div>
+      }
+    </div>
+  }
+
+  @for (section of sections(); track section.prop) {
+    @if (section.title) {
+      <h3 class="cn-sb-section">{{ section.title }}</h3>
+    } @else {
+      <div class="cn-sb-rule"></div>
+    }
+    <div class="cn-prose">
+      <cn-entries [entries]="section.header" [depth]="2" />
+      @for (sc of section.spellcasting; track $index) {
+        <cn-entry [entry]="sc" [depth]="2" />
+      }
+      <cn-named-entries [items]="section.items" />
+    </div>
+  }
+
+  @if (legendary().length) {
+    <h3 class="cn-sb-section">Legendary Actions</h3>
+    <div class="cn-prose">
+      <cn-entries [entries]="legendaryHeader()" [depth]="2" />
+      @for (sc of spellcasting()['legendary'] ?? []; track $index) {
+        <cn-entry [entry]="sc" [depth]="2" />
+      }
+      <cn-named-entries [items]="legendary()" />
+    </div>
+  }
+  @if (mythic().length) {
+    <h3 class="cn-sb-section">Mythic Actions</h3>
+    <div class="cn-prose">
+      <cn-entries [entries]="list(m()['mythicHeader'])" [depth]="2" />
+      <cn-named-entries [items]="mythic()" />
+    </div>
+  }
+
+  @if (lgData(); as lg) {
+    @if (list(lg['lairActions']).length) {
+      <h3 class="cn-sb-section">Lair Actions</h3>
+      <div class="cn-prose"><cn-entries [entries]="list(lg['lairActions'])" [depth]="2" /></div>
+    }
+    @if (list(lg['regionalEffects']).length) {
+      <h3 class="cn-sb-section">Regional Effects</h3>
+      <div class="cn-prose"><cn-entries [entries]="list(lg['regionalEffects'])" [depth]="2" /></div>
+    }
+    @if (list(lg['mythicEncounter']).length) {
+      <h3 class="cn-sb-section">Mythic Encounter</h3>
+      <div class="cn-prose"><cn-entries [entries]="list(lg['mythicEncounter'])" [depth]="2" /></div>
+    }
+  }
+
+  @if (list(m()['variant']).length) {
+    <div class="cn-prose mt-2"><cn-entries [entries]="list(m()['variant'])" [depth]="1" /></div>
+  }
+</div>

@@ -1,0 +1,342 @@
+@switch (kind()) {
+  @case ('empty') {}
+  @case ('string') {
+    @if (inlineMode()) {
+      <cn-inline [text]="str()" />
+    } @else {
+      <p><cn-inline [text]="str()" /></p>
+    }
+  }
+  @case ('number') {<ng-container>{{ str() }}</ng-container>}
+
+  @case ('entries') {
+    @if (inlineHeader()) {
+      <p>
+        <span class="cn-inline-head">{{ name() }}.</span>&ngsp;<cn-inline [text]="$any(children()[0])" />
+      </p>
+      @for (child of children().slice(1); track $index) {
+        <cn-entry [entry]="child" [depth]="depth() + 1" />
+      }
+    } @else {
+      @if (name()) {
+        @switch (depth()) {
+          @case (0) { <h3>{{ name() }}</h3> }
+          @case (1) { <h4>{{ name() }}</h4> }
+          @default { <h5>{{ name() }}</h5> }
+        }
+      }
+      @for (child of children(); track $index) {
+        <cn-entry [entry]="child" [depth]="depth() + 1" />
+      }
+    }
+  }
+
+  @case ('list') {
+    @if (name()) { <p class="cn-inline-head">{{ name() }}</p> }
+    @if (listOrdered()) {
+      <ol>
+        @for (item of children(); track $index) {
+          <li><cn-entry [entry]="item" [depth]="depth() + 1" [inlineMode]="true" /></li>
+        }
+      </ol>
+    } @else {
+      <ul [class]="listClass()">
+        @for (item of children(); track $index) {
+          <li><cn-entry [entry]="item" [depth]="depth() + 1" [inlineMode]="true" /></li>
+        }
+      </ul>
+    }
+  }
+
+  @case ('item') {
+    @if (inlineMode()) {
+      @if (name()) {<span class="cn-inline-head">{{ name() }}</span>&ngsp;}
+      @for (child of children(); track $index) {
+        <cn-entry [entry]="child" [depth]="depth() + 1" [inlineMode]="$first" />
+      }
+    } @else {
+      <p>
+        @if (name()) {<span class="cn-inline-head">{{ name() }}</span>&ngsp;}
+        @if (children()[0]; as first) {
+          <cn-entry [entry]="first" [depth]="depth() + 1" [inlineMode]="true" />
+        }
+      </p>
+      @for (child of children().slice(1); track $index) {
+        <cn-entry [entry]="child" [depth]="depth() + 1" />
+      }
+    }
+  }
+
+  @case ('table') {
+    <div class="overflow-x-auto">
+      <table>
+        @if (obj()['caption'] || tableDice()) {
+          <caption>
+            @if (obj()['caption']) {<cn-inline [text]="$any(obj()['caption'])" />}
+            @if (tableDice(); as dice) {
+              &ngsp;<cn-roll [expr]="dice" [label]="$any(obj()['caption']) ?? 'Table roll'">🎲 roll {{ dice }}</cn-roll>
+            }
+          </caption>
+        }
+        @if (colLabels().length) {
+          <thead>
+            <tr>
+              @for (label of colLabels(); track $index) {
+                <th><cn-inline [text]="$any(label)" /></th>
+              }
+            </tr>
+          </thead>
+        }
+        <tbody>
+          @for (row of rows(); track $index) {
+            <tr>
+              @for (cell of row; track $index) {
+                <td>
+                  @if (cellText(cell); as t) {
+                    {{ t }}
+                  } @else {
+                    <cn-entry [entry]="cellEntry(cell)" [depth]="depth() + 1" [inlineMode]="true" />
+                  }
+                </td>
+              }
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    @for (note of $any(obj()['footnotes']) ?? []; track $index) {
+      <p class="cn-s-muted cn-s-small"><cn-entry [entry]="note" [inlineMode]="true" /></p>
+    }
+  }
+
+  @case ('tableGroup') {
+    @if (name()) { <h4>{{ name() }}</h4> }
+    @for (t of tables(); track $index) {
+      <cn-entry [entry]="t" [depth]="depth() + 1" />
+    }
+  }
+
+  @case ('inset') {
+    <div class="cn-inset">
+      @if (name()) { <h4 class="!mt-1">{{ name() }}</h4> }
+      @for (child of children(); track $index) {
+        <cn-entry [entry]="child" [depth]="depth() + 2" />
+      }
+    </div>
+  }
+
+  @case ('readaloud') {
+    <div class="cn-readaloud">
+      @if (name()) { <h4 class="!mt-1">{{ name() }}</h4> }
+      @for (child of children(); track $index) {
+        <cn-entry [entry]="child" [depth]="depth() + 2" />
+      }
+    </div>
+  }
+
+  @case ('variant') {
+    <div class="cn-variant">
+      <h4 class="!mt-1">{{ typeName() === 'variantSub' ? '' : 'Variant: ' }}{{ name() }}</h4>
+      @for (child of children(); track $index) {
+        <cn-entry [entry]="child" [depth]="depth() + 2" />
+      }
+    </div>
+  }
+
+  @case ('quote') {
+    <blockquote>
+      @for (child of children(); track $index) {
+        <cn-entry [entry]="child" [depth]="depth() + 1" />
+      }
+      @if (quoteBy(); as by) {
+        <span class="cn-quote-by">— <cn-inline [text]="by" /></span>
+      }
+    </blockquote>
+  }
+
+  @case ('image') {
+    <figure>
+      @if (imageSrc(entry()); as src) {
+        <img [src]="src" [alt]="imageTitle(entry()) ?? ''" loading="lazy" referrerpolicy="no-referrer" (error)="$any($event.target).hidden = true" />
+      } @else {
+        <span class="cn-unsupported">Image unavailable</span>
+      }
+      @if (imageTitle(entry()) || imageCredit(entry())) {
+        <figcaption>
+          @if (imageTitle(entry()); as t) {<cn-inline [text]="t" />}
+          @if (imageCredit(entry()); as c) { · Art: {{ c }}}
+        </figcaption>
+      }
+    </figure>
+  }
+
+  @case ('gallery') {
+    <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      @for (img of images(); track $index) {
+        <cn-entry [entry]="img" [depth]="depth() + 1" />
+      }
+    </div>
+  }
+
+  @case ('hr') { <hr /> }
+
+  @case ('inline') {
+    @for (child of children(); track $index) {
+      <cn-entry [entry]="child" [depth]="depth() + 1" [inlineMode]="true" />
+    }
+  }
+
+  @case ('link') {
+    @if (linkHref(); as href) {
+      <a class="cn-link" [href]="href" target="_blank" rel="noopener noreferrer nofollow">{{ linkText() }}</a>
+    } @else {
+      {{ linkText() }}
+    }
+  }
+
+  @case ('dice') {
+    <cn-roll [expr]="diceExpr()">{{ diceExpr() }}</cn-roll>
+  }
+
+  @case ('abilityDc') {
+    <p class="text-center">
+      <span class="cn-inline-head">{{ name() }} save DC</span> = 8 + your proficiency bonus + your {{ joinOr(attributes()) }} modifier
+    </p>
+  }
+  @case ('abilityAttackMod') {
+    <p class="text-center">
+      <span class="cn-inline-head">{{ name() }} attack modifier</span> = your proficiency bonus + your {{ joinOr(attributes()) }} modifier
+    </p>
+  }
+  @case ('abilityGeneric') {
+    <p class="text-center">
+      @if (name()) {<span class="cn-inline-head">{{ name() }}</span> = }<cn-inline [text]="$any(obj()['text'])" />
+    </p>
+  }
+
+  @case ('options') {
+    @if (obj()['count']) {
+      <p class="cn-s-muted cn-s-small">Choose {{ obj()['count'] }}:</p>
+    }
+    @for (child of children(); track $index) {
+      <cn-entry [entry]="child" [depth]="depth() + 1" />
+    }
+  }
+
+  @case ('ref') {
+    @if (ref(); as r) {
+      @if (r.resolved; as res) {
+        <div class="ml-2 border-l-2 border-line pl-3">
+          <h5>{{ res.name }}</h5>
+          @for (child of relatedEntries(res); track $index) {
+            <cn-entry [entry]="child" [depth]="depth() + 2" />
+          }
+        </div>
+      } @else {
+        <p class="cn-s-italic">
+          <cn-entity-link [uid]="r.uid" [kind]="r.kind">{{ r.name }}</cn-entity-link>
+        </p>
+      }
+    } @else {
+      <p class="cn-unsupported">{{ fallbackText() }}</p>
+    }
+  }
+
+  @case ('statblock') {
+    @if (ref(); as r) {
+      <p class="cn-inset">
+        <span class="cn-s-muted cn-s-small">Statblock:</span>&ngsp;
+        <cn-entity-link [uid]="r.uid" [kind]="r.kind">{{ r.name }}</cn-entity-link>
+      </p>
+    }
+  }
+
+  @case ('spellcasting') {
+    <p>
+      <span class="cn-inline-head">{{ spellcasting().name }}.</span>
+      @for (h of spellcasting().header; track $index) {
+        &ngsp;<cn-entry [entry]="h" [inlineMode]="true" />
+      }
+    </p>
+    <ul class="cn-list-plain">
+      @for (line of spellcasting().lines; track $index) {
+        <li>{{ line.label }}: <cn-inline [text]="line.spells" /></li>
+      }
+    </ul>
+    @for (f of spellcasting().footer; track $index) {
+      <cn-entry [entry]="f" [depth]="depth() + 1" />
+    }
+  }
+
+  @case ('flow') {
+    <div class="my-2 flex flex-col items-stretch gap-2">
+      @if (typeName() === 'flowBlock') {
+        <div class="cn-inset">
+          @if (name()) { <h5 class="!mt-0">{{ name() }}</h5> }
+          @for (child of children(); track $index) {
+            <cn-entry [entry]="child" [depth]="depth() + 2" />
+          }
+        </div>
+      } @else {
+        @for (child of $any(obj()['blocks']) ?? children(); track $index) {
+          <cn-entry [entry]="child" [depth]="depth() + 1" />
+        }
+      }
+    </div>
+  }
+
+  @case ('homebrew') {
+    <div class="cn-inset">
+      <span class="cn-badge cn-badge-homebrew">Homebrew</span>
+      @for (child of children(); track $index) {
+        <cn-entry [entry]="child" [depth]="depth() + 1" />
+      }
+    </div>
+  }
+
+  @case ('code') {
+    <pre class="overflow-x-auto rounded bg-panel-2 p-2 text-sm">{{ preformatted() }}</pre>
+  }
+
+  @case ('wrapper') {
+    @for (child of children(); track $index) {
+      <cn-entry [entry]="child" [depth]="depth()" [inlineMode]="inlineMode()" />
+    }
+  }
+
+  @case ('actions') {
+    <p>
+      @if (name()) {<span class="cn-inline-head">{{ name() }}.</span>&ngsp;}
+      @if (children()[0]; as first) {<cn-entry [entry]="first" [inlineMode]="true" />}
+    </p>
+    @for (child of children().slice(1); track $index) {
+      <cn-entry [entry]="child" [depth]="depth() + 1" />
+    }
+  }
+
+  @case ('attack') {
+    <p>
+      @if (name()) {<span class="cn-inline-head">{{ name() }}.</span>&ngsp;}
+      @for (child of $any(obj()['attackEntries']) ?? []; track $index) {
+        <cn-entry [entry]="child" [inlineMode]="true" />
+      }
+      <span class="cn-s-italic">Hit:</span>&ngsp;
+      @for (child of $any(obj()['hitEntries']) ?? []; track $index) {
+        <cn-entry [entry]="child" [inlineMode]="true" />
+      }
+    </p>
+  }
+
+  @default {
+    @if (children().length) {
+      @for (child of children(); track $index) {
+        <cn-entry [entry]="child" [depth]="depth() + 1" />
+      }
+    } @else {
+      <details class="cn-unsupported">
+        <summary>Unsupported content ({{ typeName() }})</summary>
+        {{ fallbackText() }}
+      </details>
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "@cn/templates",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Block and page templates: {{variable}} placeholders, typed values, substitution, page-template inheritance, export format and migrations, built-ins.",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "typecheck": "tsc -p tsconfig.json" },
+  "dependencies": { "@cn/blocks": "workspace:*", "@cn/fivetools": "workspace:*" }
+}

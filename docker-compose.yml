@@ -1,0 +1,36 @@
+# Critical Notes with the 5etools clones mounted read-only (clone them first: `pnpm data:clone`, or the
+# two `git clone --depth 1` commands in the README). App data lives in the `app-data` volume.
+#   docker compose up -d                              start (http://localhost:3000)
+#   docker compose --profile tools run --rm data-update   pull the latest 5etools data, then:
+#   docker compose restart app                        re-index on start (only changed files are read)
+services:
+  app:
+    build: .
+    image: critical-notes:latest
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      # The address people open the app at (an https:// address makes session cookies Secure)
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
+    volumes:
+      - ./5etools-data/5etools-src:/data/5etools-src:ro
+      - ./5etools-data/5etools-img:/data/5etools-img:ro
+      - app-data:/data/app
+    restart: unless-stopped
+
+  data-update:
+    profiles: [tools]
+    image: buildpack-deps:bookworm-scm
+    # Runs as you, so the clones stay yours (set UID/GID if yours are not 1000)
+    user: "${UID:-1000}:${GID:-1000}"
+    working_dir: /work
+    environment:
+      HOME: /tmp
+      SKIP_INDEX: "1"
+    volumes:
+      - ./scripts:/work/scripts:ro
+      - ./5etools-data:/work/5etools-data
+    command: ["bash", "scripts/data-update.sh"]
+
+volumes:
+  app-data:

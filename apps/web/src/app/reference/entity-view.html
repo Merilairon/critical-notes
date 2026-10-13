@@ -1,0 +1,86 @@
+<article class="flex flex-col gap-3">
+  <header class="flex items-start gap-3">
+    <div class="min-w-0 flex-1">
+      <div class="flex flex-wrap items-center gap-1.5 text-xs text-muted">
+        <span>{{ kindLabel() }}</span>
+        <span aria-hidden="true">·</span>
+        <span class="cn-badge cn-badge-source" [title]="entity().sourceInfo?.name ?? entity().source"
+          >{{ entity().sourceInfo?.abbreviation ?? entity().source }}{{ entity().page ? ' p.' + entity().page : '' }}</span
+        >
+        @if (badgeLabel(entity().badge); as b) {
+          <span class="cn-badge" [class.cn-badge-legacy]="entity().badge === 'legacy'" [class.cn-badge-modern]="entity().badge !== 'legacy'">{{ b }}</span>
+        }
+        @if (entity().origin === 'homebrew') {
+          <span class="cn-badge cn-badge-homebrew">Homebrew</span>
+        }
+        @if (entity().deleted) {
+          <span class="cn-badge cn-badge-legacy" title="Deleted from its homebrew source; still shown where it is used">Deleted</span>
+        }
+        @if (!entity().visible) {
+          <span class="cn-badge cn-badge-source" title="Not enabled in the current campaign context">Not in campaign</span>
+        }
+      </div>
+      @if (compact()) {
+        <h2 class="font-display text-xl font-bold">{{ entity().name }}</h2>
+      } @else {
+        <h1 class="font-display text-2xl font-bold sm:text-3xl">{{ entity().name }}</h1>
+      }
+    </div>
+    @if (image(); as src) {
+      <img
+        [src]="src"
+        alt=""
+        class="h-16 w-16 shrink-0 rounded-full border border-line object-cover sm:h-20 sm:w-20"
+        loading="lazy"
+        (error)="$any($event.target).hidden = true"
+      />
+    }
+  </header>
+
+  @if (preferred(); as p) {
+    <div class="rounded-md border border-accent/40 bg-accent/5 px-3 py-2 text-sm" role="note">
+      This campaign uses a newer printing:
+      <cn-entity-link [uid]="p.uid" [kind]="entity().kind">{{ p.name }} ({{ p.source }})</cn-entity-link>.
+    </div>
+  }
+
+  @switch (block()) {
+    @case ('monster') { <cn-monster-statblock [entity]="entity()" [showName]="false" /> }
+    @case ('spell') { <cn-spell-block [entity]="entity()" [showName]="false" /> }
+    @case ('item') { <cn-item-block [entity]="entity()" [showName]="false" /> }
+    @case ('class') { <cn-class-view [entity]="entity()" [showName]="false" /> }
+    @case ('option') { <cn-character-option-block [entity]="entity()" [showName]="false" /> }
+    @default { <cn-generic-block [entity]="entity()" [showName]="false" /> }
+  }
+
+  @if (!compact()) {
+    @if (fluffEntries().length || fluffImages().length) {
+      <section class="cn-prose rounded-lg border border-line bg-panel p-3 sm:p-4">
+        <h2>Lore</h2>
+        <div [class]="fluffEntries().length && fluffImages().length ? 'grid gap-3 lg:grid-cols-[1fr_auto]' : 'grid gap-3'">
+          <cn-entries [entries]="fluffEntries()" [depth]="1" />
+          @if (fluffImages().length) {
+            <div class="flex flex-col gap-2 lg:w-64">
+              <cn-entries [entries]="fluffImages()" [depth]="1" />
+            </div>
+          }
+        </div>
+      </section>
+    } @else if (art(); as src) {
+      <img [src]="src" alt="" class="max-h-96 self-start rounded-lg border border-line" loading="lazy" (error)="$any($event.target).hidden = true" />
+    }
+
+    @if (otherPrintings().length || missingReprints().length) {
+      <section class="text-sm text-muted">
+        <span class="font-semibold">Also printed as:</span>&ngsp;
+        @for (m of otherPrintings(); track m.uid; let last = $last) {
+          <a class="cn-link" [routerLink]="[...referenceBase(), entity().kind, m.uid]">{{ m.name }} ({{ m.source }})</a
+          >@if (!m.visible) {<span title="Not enabled in the current campaign"> †</span>}{{ last ? '' : ', ' }}
+        }
+        @for (r of missingReprints(); track r.uid) {
+          <span class="ml-1" title="Not available in the loaded data">{{ r.uid }} (unavailable)</span>
+        }
+      </section>
+    }
+  }
+</article>
