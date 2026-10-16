@@ -43,6 +43,7 @@ COPY --from=build /src/apps/server/dist ./
 COPY --from=build /src/apps/web/dist/web/browser ./web
 # License notices of what the image ships
 COPY --from=build /src/apps/web/dist/web/3rdpartylicenses.txt ./licenses/web-3rdpartylicenses.txt
+COPY --from=build /src/apps/server/dist/THIRD_PARTY_LICENSES.txt ./licenses/server-THIRD_PARTY_LICENSES.txt
 COPY THIRD_PARTY_NOTICES.md ./licenses/
 RUN mkdir -p /data/app && chown node:node /data/app
 USER node
