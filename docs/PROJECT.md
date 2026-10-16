@@ -158,16 +158,18 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 
 ### 5.2 Epic M2: Account recovery and user administration
 
-### [ ] Task M2.1: Accounts design and threat model
+### [x] Task M2.1: Accounts design and threat model
 **Owner**: Identity & Access Engineer · **QA**: Security Architect
+**Done:** 2026-10-16, QA Security Architect: PASS (2 retries). Design: `docs/design/accounts.md`. Awaiting owner: D5 and Q9 (see §8).
 **Description**: Design without email: admin-issued one-time reset links (hashed like invite tokens, 24 h expiry, single use), disabling a user (ends sessions and API tokens), deleting a user (what happens to campaigns they own: transfer to a chosen member or archive), the last-admin rule, a command-line reset for a locked-out admin.
 **Acceptance Criteria**:
 - `docs/design/accounts.md` with flows, data model changes, endpoints and threats (enumeration, token theft, privilege escalation) with mitigations
 - Reviewed against `apps/server/src/auth/session.ts` and `routes/auth.ts` (the `/password` route already exists)
 **Reference**: PRD §8 M2
 
-### [ ] Task M2.2: Schema for accounts
+### [x] Task M2.2: Schema for accounts
 **Owner**: Backend Architect · **QA**: Database Reliability Engineer
+**Done:** 2026-10-16, QA Database Reliability Engineer: PASS. Migrations `drizzle/0006_accounts`, `drizzle-pg/0002_accounts`.
 **Description**: Add `users.disabled_at` and a `password_resets` table (id, user_id, token_hash, created_by, expires_at, used_at) to both schemas; generate migrations.
 **Acceptance Criteria**:
 - Migrations for SQLite and Postgres generated; pg parity test passes
@@ -175,8 +177,9 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 **Files**: `apps/server/src/db/schema.ts`, `schema.pg.ts`, `drizzle/`, `drizzle-pg/`
 **Depends on**: M2.1
 
-### [ ] Task M2.3: Self-service account endpoints
+### [x] Task M2.3: Self-service account endpoints
 **Owner**: Identity & Access Engineer · **QA**: API Tester
+**Done:** 2026-10-16, Code Reviewer PASS, QA API Tester: PASS (live instance). Reset-budget wiring deferred to M2.5. Note: apps/server has no `test` script; use root `pnpm test`.
 **Description**: `PATCH /api/auth/me` (display name); make the existing password change end the user's other sessions; disabled users can't sign in and their sessions and API tokens stop working (`ApiTokenService.verify`).
 **Acceptance Criteria**:
 - Changing the password signs out other browsers but not the current one
@@ -184,8 +187,9 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 **Files**: `apps/server/src/routes/auth.ts`, `auth/session.ts`, `services/api-tokens.ts`
 **Depends on**: M2.2
 
-### [ ] Task M2.4: Admin user endpoints
+### [x] Task M2.4: Admin user endpoints
 **Owner**: Backend Architect · **QA**: API Tester, Application Security Engineer
+**Done:** 2026-10-16, Code Reviewer PASS, QA API Tester: PASS, Application Security Engineer: PASS. Follow-ups (low, non-blocking): reject transfer to a disabled member; make the step-up rate limit count before verify (atomic); consider a password for enabling an admin target; archived campaigns have no `dm` (only `codm`), so owner-only actions are dead until a transfer, noted for M2.8.
 **Description**: `requireAdmin` routes under `/api/admin/users`: list; create a reset link (shown once); disable/enable; grant/revoke admin; delete with the ownership rule from M2.1. Never remove the last admin; an admin can't disable themselves.
 **Acceptance Criteria**:
 - Non-admins get 403 on every route; the last-admin rule holds under every path
@@ -194,32 +198,36 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 **Files**: new `apps/server/src/routes/admin.ts`, `services/users.ts`, `app.ts`
 **Depends on**: M2.2
 
-### [ ] Task M2.5: Password reset by link
+### [x] Task M2.5: Password reset by link
 **Owner**: Identity & Access Engineer · **QA**: API Tester
+**Done:** 2026-10-16, Code Reviewer PASS (1 round of small fixes), QA API Tester: PASS (live instance).
 **Description**: `GET /api/auth/reset/:token` (valid or not, for whom) and `POST /api/auth/reset/:token` (new password; single use; rate limited like login).
 **Acceptance Criteria**:
 - Expired, used and unknown tokens answer alike (no enumeration)
 - After a reset, all of that user's sessions end
 **Depends on**: M2.4
 
-### [ ] Task M2.6: Command-line admin reset
+### [x] Task M2.6: Command-line admin reset
 **Owner**: Backend Architect · **QA**: DevOps Automator
+**Done:** 2026-10-16, Code Reviewer PASS, QA DevOps Automator: PASS (native against a running server under write load, and in a real container as the non-root user). `dist/admin.mjs` has a subcommand registry for M3.3.
 **Description**: `node dist/admin.mjs reset-link <username>` prints a reset link; works in Docker (`docker compose exec app node admin.mjs …`). Add the entry to `apps/server/scripts/build.mjs`.
 **Acceptance Criteria**:
 - Works against a running instance's database (SQLite WAL) and in the container
 - Documented in the README
 **Depends on**: M2.5
 
-### [ ] Task M2.7: Account page: profile and password
+### [x] Task M2.7: Account page: profile and password
 **Owner**: Frontend Developer · **QA**: Evidence Collector, Accessibility Auditor
+**Done:** 2026-10-16, Code Reviewer PASS, QA Evidence Collector: PASS (browser), Accessibility Auditor: PASS (axe 0 violations light and dark; 1 retry). Deferred app-wide findings: shared input border contrast (1.4.11) and skip link to G1.2; header reflow at 320px to M6.3.
 **Description**: Add display name and password sections to `apps/web/src/app/account/account-page.ts` (current password, new password twice).
 **Acceptance Criteria**:
 - Errors shown inline; success confirmed; keyboard and screen-reader usable
 - Unit spec next to the component
 **Depends on**: M2.3
 
-### [ ] Task M2.8: Admin: users page
+### [x] Task M2.8: Admin: users page
 **Owner**: Frontend Developer · **QA**: Evidence Collector
+**Done:** 2026-10-16, Code Reviewer PASS (1 round of fixes), QA Evidence Collector: PASS (browser, items 1-6). Design: `docs/design/admin-users-ui.md`. Also shipped (server prep): transfer to a disabled member rejected, enabling an admin needs the password, step-up limiter counts before verify and gives back only its own attempt. Owner decisions: Archive kept with a warning; enable-admin needs password. Follow-ups: pin the dialog footer at 390px; admin header overflows 35px at 390px (M6.3, the Users link tips it over); `homebrew.test.ts` has a load-sensitive 5s timeout.
 **Description**: `/admin/users` (admin guard): list with role badges; "Reset link" (shown once with copy); disable/enable; admin toggle; delete with the ownership choice. Header link for admins only.
 **Acceptance Criteria**:
 - Non-admins can't reach the route (guard) and don't see the link
@@ -227,13 +235,15 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 **Files**: new `apps/web/src/app/admin/`, `app.routes.ts`, `app.html`
 **Depends on**: M2.4 · **Design**: UX Architect (one screen sketch before the task)
 
-### [ ] Task M2.9: Reset page
+### [x] Task M2.9: Reset page
 **Owner**: Frontend Developer · **QA**: Evidence Collector
+**Done:** 2026-10-16, Code Reviewer PASS, QA Evidence Collector: PASS (browser, axe 0 violations on the page). Link is `/reset#<token>` (logged in PLAN.md). Follow-up for the app-wide a11y backlog (G1.2): `label-content-name-mismatch` on the header Search button.
 **Description**: `/reset/:token` outside the auth guard: shows whose account, sets the new password, signs in.
 **Depends on**: M2.5
 
-### [ ] Task M2.10: Account tests
+### [x] Task M2.10: Account tests
 **Owner**: Test Automation Engineer · **QA**: Reality Checker
+**Done:** 2026-10-16, QA Reality Checker: PASS. `pnpm e2e` 60/60; `e2e/admin.spec.ts` 6/6 repeatedly and against the Docker image (`E2E_BASE`). Epic M2 certified against PRD §8 M2 (all items MET). Caveats: no e2e for the last-admin refusal, grant admin or the CLI reset (covered by server tests); sign-up is rate limited to 8 per minute per address, so specs must stay under it.
 **Description**: `e2e/admin.spec.ts`: admin creates a reset link → user resets → signs in; disabled user can't sign in; MCP token of a disabled user fails.
 **Acceptance Criteria**: passes in `pnpm e2e` and against the Docker image (`E2E_BASE`)
 **Depends on**: M2.7, M2.8, M2.9
@@ -594,7 +604,7 @@ The Senior Project Manager breaks these into tasks at the start of their release
 | D2 | Where the repository lives (e.g. GitHub, public or private) and its name | M5.1–M5.5 | Git Workflow Master | Open |
 | D3 | Approval of the first commit and of each release | M5.1, G1.4, G2.1 | Reality Checker | Open |
 | D4 | A self-hosted CI runner with a 5etools clone for browser tests | M5.3 | DevOps Automator | Open |
-| D5 | What happens to a deleted user's campaigns (transfer or archive) | M2.4 | Identity & Access Engineer | Open |
+| D5 | What happens to a deleted user's campaigns (transfer or archive) | M2.4 | Identity & Access Engineer | Decided 2026-10-16: option C (admin chooses per owned campaign, transfer pre-selected; archive only with a co-DM; solo campaign can't be orphaned). Also decided: reset link is `/reset#<token>` (deviation from `/reset/:token`, log in PLAN.md at M2.9); `TRUST_PROXY` stays off in the shipped compose; on user delete, shared homebrew sources go to the acting admin, private ones and user templates stay ownerless |
 
 ### Risks
 | Risk | Impact | Mitigation | Owner |

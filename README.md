@@ -85,7 +85,25 @@ resolved from the repository root.
 | `PORT` | `3000` | |
 | `PUBLIC_URL` | `http://localhost:4200` | The address people open; requests from other origins are refused |
 | `SECURE_COOKIES` | from `PUBLIC_URL` | `1` or `0` to override (for example behind a TLS-terminating proxy that forwards plain http) |
+| `TRUST_PROXY` | off | `1` behind a reverse proxy that overwrites `X-Forwarded-For`, so rate limits tell clients apart. Leave off when the port is reachable directly (the header could be spoofed); the app logs one warning if it sees the header while this is off |
 | `WEB_DIST_DIR` | `./apps/web/dist/web/browser` | The built web app, served in production |
+
+## Locked out? Recover an account
+
+Anyone with shell access to the server (or its container) can issue a one-time password reset link for any
+enabled user, including the only admin. Admins can also create links from the Admin page.
+
+```sh
+docker compose exec app node admin.mjs reset-link <username>      # with Docker
+node apps/server/dist/admin.mjs reset-link <username>             # without Docker, after `pnpm build`
+```
+
+It prints the link (`<PUBLIC_URL>/reset#<token>`) on stdout and nothing else, so it can be piped; hints go to
+stderr. Open the link, choose a new password; the link works once, expires after 24 hours and replaces any
+earlier link for that user. Reading the settings works as for the server: environment variables, plus the
+repository `.env` outside Docker (so run it with the same `DATA_DIR` and `PUBLIC_URL` as the server; the
+Docker image has them set). It is safe to run while the app is running, but `admin.mjs` must be the same version as the running server (it applies pending migrations when it opens the database). Exit codes: 1 unknown user, 2 disabled
+user (enable it first; this command cannot), 3 no database found at `DATA_DIR`, 64 wrong usage.
 
 ## Using it
 
