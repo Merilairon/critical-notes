@@ -120,8 +120,9 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 
 ### 5.1 Epic M1: License
 
-### [ ] Task M1.1: License options brief
+### [x] Task M1.1: License options brief
 **Owner**: Legal Compliance Checker · **QA**: Product Manager
+**Done:** 2026-10-16, QA Product Manager: PASS (1 retry). Brief: `docs/legal/license-options.md`; recommendation Apache-2.0 (owner decides in M1.2).
 **Description**: Compare MIT, Apache-2.0 and AGPL-3.0 for a self-hosted app (hosted forks, contributions, compatibility with dependencies). Review the content notice in README "Licensing" and DATA_NOTES §9 (5etools code MIT, WotC content and art, SRD 5.1/5.2 CC-BY-4.0, bring your own data).
 **Acceptance Criteria**:
 - `docs/legal/license-options.md` with a recommendation, trade-offs, and a dependency license check (`pnpm licenses list`)
@@ -130,13 +131,15 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 - States clearly that it is not legal advice
 **Reference**: PRD §8 M1, §12
 
-### [ ] Task M1.2: Decide the license
+### [x] Task M1.2: Decide the license
 **Owner**: **Owner (human)**, prepared by Product Manager · **QA**: none
+**Done:** 2026-10-16, owner decision: Apache-2.0, DCO sign-off (no CLA), copyright holder "Merilairon" (see §8 D1).
 **Description**: Choose the license from the brief. Record it in §8 (decision log).
 **Depends on**: M1.1
 
-### [ ] Task M1.3: Publish the license
+### [x] Task M1.3: Publish the license
 **Owner**: Technical Writer · **QA**: Code Reviewer
+**Done:** 2026-10-16, QA Code Reviewer: PASS (full gate green).
 **Description**: Add `LICENSE`; set `"license"` in every `package.json` (root, `apps/*`, `packages/*`); update the README licensing section.
 **Acceptance Criteria**:
 - `LICENSE` matches the decision; all `package.json` files agree
@@ -144,8 +147,9 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 **Files**: `LICENSE`, `package.json` (×7), `README.md`
 **Depends on**: M1.2
 
-### [ ] Task M1.4: Contributor files
+### [x] Task M1.4: Contributor files
 **Owner**: Developer Advocate · **QA**: Technical Writer
+**Done:** 2026-10-16, QA Technical Writer: PASS. Open: SECURITY.md contact placeholder until D2 (repository location).
 **Description**: `CONTRIBUTING.md` (setup, data clone, gate, the rules in §4), `SECURITY.md` (private reporting), `.github/ISSUE_TEMPLATE/` (bug, feature), `.github/pull_request_template.md` (gate checklist, sentinel rule, no co-author lines).
 **Acceptance Criteria**:
 - A new contributor can set up and run the gate from CONTRIBUTING alone
@@ -586,7 +590,7 @@ The Senior Project Manager breaks these into tasks at the start of their release
 ### Owner decisions (block the tasks shown)
 | ID | Decision | Blocks | Prepared by | Status |
 |---|---|---|---|---|
-| D1 | The project license | M1.3, M5.1 | Product Manager, Legal Compliance Checker | Open |
+| D1 | The project license | M1.3, M5.1 | Product Manager, Legal Compliance Checker | Decided 2026-10-16: Apache-2.0; DCO sign-off, no CLA; copyright `Copyright (c) 2026 Merilairon` |
 | D2 | Where the repository lives (e.g. GitHub, public or private) and its name | M5.1–M5.5 | Git Workflow Master | Open |
 | D3 | Approval of the first commit and of each release | M5.1, G1.4, G2.1 | Reality Checker | Open |
 | D4 | A self-hosted CI runner with a 5etools clone for browser tests | M5.3 | DevOps Automator | Open |
