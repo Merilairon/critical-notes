@@ -13,12 +13,14 @@ import { ensureDataDirs, loadConfig } from './config';
 import { openAppDb } from './db';
 import { openIndexDb } from './reference/index-db';
 import { runIndexer } from './reference/indexer';
+import { purgeOldResets } from './services/users';
 
 const config = loadConfig();
 ensureDataDirs(config);
 const indexDb = openIndexDb(config.indexDbPath);
 const db = openAppDb(config.appDbPath);
 purgeExpiredSessions(db);
+purgeOldResets(db);
 
 if (existsSync(join(config.fivetoolsSrcPath, 'data'))) {
   const report = await runIndexer({ srcPath: config.fivetoolsSrcPath, db: indexDb, editionLists: loadEditionListsFromPackage() });

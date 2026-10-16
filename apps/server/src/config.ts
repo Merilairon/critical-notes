@@ -41,6 +41,8 @@ export interface AppConfig {
   publicUrl: string;
   /** Session cookies carry `Secure`: by default when PUBLIC_URL is https (browsers drop them over plain http). */
   secureCookies: boolean;
+  /** Read the client address from X-Forwarded-For (rate limits). Only safe behind a proxy that overwrites it. */
+  trustProxy: boolean;
   port: number;
   isProduction: boolean;
   /** Directory with the built web app, served as static files in production. */
@@ -61,6 +63,7 @@ export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     uploadsDir: join(dataDir, 'uploads'),
     publicUrl,
     secureCookies: env.SECURE_COOKIES ? env.SECURE_COOKIES === '1' || env.SECURE_COOKIES === 'true' : publicUrl.startsWith('https://'),
+    trustProxy: env.TRUST_PROXY === '1' || env.TRUST_PROXY === 'true',
     port: Number(env.PORT ?? 3000),
     isProduction: env.NODE_ENV === 'production',
     webDistDir: resolvePath(env.WEB_DIST_DIR, './apps/web/dist/web/browser'),

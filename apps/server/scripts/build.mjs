@@ -1,6 +1,6 @@
 /**
- * Bundles the server into `dist/` so it runs on plain Node (no tsx): `main.mjs` (the server), `THIRD_PARTY_LICENSES.txt` and `index.mjs`
- * (`node dist/index.mjs [--force]` rebuilds the reference index). Native modules and 5etools-utils (which reads
+ * Bundles the server into `dist/` so it runs on plain Node (no tsx): `main.mjs` (the server), `THIRD_PARTY_LICENSES.txt`, `index.mjs`
+ * (`node dist/index.mjs [--force]` rebuilds the reference index) and `admin.mjs` (`node dist/admin.mjs reset-link <user>`). Native modules and 5etools-utils (which reads
  * its JSON schemas from its own folder) stay external; `dist/package.json` lists them at the installed versions,
  * so `npm install` in `dist/` is all a deployment needs. The SQLite migrations are copied next to the bundle.
  */
@@ -13,7 +13,7 @@ const EXTERNAL = ['better-sqlite3', '@node-rs/argon2', 'sharp', '5etools-utils']
 
 rmSync('dist', { recursive: true, force: true });
 const result = await build({
-  entryPoints: { main: 'src/main.ts', index: 'src/cli/index.ts' },
+  entryPoints: { main: 'src/main.ts', index: 'src/cli/index.ts', admin: 'src/cli/admin.ts' },
   outdir: 'dist',
   outExtension: { '.js': '.mjs' },
   bundle: true,

@@ -23,6 +23,9 @@ const ROUTES: [string, RegExp][] = [
   ['DELETE', new RegExp(`^/api/(homebrew/entities|templates)/${ID}$`)],
 ];
 
+/** Whether the MCP tools may call this method and path (tests prove accounts and admin routes never match). */
+export const isAllowed = (method: string, url: string) => ROUTES.some(([m, re]) => m === method && re.test(url));
+
 /** A refused or failed API call, with the API's own explanation. */
 export class ApiError extends Error {
   constructor(
@@ -62,7 +65,7 @@ export class Api {
   ) {}
 
   async request<T>(method: string, url: string, body?: unknown, query?: Record<string, string | number | undefined>): Promise<T> {
-    if (!ROUTES.some(([m, re]) => m === method && re.test(url))) throw new ApiError(403, `Not available to AI assistants: ${method} ${url}`, null);
+    if (!isAllowed(method, url)) throw new ApiError(403, `Not available to AI assistants: ${method} ${url}`, null);
     const params = new URLSearchParams(Object.entries(query ?? {}).flatMap(([k, v]): [string, string][] => (v === undefined || v === '' ? [] : [[k, String(v)]])));
     const target = `http://internal${url}${params.size ? `?${params}` : ''}`;
     const res = await this.app.request(

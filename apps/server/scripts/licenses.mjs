@@ -1,7 +1,7 @@
 /**
  * Writes the license text of every npm package that esbuild bundled into the server (and any NOTICE file, which
  * Apache-2.0 section 4(d) requires us to pass on) to one file. The packages are found from esbuild's metafile, so
- * the list is exactly what is in `dist/main.mjs` and `dist/index.mjs`. Packages kept outside the bundle
+ * the list is exactly what is in `dist/main.mjs`, `dist/index.mjs` and `dist/admin.mjs` (one metafile covers all entries). Packages kept outside the bundle
  * (see EXTERNAL in build.mjs) are installed with their own license files and are not repeated here.
  */
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';

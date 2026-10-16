@@ -1,34 +1,16 @@
 import { count, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
-import { changePasswordInput, loginInput, registerWithInviteInput, setupInput, type MeDto } from '@cn/shared';
+import { changePasswordInput, loginInput, redeemResetInput, registerWithInviteInput, setupInput, updateMeInput, type MeDto, type ResetInfoDto } from '@cn/shared';
 import type { AppDb } from '../db';
 import { users } from '../db/schema';
-import { createSession, destroySession, requireUser, type AppEnv } from '../auth/session';
-import { badRequest, HttpError, unauthorized, validate } from '../lib/http';
+import { createSession, destroySession, endUserSessions, hashToken, rejectTokenScope, requireUser, SESSION_COOKIE, type AppEnv } from '../auth/session';
+import { getCookie } from 'hono/cookie';
+import { HttpError, badRequest, forbidden, unauthorized, validate } from '../lib/http';
 import { newId } from '../lib/ids';
 import { hashPassword, verifyPassword } from '../lib/password';
-
-/** Small fixed-window limiter for login attempts (per IP + username). */
-class AttemptLimiter {
-  private readonly hits = new Map<string, { n: number; reset: number }>();
-  constructor(
-    private readonly max: number,
-    private readonly windowMs: number,
-  ) {}
-  check(key: string) {
-    const now = Date.now();
-    const entry = this.hits.get(key);
-    if (!entry || entry.reset < now) {
-      this.hits.set(key, { n: 1, reset: now + this.windowMs });
-      return;
-    }
-    entry.n++;
-    if (entry.n > this.max) throw new HttpError(429 as never, 'Too many attempts, try again in a minute');
-  }
-  clear(key: string) {
-    this.hits.delete(key);
-  }
-}
+import { createClientKey, RateLimiter } from '../lib/rate-limit';
+import { audit } from '../lib/audit';
+import { findLiveReset, redeemReset } from '../services/users';
 
 /** Invite handling the auth routes need (implemented by the campaign service). */
 export interface InviteGate {
@@ -36,9 +18,16 @@ export interface InviteGate {
   acceptInvite(token: string, userId: string): string;
 }
 
-export function authRoutes(db: AppDb, opts: { secureCookies: boolean; invites?: InviteGate }) {
+export function authRoutes(db: AppDb, opts: { secureCookies: boolean; trustProxy?: boolean; invites?: InviteGate }) {
   const app = new Hono<AppEnv>();
-  const limiter = new AttemptLimiter(8, 60_000);
+  /** Per caller address + username, 8 a minute. */
+  const limiter = new RateLimiter(8, 60_000);
+  /** Failures per username whatever the address, so rotating addresses (or a spoofed header) does not help. */
+  const userBudget = new RateLimiter(30, 15 * 60_000);
+  const passwordLimiter = new RateLimiter(5, 60_000);
+  /** Failed reset lookups only (a token that is not live), 30 per 10 minutes per caller key. A live token is never refused or counted. */
+  const resetBudget = new RateLimiter(30, 10 * 60_000);
+  const clientKey = createClientKey(opts.trustProxy === true);
   const userCount = () => db.select({ n: count() }).from(users).get()?.n ?? 0;
 
   app.get('/me', (c) => c.json<MeDto>({ user: c.get('user'), setupRequired: userCount() === 0 }));
@@ -57,13 +46,21 @@ export function authRoutes(db: AppDb, opts: { secureCookies: boolean; invites?: 
 
   app.post('/login', validate('json', loginInput), async (c) => {
     const { username, password } = c.req.valid('json');
-    const key = `${c.req.header('x-forwarded-for') ?? 'local'}|${username.toLowerCase()}`;
-    limiter.check(key);
+    const name = username.toLowerCase();
+    const key = `${clientKey(c)}|${name}`;
+    limiter.hit(key);
+    userBudget.assert(name);
     const user = db.select().from(users).where(eq(users.username, username.toLowerCase())).get();
     // Always verify against a hash to keep timing similar for unknown users
     const ok = await verifyPassword(user?.passwordHash ?? '$argon2id$v=19$m=19456,t=2,p=1$c29tZXNhbHQ$0000000000000000000000000000000000000000000', password);
-    if (!user || !ok) throw unauthorized('Wrong username or password');
+    if (!user || !ok) {
+      userBudget.fail(name);
+      throw unauthorized('Wrong username or password');
+    }
+    // Only after the right password, so this reveals nothing to someone who does not have it.
+    if (user.disabledAt !== null) throw forbidden('This account is disabled. Ask the host.');
     limiter.clear(key);
+    userBudget.clear(name);
     createSession(db, c, user.id, opts.secureCookies);
     return c.json({ ok: true });
   });
@@ -71,7 +68,7 @@ export function authRoutes(db: AppDb, opts: { secureCookies: boolean; invites?: 
   /** Creates an account through a campaign invite link (there is no open sign-up), signs in and joins. */
   app.post('/register', validate('json', registerWithInviteInput), async (c) => {
     const { token, username, displayName, password } = c.req.valid('json');
-    limiter.check(`${c.req.header('x-forwarded-for') ?? 'local'}|register`);
+    limiter.hit(`${clientKey(c)}|register`);
     if (!opts.invites) throw badRequest('Sign-up is not available');
     opts.invites.assertInviteUsable(token);
     const name = username.toLowerCase();
@@ -88,12 +85,61 @@ export function authRoutes(db: AppDb, opts: { secureCookies: boolean; invites?: 
     return c.json({ ok: true });
   });
 
-  app.post('/password', requireUser, validate('json', changePasswordInput), async (c) => {
+  /** Display name only: username and admin flag are not settable here. */
+  app.patch('/me', requireUser, rejectTokenScope, validate('json', updateMeInput), (c) => {
     const me = c.get('user')!;
+    const { displayName } = c.req.valid('json');
+    db.update(users).set({ displayName, updatedAt: Date.now() }).where(eq(users.id, me.id)).run();
+    return c.json({ user: { ...me, displayName } });
+  });
+
+  /** Changes the password and signs out every other browser; the current session stays. */
+  app.post('/password', requireUser, rejectTokenScope, validate('json', changePasswordInput), async (c) => {
+    const me = c.get('user')!;
+    passwordLimiter.hit(me.id);
     const { currentPassword, newPassword } = c.req.valid('json');
     const user = db.select().from(users).where(eq(users.id, me.id)).get();
     if (!user || !(await verifyPassword(user.passwordHash, currentPassword))) throw unauthorized('Current password is wrong');
-    db.update(users).set({ passwordHash: await hashPassword(newPassword), updatedAt: Date.now() }).where(eq(users.id, me.id)).run();
+    const passwordHash = await hashPassword(newPassword);
+    const cookie = getCookie(c, SESSION_COOKIE);
+    // No await between these statements: they run as one step in this single-writer process.
+    db.update(users).set({ passwordHash, updatedAt: Date.now() }).where(eq(users.id, me.id)).run();
+    endUserSessions(db, me.id, cookie ? hashToken(cookie) : undefined);
+    passwordLimiter.clear(me.id);
+    return c.json({ ok: true });
+  });
+
+  // Password reset by link (Task M2.5, design 4.1). Outside any auth requirement; the token is the credential.
+  app.use('/reset/*', async (c, next) => {
+    c.header('Cache-Control', 'no-store');
+    await next();
+  });
+  /** One answer for unknown, expired, used, superseded and disabled-user links. */
+  const invalidReset = () => new HttpError(404, 'This reset link is not valid');
+  /** Budget gate for a token that is not live: refuse when spent, else count one failure; then the uniform 404. */
+  const rejectReset = (key: string) => {
+    resetBudget.assert(key);
+    resetBudget.fail(key);
+    return invalidReset();
+  };
+
+  app.get('/reset/:token', (c) => {
+    const live = findLiveReset(db, c.req.param('token'));
+    if (!live) throw rejectReset(clientKey(c));
+    return c.json<ResetInfoDto>({ username: live.username, displayName: live.displayName, expiresAt: live.expiresAt });
+  });
+
+  app.post('/reset/:token', validate('json', redeemResetInput), async (c) => {
+    const token = c.req.param('token');
+    const key = clientKey(c);
+    const { newPassword } = c.req.valid('json');
+    if (!findLiveReset(db, token)) throw rejectReset(key);
+    const passwordHash = await hashPassword(newPassword);
+    const cookie = getCookie(c, SESSION_COOKIE);
+    const userId = redeemReset(db, token, passwordHash, cookie ? hashToken(cookie) : undefined);
+    if (!userId) throw invalidReset();
+    createSession(db, c, userId, opts.secureCookies);
+    audit('password.reset', { target: userId, ip: key });
     return c.json({ ok: true });
   });
 

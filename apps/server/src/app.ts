@@ -4,7 +4,7 @@
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import { secureHeaders } from 'hono/secure-headers';
-import { requireUser, originCheck, sessionMiddleware, type AppEnv } from './auth/session';
+import { requireAdmin, requireUser, originCheck, sessionMiddleware, type AppEnv } from './auth/session';
 import type { AppConfig } from './config';
 import type { AppDb } from './db';
 import { HttpError } from './lib/http';
@@ -37,6 +37,8 @@ import { EditionMigration } from './services/migration';
 import { TemplateService } from './services/templates';
 import { ApiTokenService } from './services/api-tokens';
 import { tokenRoutes } from './routes/tokens';
+import { adminRoutes } from './routes/admin';
+import { UserAdminService } from './services/users';
 import { mcpRoutes } from './mcp/route';
 
 export interface AppDeps {
@@ -64,7 +66,8 @@ export function createServices({ indexDb, db, config }: AppDeps) {
   const transfer = new CampaignTransfer(db, indexDb, { campaigns, pages, properties, templates, homebrew, homebrewTransfer, uploads });
   const migration = new EditionMigration(db, indexDb, { campaigns, pages, properties });
   const apiTokens = new ApiTokenService(db);
-  return { apiTokens, visibility, transfer, migration, reference, homebrewIndex, campaigns, pages, homebrew, homebrewTransfer, properties, pageSearch, uploads, templates, encounters, trackers, inventory };
+  const userAdmin = new UserAdminService(db);
+  return { userAdmin, apiTokens, visibility, transfer, migration, reference, homebrewIndex, campaigns, pages, homebrew, homebrewTransfer, properties, pageSearch, uploads, templates, encounters, trackers, inventory };
 }
 
 export type Services = ReturnType<typeof createServices>;
@@ -100,8 +103,10 @@ export function createApp(deps: AppDeps, services: Services = createServices(dep
 
   app.get('/api/health', (c) => c.json({ ok: true }));
   app.route('/api/auth/tokens', tokenRoutes(services.apiTokens));
-  app.route('/api/auth', authRoutes(db, { secureCookies: config.secureCookies, invites: campaigns }));
+  app.route('/api/auth', authRoutes(db, { secureCookies: config.secureCookies, trustProxy: config.trustProxy, invites: campaigns }));
   app.route('/api/invites', inviteRoutes(campaigns));
+  app.use('/api/admin/*', requireAdmin);
+  app.route('/api/admin/users', adminRoutes(services.userAdmin, { publicUrl: config.publicUrl, trustProxy: config.trustProxy }));
 
   // Everything below requires a signed-in user
   app.use('/api/reference/*', requireUser);
@@ -129,7 +134,10 @@ export function createApp(deps: AppDeps, services: Services = createServices(dep
 
   app.notFound((c) => (c.req.path.startsWith('/api/') ? c.json({ error: 'Not found' }, 404) : c.text('Not found', 404)));
   app.onError((err, c) => {
-    if (err instanceof HttpError) return c.json({ error: err.message, ...(err.details ? { details: err.details } : {}) }, err.status);
+    if (err instanceof HttpError) {
+      if (err.retryAfterSec) c.header('Retry-After', String(err.retryAfterSec));
+      return c.json({ error: err.message, ...(err.details ? { details: err.details } : {}) }, err.status);
+    }
     if ('status' in err && typeof err.status === 'number' && err.status < 500) return c.json({ error: err.message }, err.status as 400);
     console.error(err);
     return c.json({ error: 'Internal error' }, 500);

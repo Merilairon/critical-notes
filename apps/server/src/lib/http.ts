@@ -4,7 +4,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { ZodType } from 'zod';
 
 export class HttpError extends HTTPException {
-  constructor(status: 400 | 401 | 403 | 404 | 409 | 413 | 422 | 500, message: string, readonly details?: unknown) {
+  constructor(status: 400 | 401 | 403 | 404 | 409 | 413 | 422 | 429 | 500, message: string, readonly details?: unknown, readonly retryAfterSec?: number) {
     super(status, { message });
   }
 }

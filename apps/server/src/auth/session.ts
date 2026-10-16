@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { and, eq, gt, lt } from 'drizzle-orm';
+import { and, eq, gt, isNull, lt, ne } from 'drizzle-orm';
 import type { Context, MiddlewareHandler } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import type { UserDto } from '@cn/shared';
@@ -41,6 +41,13 @@ export function createSession(db: AppDb, c: Context, userId: string, secure: boo
   setCookie(c, SESSION_COOKIE, token, { httpOnly: true, sameSite: 'Lax', secure, path: '/', expires: new Date(expiresAt) });
 }
 
+/** Deletes the user's sessions, optionally keeping one (by stored id, i.e. the token hash). */
+export function endUserSessions(db: AppDb, userId: string, exceptSessionId?: string) {
+  db.delete(sessions)
+    .where(exceptSessionId ? and(eq(sessions.userId, userId), ne(sessions.id, exceptSessionId)) : eq(sessions.userId, userId))
+    .run();
+}
+
 export function destroySession(db: AppDb, c: Context) {
   const token = getCookie(c, SESSION_COOKIE);
   if (token) db.delete(sessions).where(eq(sessions.id, hashToken(token))).run();
@@ -54,7 +61,7 @@ export function sessionMiddleware(db: AppDb, secure: boolean): MiddlewareHandler
     const internal = (c.env as Record<symbol, InternalAuth | undefined> | undefined)?.[INTERNAL_AUTH];
     if (internal) {
       const user = db.select().from(users).where(eq(users.id, internal.userId)).get();
-      if (!user) throw unauthorized();
+      if (!user || user.disabledAt !== null) throw unauthorized();
       if (internal.scope === 'read' && !['GET', 'HEAD'].includes(c.req.method)) throw forbidden('This token can only read; create a read & write token to make changes');
       c.set('user', { id: user.id, username: user.username, displayName: user.displayName, isAdmin: user.isAdmin });
       c.set('tokenScope', internal.scope);
@@ -68,7 +75,7 @@ export function sessionMiddleware(db: AppDb, secure: boolean): MiddlewareHandler
         .select({ user: users, expiresAt: sessions.expiresAt })
         .from(sessions)
         .innerJoin(users, eq(users.id, sessions.userId))
-        .where(and(eq(sessions.id, id), gt(sessions.expiresAt, now)))
+        .where(and(eq(sessions.id, id), gt(sessions.expiresAt, now), isNull(users.disabledAt)))
         .get();
       if (row) {
         c.set('user', { id: row.user.id, username: row.user.username, displayName: row.user.displayName, isAdmin: row.user.isAdmin });
@@ -94,9 +101,17 @@ export const requireUser: MiddlewareHandler<AppEnv> = async (c, next) => {
   await next();
 };
 
+/** Account routes need a browser session: an API token (MCP) never changes account details. */
+export const rejectTokenScope: MiddlewareHandler<AppEnv> = async (c, next) => {
+  if (c.get('tokenScope')) throw forbidden('API tokens cannot change account details');
+  await next();
+};
+
 export const requireAdmin: MiddlewareHandler<AppEnv> = async (c, next) => {
   const user = c.get('user');
   if (!user) throw unauthorized();
+  // Even an admin's API token never runs admin actions (the MCP allowlist already excludes them).
+  if (c.get('tokenScope')) throw forbidden('API tokens cannot do admin actions');
   if (!user.isAdmin) throw forbidden('Admins only');
   await next();
 };

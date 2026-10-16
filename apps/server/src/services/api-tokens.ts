@@ -77,7 +77,7 @@ export class ApiTokenService {
     if (!token.startsWith(TOKEN_PREFIX) || token.length > 200) return null;
     const row = this.db.select({ token: apiTokens, user: users }).from(apiTokens).innerJoin(users, eq(users.id, apiTokens.userId)).where(eq(apiTokens.tokenHash, hashToken(token))).get();
     const now = Date.now();
-    if (!row || row.token.revokedAt !== null || (row.token.expiresAt !== null && row.token.expiresAt <= now)) return null;
+    if (!row || row.token.revokedAt !== null || (row.token.expiresAt !== null && row.token.expiresAt <= now) || row.user.disabledAt !== null) return null;
     if (row.token.lastUsedAt === null || now - row.token.lastUsedAt > TOUCH_EVERY_MS) {
       this.db.update(apiTokens).set({ lastUsedAt: now }).where(eq(apiTokens.id, row.token.id)).run();
     }
