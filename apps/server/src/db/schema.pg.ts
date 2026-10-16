@@ -18,6 +18,8 @@ export const users = pgTable('users', {
   displayName: text('display_name').notNull(),
   passwordHash: text('password_hash').notNull(),
   isAdmin: boolean('is_admin').notNull().default(false),
+  /** Set when an admin disables the account (epoch ms); null = enabled. */
+  disabledAt: bigint('disabled_at', { mode: 'number' }),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -629,6 +631,23 @@ export const apiTokens = pgTable(
     revokedAt: bigint('revoked_at', { mode: 'number' }),
   },
   (t) => [index('api_tokens_user').on(t.userId)],
+);
+
+/** Single-use password reset links. Only a hash of the token is stored; `usedAt` is set when consumed or superseded. */
+export const passwordResets = pgTable(
+  'password_resets',
+  {
+    id: id(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull().unique(),
+    /** Null when created from the command line. */
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    expiresAt: bigint('expires_at', { mode: 'number' }).notNull(),
+    usedAt: bigint('used_at', { mode: 'number' }),
+  },
+  (t) => [index('password_resets_user').on(t.userId)],
 );
 
 // endregion
