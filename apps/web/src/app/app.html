@@ -7,6 +7,9 @@
     <a routerLink="/reference" routerLinkActive="bg-panel-2 text-ink" class="rounded px-2 py-1 text-muted hover:text-ink">Reference</a>
     <a routerLink="/homebrew" routerLinkActive="bg-panel-2 text-ink" class="rounded px-2 py-1 text-muted hover:text-ink">Homebrew</a>
     <a routerLink="/templates" routerLinkActive="bg-panel-2 text-ink" class="rounded px-2 py-1 text-muted hover:text-ink">Templates</a>
+    @if (auth.user()?.isAdmin) {
+    <a routerLink="/admin/users" routerLinkActive="bg-panel-2 text-ink" class="rounded px-2 py-1 text-muted hover:text-ink">Users</a>
+    }
   </nav>
 
   <div class="ml-auto flex flex-wrap items-center gap-2">

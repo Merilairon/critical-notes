@@ -31,3 +31,12 @@ export function errorMessage(err: unknown): string {
   }
   return err instanceof Error ? err.message : 'Something went wrong';
 }
+
+/** Error text for a form request, with a retry hint when the server rate-limits (429 + Retry-After). */
+export function requestError(err: unknown): string {
+  if (err instanceof HttpErrorResponse && err.status === 429) {
+    const secs = Number(err.headers.get('Retry-After'));
+    return secs > 0 ? `Too many attempts. Try again in ${secs >= 60 ? `${Math.ceil(secs / 60)} min` : `${secs} s`}.` : 'Too many attempts. Try again in a minute.';
+  }
+  return errorMessage(err);
+}

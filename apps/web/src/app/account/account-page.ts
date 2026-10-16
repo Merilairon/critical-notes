@@ -1,10 +1,10 @@
 import { DatePipe } from '@angular/common';
-import { HttpClient } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import type { ApiTokenDto, CreatedApiTokenDto } from '@cn/shared';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { ChangeDetectionStrategy, Component, inject, signal, viewChild, type ElementRef } from '@angular/core';
+import { passwordSchema, updateMeInput, type ApiTokenDto, type CreatedApiTokenDto, type UserDto } from '@cn/shared';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../core/auth.service';
-import { errorMessage } from '../core/http.interceptor';
+import { errorMessage, requestError } from '../core/http.interceptor';
 
 /** Ready-to-paste setup for the common kinds of MCP clients. */
 function setups(origin: string, token: string) {
@@ -26,7 +26,7 @@ function setups(origin: string, token: string) {
   ];
 }
 
-/** The signed-in user's account: API tokens for AI assistants (MCP). */
+/** The signed-in user's account: display name, password, and API tokens for AI assistants (MCP). */
 @Component({
   selector: 'cn-account-page',
   imports: [DatePipe],
@@ -34,6 +34,47 @@ function setups(origin: string, token: string) {
   template: `<div class="mx-auto max-w-3xl p-4 sm:p-6">
     <h1 class="font-display text-3xl font-bold">Account</h1>
     <p class="mt-1 text-muted">Signed in as {{ auth.user()?.displayName }} ({{ auth.user()?.username }}).</p>
+
+    <section class="mt-6 rounded-xl border border-line bg-panel p-4" aria-labelledby="profile-heading">
+      <h2 id="profile-heading" class="font-semibold">Display name</h2>
+      <p class="mt-1 text-sm text-muted">The name other people see in campaigns. Your username ({{ auth.user()?.username }}) does not change.</p>
+      <form novalidate class="mt-3 flex flex-wrap items-end gap-2 text-sm" (submit)="$event.preventDefault(); saveName(nameInput.value)">
+        <label class="flex min-w-48 flex-1 flex-col gap-1">
+          <span class="text-xs text-muted">Display name</span>
+          <input #nameInput class="cn-prop-input" name="displayName" autocomplete="nickname" required maxlength="80" (input)="nameDone.set('')" [value]="auth.user()?.displayName ?? ''"
+            [attr.aria-invalid]="nameError() ? 'true' : null" [attr.aria-describedby]="nameError() ? 'name-error' : null" />
+        </label>
+        <button type="submit" class="rounded-md bg-accent px-3 py-1.5 font-semibold text-accent-ink aria-disabled:opacity-60" [attr.aria-disabled]="nameBusy() ? 'true' : null">Save name</button>
+      </form>
+      <div role="status" class="mt-2 text-sm">{{ nameDone() }}</div>
+      <div role="alert" class="text-sm text-accent"><p id="name-error">{{ nameError() }}</p></div>
+    </section>
+
+    <section class="mt-6 rounded-xl border border-line bg-panel p-4" aria-labelledby="password-heading">
+      <h2 id="password-heading" class="font-semibold">Password</h2>
+      <p class="mt-1 text-sm text-muted">Changing your password signs you out on all your other devices. This one stays signed in.</p>
+      <form novalidate class="mt-3 flex max-w-sm flex-col gap-3 text-sm" (submit)="$event.preventDefault(); changePassword(current.value, next.value, again.value)">
+        <input type="text" name="username" autocomplete="username" class="sr-only" aria-hidden="true" tabindex="-1" [value]="auth.user()?.username ?? ''" />
+        <label class="flex flex-col gap-1">
+          <span class="text-xs text-muted">Current password</span>
+          <input #current type="password" name="currentPassword" class="cn-prop-input" autocomplete="current-password" required
+            [attr.aria-invalid]="pwField() === 'current' ? 'true' : null" [attr.aria-describedby]="pwField() === 'current' ? 'pw-error' : null" />
+        </label>
+        <label class="flex flex-col gap-1">
+          <span class="text-xs text-muted">New password (at least 8 characters)</span>
+          <input #next type="password" name="newPassword" class="cn-prop-input" autocomplete="new-password" required minlength="8"
+            [attr.aria-invalid]="pwField() === 'new' ? 'true' : null" [attr.aria-describedby]="pwField() === 'new' ? 'pw-error' : null" />
+        </label>
+        <label class="flex flex-col gap-1">
+          <span class="text-xs text-muted">New password again</span>
+          <input #again type="password" name="newPasswordAgain" class="cn-prop-input" autocomplete="new-password" required
+            [attr.aria-invalid]="pwField() === 'again' ? 'true' : null" [attr.aria-describedby]="pwField() === 'again' ? 'pw-error' : null" />
+        </label>
+        <button type="submit" class="self-start rounded-md bg-accent px-3 py-1.5 font-semibold text-accent-ink aria-disabled:opacity-60" [attr.aria-disabled]="pwBusy() ? 'true' : null">Change password</button>
+      </form>
+      <div role="status" class="mt-2 text-sm">{{ pwDone() }}</div>
+      <div role="alert" class="text-sm text-accent"><p id="pw-error">{{ pwError() }}</p></div>
+    </section>
 
     <section class="mt-6 rounded-xl border border-line bg-panel p-4" aria-label="AI assistants">
       <h2 class="font-semibold">AI assistants (MCP)</h2>
@@ -63,7 +104,7 @@ function setups(origin: string, token: string) {
             <option value="">No limit</option>
           </select>
         </label>
-        <button type="submit" class="rounded-md bg-accent px-3 py-1.5 font-semibold text-white" [disabled]="busy()">Create token</button>
+        <button type="submit" class="rounded-md bg-accent px-3 py-1.5 font-semibold text-accent-ink" [disabled]="busy()">Create token</button>
       </form>
 
       @if (created(); as c) {
@@ -120,6 +161,18 @@ export class AccountPage {
   protected readonly copied = signal<string | null>(null);
   protected readonly busy = signal(false);
   protected readonly error = signal('');
+  protected readonly nameBusy = signal(false);
+  protected readonly nameError = signal('');
+  protected readonly nameDone = signal('');
+  protected readonly pwBusy = signal(false);
+  protected readonly pwError = signal('');
+  protected readonly pwDone = signal('');
+  /** Which password field the current error belongs to (for aria-invalid and focus). */
+  protected readonly pwField = signal<'current' | 'new' | 'again' | null>(null);
+  private readonly nameEl = viewChild.required<ElementRef<HTMLInputElement>>('nameInput');
+  private readonly currentEl = viewChild.required<ElementRef<HTMLInputElement>>('current');
+  private readonly nextEl = viewChild.required<ElementRef<HTMLInputElement>>('next');
+  private readonly againEl = viewChild.required<ElementRef<HTMLInputElement>>('again');
   protected readonly endpoint = `${location.origin}/mcp`;
   private readonly now = signal(Date.now());
   protected readonly expired = (t: ApiTokenDto) => t.expiresAt !== null && t.expiresAt <= this.now();
@@ -127,6 +180,62 @@ export class AccountPage {
 
   constructor() {
     void this.reload();
+  }
+
+  protected async saveName(value: string) {
+    if (this.nameBusy()) return;
+    this.nameDone.set('');
+    this.nameError.set('');
+    this.pwError.set('');
+    this.pwField.set(null);
+    this.pwDone.set('');
+    const parsed = updateMeInput.safeParse({ displayName: value });
+    if (!parsed.success) {
+      this.nameError.set('Enter a display name of 1 to 80 characters.');
+      this.nameEl().nativeElement.focus();
+      return;
+    }
+    this.nameBusy.set(true);
+    try {
+      const res = await firstValueFrom(this.http.patch<{ user: UserDto }>('/api/auth/me', parsed.data));
+      this.auth.user.set(res.user);
+      this.nameDone.set(`Display name changed to ${res.user.displayName}.`);
+    } catch (err) {
+      this.nameError.set(requestError(err));
+      this.nameEl().nativeElement.focus();
+    } finally {
+      this.nameBusy.set(false);
+    }
+  }
+
+  protected async changePassword(currentPassword: string, newPassword: string, again: string) {
+    if (this.pwBusy()) return;
+    this.nameDone.set('');
+    this.nameError.set('');
+    this.pwDone.set('');
+    this.pwError.set('');
+    this.pwField.set(null);
+    const fail = (field: 'current' | 'new' | 'again', message: string) => {
+      this.pwField.set(field);
+      this.pwError.set(message);
+      (field === 'current' ? this.currentEl() : field === 'new' ? this.nextEl() : this.againEl()).nativeElement.focus();
+    };
+    if (!currentPassword) return fail('current', 'Enter your current password.');
+    const weak = passwordSchema.safeParse(newPassword);
+    if (!weak.success) return fail('new', `New password: ${weak.error.issues[0]?.message ?? 'not allowed'}.`);
+    if (newPassword !== again) return fail('again', 'The two new passwords do not match.');
+    this.pwBusy.set(true);
+    try {
+      await firstValueFrom(this.http.post('/api/auth/password', { currentPassword, newPassword }));
+      for (const el of [this.currentEl(), this.nextEl(), this.againEl()]) el.nativeElement.value = '';
+      this.pwDone.set('Password changed. You were signed out on your other devices; this one stays signed in.');
+      this.currentEl().nativeElement.focus();
+    } catch (err) {
+      const status = err instanceof HttpErrorResponse ? err.status : 0;
+      fail(status === 401 || status === 429 ? 'current' : 'new', status === 401 ? 'The current password is not correct.' : requestError(err));
+    } finally {
+      this.pwBusy.set(false);
+    }
   }
 
   private async reload() {

@@ -1,6 +1,7 @@
 import type { Routes } from '@angular/router';
 import { authGuard } from './core/auth.guard';
 import { gmGuard } from './campaign/gm.guard';
+import { adminGuard } from './admin/admin.guard';
 
 const leaveGuard = (c: { canLeave(): boolean }) => c.canLeave();
 
@@ -19,6 +20,7 @@ const referenceRoutes: Routes = [
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'campaigns' },
   { path: 'login', loadComponent: () => import('./auth/login').then((m) => m.Login), title: 'Sign in — Critical Notes' },
+  { path: 'reset', loadComponent: () => import('./auth/reset').then((m) => m.ResetPage), title: 'Reset password — Critical Notes' },
   { path: 'setup', loadComponent: () => import('./auth/setup').then((m) => m.Setup), title: 'Welcome — Critical Notes' },
   { path: 'invite/:token', loadComponent: () => import('./invites/invite-page').then((m) => m.InvitePage), title: 'Invitation — Critical Notes' },
   {
@@ -27,6 +29,7 @@ export const routes: Routes = [
     children: [
       { path: 'campaigns', loadComponent: () => import('./campaigns/campaign-list').then((m) => m.CampaignList), title: 'Campaigns — Critical Notes' },
       { path: 'account', loadComponent: () => import('./account/account-page').then((m) => m.AccountPage), title: 'Account — Critical Notes' },
+      { path: 'admin/users', loadComponent: () => import('./admin/users-page').then((m) => m.UsersPage), title: 'Users — Critical Notes', canActivate: [adminGuard] },
       { path: 'reference', children: referenceRoutes },
       { path: 'templates', children: templateRoutes },
       {
