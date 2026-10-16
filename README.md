@@ -174,16 +174,27 @@ pnpm --filter @cn/server db:generate                   # migrations after a sche
 
 ## Licensing
 
+- **This project's code.** Critical Notes is licensed under the [Apache License 2.0](LICENSE)
+  (Copyright (c) 2026 Merilairon). The license covers only this repository's own code and documents. It does
+  not cover or grant any right in the game content below. Contributions are accepted under the same license,
+  with a DCO sign-off (`git commit -s`) and no CLA; the details come with CONTRIBUTING.md.
 - **Game content and art.** The rules text, statblocks and other content in 5etools, and the art in
-  5etools-img, belong to Wizards of the Coast and the credited artists. The portions from the System Reference
-  Documents 5.1 and 5.2 are available under [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/).
-  Critical Notes does not contain, copy or redistribute any of it: it reads the clone on your own machine
-  while it runs. Use it for books you own. Do not publish a server with this content to the public.
-- **5etools.** The 5etools code is MIT-licensed (Copyright (c) 2017 TheGiddyLimit and contributors). The data
-  handling in `packages/fivetools` (inheritance with `_copy`, the `{@tag}` syntax, edition rules) follows how
-  5etools works. The [5etools-utils](https://www.npmjs.com/package/5etools-utils) package (MIT) supplies the
-  homebrew schemas and the edition source lists at run time.
+  5etools-img, belong to Wizards of the Coast, the credited artists or their rights holders. Only the text of
+  the System Reference Documents 5.1 and 5.2 is available under
+  [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), and reuse needs the attribution statement from the
+  SRD. This repository contains none of the content. The app builds a local index (`DATA_DIR/index.sqlite`, a
+  derived copy of the entities in your clone) and shows the content and images to the players you invite, and
+  over MCP to the AI service you connect. The host is responsible for that use. Use it for books you own; this
+  is advice, not a license from Wizards. Do not publish a server with this content to the public.
+- **5etools.** The 5etools code is MIT-licensed (Copyright (c) 2017 TheGiddyLimit and contributors). Parts of
+  `packages/fivetools` (the edition table, the `{@tag}` registry, the source-name maps) are adapted from it, and
+  the MIT notice is kept in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The
+  [5etools-utils](https://www.npmjs.com/package/5etools-utils) package (MIT) supplies the homebrew schemas and
+  the edition source lists at run time; its npm package ships no license file.
 - **Third-party code** (dependencies, the bundled AI agent definitions, the 5etools license notice) is listed
   in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-- **Your data** stays in your `DATA_DIR`; exports are yours.
-- **This project's own license** has not been chosen yet.
+- **Your data** stays in your `DATA_DIR`. Your notes and homebrew are yours. An export that contains 5etools
+  text or art stays under the terms of that content.
+- **Trademarks.** Critical Notes is an unofficial fan project. It is not affiliated with, endorsed or
+  sponsored by Wizards of the Coast. "Dungeons & Dragons" and "D&D" are trademarks of Wizards of the Coast LLC,
+  used here only to describe compatibility; the project uses no Wizards logos.

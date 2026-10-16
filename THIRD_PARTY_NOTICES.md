@@ -83,8 +83,10 @@ reads the 5etools clones the user provides (`FIVETOOLS_SRC_PATH`, `FIVETOOLS_IMG
 belong to Wizards of the Coast and the credited artists; the portions from the System Reference Documents 5.1
 and 5.2 are available under CC-BY-4.0.
 
-**5etools code.** Parts of `packages/fivetools` follow how 5etools works: the `_copy`/`_mod` inheritance of
-its data, the `{@tag}` syntax, and how it decides a source's edition. 5etools is MIT-licensed:
+**5etools code.** Parts of `packages/fivetools` are adapted from 5etools code: the edition matching table
+(`expand/items.ts`), the tag registry (`tags/registry.ts`, from `Renderer.tag.*`) and the source-name maps read
+from `js/parser.js` (`node/loader.ts`). The rest follows how 5etools works: the `_copy`/`_mod` inheritance of its
+data, the `{@tag}` syntax, and how it decides a source's edition. 5etools is MIT-licensed:
 
 ```
 MIT License
@@ -111,8 +113,10 @@ SOFTWARE.
 ```
 
 **5etools-utils** ([TheGiddyLimit/5etools-utils](https://github.com/TheGiddyLimit/5etools-utils), MIT) is a
-run-time dependency: it supplies the homebrew schemas and the edition source lists. It is installed with its
-own license file.
+run-time dependency: it supplies the homebrew schemas and the edition source lists. Its npm package declares
+`"license": "MIT"` but contains no license file (reviewed 2026-10-16 for version 0.17.21), so the image carries
+no copyright line for it; the 5etools notice above is the closest text. See
+[docs/legal/license-options.md](docs/legal/license-options.md).
 
 ## 3. Dependencies shipped in builds and the Docker image
 
@@ -122,7 +126,7 @@ them are stored in this repository; they are installed from `pnpm-lock.yaml`.
 | License | Notable packages |
 |---|---|
 | MIT (most packages) | Angular, TipTap and ProseMirror, ngx-tiptap, Hono, zod, better-sqlite3, @node-rs/argon2, fflate, the mdast and micromark Markdown libraries, 5etools-utils |
-| Apache-2.0 | sharp, @img/sharp-linux-x64, drizzle-orm, @modelcontextprotocol/server and core, rxjs, uuidv7 |
+| Apache-2.0 | sharp, @img/sharp-linux-x64, drizzle-orm, @modelcontextprotocol/server and core, rxjs, uuidv7, detect-libc |
 | LGPL-3.0-or-later | libvips and part of the libraries bundled with it (`@img/sharp-libvips-*`), see below |
 | BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, BlueOak-1.0.0, CC0-1.0 | smaller packages, e.g. fractional-indexing (CC0-1.0), tslib (0BSD), minimatch (BlueOak-1.0.0) |
 
@@ -134,11 +138,17 @@ and [libvips/libvips](https://github.com/libvips/libvips).
 **Where the full license texts are:**
 - Web app: `3rdpartylicenses.txt`, written by the Angular build to `apps/web/dist/web/`; in the Docker image at
   `/app/licenses/web-3rdpartylicenses.txt`.
-- Server bundle: `apps/server/dist/main.mjs.LEGAL.txt` (in the image at `/app/main.mjs.LEGAL.txt`) collects the
-  license comments esbuild found in the bundled code. The packages kept outside the bundle (better-sqlite3,
-  @node-rs/argon2, sharp with libvips, 5etools-utils) keep their license files under `/app/node_modules/`.
+- Server bundle: `apps/server/dist/THIRD_PARTY_LICENSES.txt` (in the image at
+  `/app/licenses/server-THIRD_PARTY_LICENSES.txt`) holds the full license text of every package bundled into
+  `main.mjs` and `index.mjs`, plus any NOTICE files. `apps/server/scripts/licenses.mjs` generates it from
+  esbuild's metafile on every `pnpm --filter @cn/server build`. `main.mjs.LEGAL.txt` (in the image at
+  `/app/main.mjs.LEGAL.txt`) still collects the license comments esbuild found in the code. The packages kept
+  outside the bundle (better-sqlite3, @node-rs/argon2, sharp with libvips) keep their license files under
+  `/app/node_modules/`; 5etools-utils has none (see above).
 - This file is in the image at `/app/licenses/THIRD_PARTY_NOTICES.md`.
 - A complete list of packages and licenses: `pnpm licenses list --prod --filter @cn/server --filter @cn/web`.
 
-A generated file with the full license text of every package in the server bundle is not produced yet; it is
-part of the license review in [docs/PROJECT.md](docs/PROJECT.md) (task M1.1).
+Two bundled packages ship no license file in their npm package: `@hono/zod-validator` (MIT) and `drizzle-orm`
+(Apache-2.0). The generated file says so and, for Apache-2.0, adds the standard license text. No bundled package
+carries an Apache-2.0 NOTICE file (checked 2026-10-16). `@modelcontextprotocol/server` is mid-way through a
+relicense from MIT to Apache-2.0 and says so in its LICENSE file; the generated file reproduces that text.

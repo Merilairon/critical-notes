@@ -185,4 +185,4 @@ External images use `{type:"external", url}` (1 occurrence).
 
 - 5etools code and `5etools-utils` are MIT.
 - The *content* (rules text, statblocks) and *art* in these repos are owned by Wizards of the Coast and the credited artists. SRD 5.1 / 5.2 portions are CC-BY-4.0.
-- This app never copies, commits or bundles this content. It reads a user-supplied local clone at runtime.
+- This project never commits or bundles this content. At run time the app reads a user-supplied local clone and builds a derived, rebuildable index of it (`DATA_DIR/index.sqlite`, with full-text search) in the operator's data folder. It shows that content to the people the host invites. The index is the operator's copy and stays under the original terms.

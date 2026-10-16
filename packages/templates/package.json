@@ -2,6 +2,7 @@
   "name": "@cn/templates",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "description": "Block and page templates: {{variable}} placeholders, typed values, substitution, page-template inheritance, export format and migrations, built-ins.",
   "exports": { ".": "./src/index.ts" },

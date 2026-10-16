@@ -2,6 +2,7 @@
   "name": "@cn/fivetools",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "description": "Framework-agnostic 5etools data model: loading, _copy resolution, expansion, editions, rulesets, tags, dice.",
   "exports": {

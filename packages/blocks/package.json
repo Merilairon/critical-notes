@@ -2,6 +2,7 @@
   "name": "@cn/blocks",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "description": "Block document model: registry, validation/sanitization, visibility projection, text and link extraction.",
   "exports": {

@@ -1,6 +1,7 @@
 {
   "name": "critical-notes",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "description": "Self-hostable D&D 5e campaign manager powered by local 5etools data",
   "packageManager": "pnpm@11.0.9",
