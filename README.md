@@ -48,7 +48,8 @@ The first visit asks you to create the admin account. Players join through invit
 in the campaign's settings (there is no open sign-up).
 
 - The 5etools folders are mounted read-only. Your data (database, search index, uploaded images) lives in the
-  `app-data` volume, and `docker compose down -v` deletes it. Set up [Backups](#backups) before you rely on it.
+  `app-data` volume, and `docker compose down -v` deletes it. Scheduled [backups](#scheduled-backups) are on by
+  default (one every 24 hours, into that same volume), so [copy them off the machine](#copying-backups-off-the-machine).
 - The app runs as an unprivileged user, on port 3000 inside the container (`PORT=8080 docker compose up -d`
   to publish another port).
 - Set `PUBLIC_URL` to the address people use (for example `https://notes.example.org` behind a reverse proxy
@@ -83,7 +84,7 @@ resolved from the repository root.
 | `FIVETOOLS_IMG_PATH` | `./5etools-data/5etools-img` | The image clone (optional; missing images show a placeholder) |
 | `DATA_DIR` | `./var` | Database, search index and uploads |
 | `BACKUP_KEEP` | `7` | Backups to keep, 1 to 1000 (an invalid value logs a warning and uses 7). Backups made from the web page are protected for 7 days and do not count until then |
-| `BACKUP_EVERY_HOURS` | off | Make a backup in the server every N hours, 1 to 720 (`0` or unset = off; recommended `24`; with Docker add it to the `environment:` of `docker-compose.yml`, see [Backups](#scheduled-backups)). After downtime one catch-up backup is made about a minute after start; it is skipped while a backup or a restore is running. An invalid value stops the server from starting. The Backups page shows the next run |
+| `BACKUP_EVERY_HOURS` | off (`24` in `docker-compose.yml`) | Make a backup in the server every N hours, 1 to 720 (`0` or unset = off; recommended `24`). The shipped `docker-compose.yml` turns it on with 24; put `BACKUP_EVERY_HOURS=0` in the `.env` next to it to turn it off, see [Backups](#scheduled-backups). After downtime one catch-up backup is made about a minute after start; it is skipped while a backup or a restore is running. An invalid value stops the server from starting. The Backups page shows the next run |
 | `BACKUP_DIR` | `DATA_DIR/backups` | Where backup zips go; use another disk or mount so the backups survive the data. Must not be inside the web build, the uploads or the 5etools folders, or `DATA_DIR` itself, and must not be world-writable (the server refuses to start) |
 | `PORT` | `3000` | |
 | `PUBLIC_URL` | `http://localhost:4200` | The address people open; requests from other origins are refused |
@@ -145,9 +146,10 @@ cp var/backups/backup-<time>.zip /some/other/disk/
 node apps/server/dist/admin.mjs restore var/backups/backup-<time>.zip --check
 ```
 
-To restore, see [Restoring](#restoring). Then do two more things today: turn on [scheduled
-backups](#scheduled-backups) so you do not depend on remembering, and decide where the copies go (the backup is on
-the same disk as your data until you move it).
+To restore, see [Restoring](#restoring). Then do two more things today: check that [scheduled
+backups](#scheduled-backups) are on (they are by default with Docker; a bare install needs `BACKUP_EVERY_HOURS`) so
+you do not depend on remembering, and decide where the copies go (the backup is on the same disk as your data until
+you move it).
 
 ### What is in a backup
 
@@ -199,25 +201,20 @@ restarted several times and give up after 10 minutes with exit code 70: run it a
 
 #### Scheduled backups
 
-Set `BACKUP_EVERY_HOURS` and the server makes a backup by itself every N hours (1 to 720). It is **off by
-default**, and we recommend `24`. This matters for more than convenience: retention keeps only the newest
+Set `BACKUP_EVERY_HOURS` and the server makes a backup by itself every N hours (1 to 720). With Docker Compose it
+is **on by default**: the shipped `docker-compose.yml` uses 24 hours and keeps the newest 7. A bare install
+(without Docker) is **off by default**; we recommend `24` there too. This matters for more than convenience: retention keeps only the newest
 backups, so if you only ever make them by hand, the day you finally need one it may be the old one you made last
 spring. A schedule keeps fresh backups coming and is also what protects your older ones from being pushed out (see
 [Retention](#how-long-backups-are-kept)).
 
-Without Docker, add `BACKUP_EVERY_HOURS=24` to `.env` (or the server's environment). With Docker, `docker-compose.yml`
-only passes the variables it lists, so a line in a `.env` file does not reach the app: add the variable to the
-`environment:` block of the `app` service, or put it in a `docker-compose.override.yml` next to it (Compose reads
-that file automatically):
+With Docker, put `BACKUP_EVERY_HOURS`, `BACKUP_KEEP` or `BACKUP_DIR` in a `.env` file next to `docker-compose.yml`;
+Compose passes them into the container (an empty `BACKUP_KEEP` or `BACKUP_DIR` counts as unset, an empty
+`BACKUP_EVERY_HOURS` as the default 24). For example, `.env` with `BACKUP_EVERY_HOURS=0`
+turns scheduled backups off, and `BACKUP_EVERY_HOURS=12` makes one every 12 hours. Without Docker, add
+`BACKUP_EVERY_HOURS=24` to `.env` in the repository folder (or the server's environment).
 
-```yaml
-services:
-  app:
-    environment:
-      BACKUP_EVERY_HOURS: 24
-```
-
-Then `docker compose up -d` to apply it. The server log says `Scheduled backups: every 24 h, keeping 7` at start,
+Run `docker compose up -d` after changing `.env`. The server log says `Scheduled backups: every 24 h, keeping 7` at start,
 and the Backups page shows `Scheduled backups: every 24 hours, next run <time>`.
 
 - The next run is the newest backup (from any source) plus the interval, so a backup you make by hand postpones
@@ -253,31 +250,52 @@ touched; ordering uses the time in the name, so copying a file does not change i
 `BACKUP_DIR` (default `DATA_DIR/backups`) is where zips are written and listed. Point it at another disk or mount
 so a dead data disk does not take the backups with it. The server refuses to start (and the command line refuses
 to run) if it is `DATA_DIR` itself, inside or around the uploads, the web build or the 5etools folders, or
-world-writable. The directory must be writable by the user the app runs as. If you change it later, backups in the
-old place are no longer listed or cleaned up.
+world-writable, or if the user the app runs as cannot write in it (see [When something goes wrong](#when-something-goes-wrong)). If you
+change it later, backups in the old place are no longer listed or cleaned up.
 
-With Docker, mount a host folder and set the variable. The app runs as the unprivileged user `node` (uid 1000), so
-the folder must belong to that user.
+With Docker, mount a host folder and set `BACKUP_DIR` in the `.env` next to `docker-compose.yml`. The app runs as
+the unprivileged user `node` (uid 1000), so the folder must belong to that user.
 
 Create the folder with the right owner **before** the first `docker compose up`; if it does not exist, Docker
-creates it owned by root and the app cannot write to it:
+creates it owned by root, and the server then refuses to start (see [When something goes wrong](#when-something-goes-wrong)):
 
 ```sh
 mkdir -m 700 /mnt/backupdisk/critical-notes && sudo chown 1000:1000 /mnt/backupdisk/critical-notes
 ```
 
+```sh
+# .env
+BACKUP_DIR=/backups
+```
+
+Under Docker, `BACKUP_DIR` is a path **inside the container** (use an absolute path such as `/backups`; a relative
+path would be wrong), not a path on the host. A folder outside the `app-data` volume therefore has to be mounted there. `docker-compose.yml`
+has no such mount, so add one in a `docker-compose.override.yml` next to it (Compose reads that file automatically):
+
 ```yaml
 # docker-compose.override.yml
 services:
   app:
-    environment:
-      BACKUP_DIR: /backups
     volumes:
       - /mnt/backupdisk/critical-notes:/backups
 ```
 
 Inside the container the files are then in `/backups/` (use that path in the restore commands below). A host folder
 also makes the next section easier: it is a normal folder you can `rsync`.
+
+#### Stopping the server while a backup runs
+
+When the server gets a stop request (`docker compose stop`, `docker stop`, `systemctl stop`, Ctrl+C), it stops
+accepting requests and waits up to 8 seconds for a running backup, whether it is scheduled or from the web page. Then
+it closes its databases and exits. If the backup did not finish in time, the log says `Shutting down: the running
+backup did not finish in time; it was stopped, nothing was published and its partial files and lock were removed`:
+no partial file is ever listed, and a new backup can start right after the restart. Only a forced end (a second stop
+request while it waits, `kill -9`, a power cut) leaves leftovers behind; see "A backup is already running" under
+[When something goes wrong](#when-something-goes-wrong). An idle server
+stops well under a second; a stop during a backup can take up to about 10 seconds (the 8-second wait plus a moment
+to finish open requests). Compose allows 15 seconds (`stop_grace_period`), so `docker compose stop` is never cut
+short. With plain `docker run`, Docker's default is 10 seconds, so add `--stop-timeout 15` if you may stop the
+container during a backup.
 
 ### Copying backups off the machine
 
@@ -365,7 +383,7 @@ then reset your admin password and revoke tokens by hand. Prefer `restore` whene
 #### With Docker
 
 ```sh
-docker compose stop app                  # takes about 10 seconds (instant when BACKUP_EVERY_HOURS is set)
+docker compose stop app
 ```
 
 Check the file first. This changes nothing and tells you what is in it:
@@ -392,9 +410,8 @@ docker compose run --rm app node admin.mjs restore /data/app/backups/backup-2026
 docker compose up -d
 ```
 
-(The 10 seconds is Docker's stop timeout: the app only reacts to the stop request when scheduled backups are on.
-Harmless.) The report ends with `docker compose start app`; on an existing
-setup both work, and on a machine where the app never ran only `up -d` does.
+The report ends with `Docker: docker compose up -d (works whether or not the container exists)`, which is the command
+to use.
 
 Verify: open the app, sign in (everyone has to sign in again), open a campaign you know and look at the newest page
 and an image. Then delete the safety copy (below). If it is not what you wanted, restore another backup the same
@@ -415,10 +432,6 @@ node apps/server/dist/admin.mjs restore var/backups/backup-20261017T223817Z.zip 
 
 Run it as the same user as the server. If you run it as root, the restored files are handed to the owner of the
 data directory.
-
-The Backups page shows a shorter hint (`node dist/admin.mjs restore backups/<file> --yes`). Use the commands on this
-page instead: the program is `apps/server/dist/admin.mjs` and the path is relative to where you run the command (the
-repository folder), not to the data directory.
 
 #### What restore does
 
@@ -490,6 +503,7 @@ The commands use these exit codes (`backup` and `restore` share them; 1 to 3 are
 | 70 | Failed (the message says why; for example a database copy that could not finish in 10 minutes) |
 | 71 | The restore was rolled back: your data is exactly as before |
 | 72 | You answered no at the prompt: nothing was changed |
+| 73 | The backup folder (`BACKUP_DIR`) is not writable by the user running the command: see [When something goes wrong](#when-something-goes-wrong) |
 | 74 | Not enough disk space |
 | 75 | A restore is running or was interrupted: finish it first |
 | 76 | A backup is already running |
@@ -524,7 +538,9 @@ message lists these steps and running the restore command again retries the roll
 
 **`A backup is already running` (exit 76, or "Back up now" is refused).** Only one backup runs at a time. If the
 previous one was killed (a reboot, `kill -9`), it looks like it is still running for 2 minutes: wait and try
-again. Half-written files left by a killed backup are cleaned up after an hour and are never listed.
+again. Half-written files left by a killed backup are cleaned up after an hour and are never listed. (A normal stop
+removes its own unfinished backup, so this only applies after a forced end such as `kill -9`, a power cut or a second
+stop request: a backup started within 2 minutes of that says "already running".)
 
 **The command-line backup takes forever or fails with "did not finish within 10 minutes".** A command-line backup
 copies the database in steps and has to start a step again whenever the server writes to it in between. On a
@@ -562,13 +578,20 @@ some odd mounts file locking does not work at all; restore on a local disk.
   kept (and no older backup was deleted). It happens, rarely, with a database full of repeated blocks that
   compresses more than 50 to 1. Try again; if it keeps happening, report it.
 
-**Backups fail with `EACCES ... .lock` (or `mkdir`) while the server runs normally.** The app user cannot write
-`BACKUP_DIR`, usually because the host folder did not exist before `docker compose up` and Docker created it owned by
-root. Fix the owner (`sudo chown 1000:1000 <folder>`, mode 700). The Backups page shows the last error.
+**`Refusing to start: The backup folder ... is not writable by this user` (the command-line `backup` prints the same
+sentence and exits 73).** The app user cannot write in `BACKUP_DIR` (or the mount is read-only: remove `:ro`), usually because the host folder did not exist before
+`docker compose up` and Docker created it owned by root. The server checks this at start (it creates a missing folder,
+mode 700, then writes and removes a small test file), so you see the problem at once instead of at the first backup. The
+message gives the Docker and bare-install fixes and shows the path as the app sees it, so with a bind mount
+(`/backups` above) fix the **host** folder: `sudo chown 1000:1000 /mnt/backupdisk/critical-notes`, mode 700. A bare install
+needs a folder its own user can write. With `restart: unless-stopped` a container that refuses to start restarts over
+and over until you fix the folder; run `docker compose stop app` first if you want a quiet log. If a backup fails later
+because the folder became unwritable, the Backups page shows `The last backup failed: the server may not write in the
+backup folder (BACKUP_DIR). Fix the folder owner (Docker: chown 1000:1000 on the folder); the server log has its path.`
 
 **The server will not start and says `Refusing to start: BACKUP_DIR ...`** The folder is not allowed (see
 [BACKUP_DIR](#putting-backups-on-another-disk-backup_dir)) or `BACKUP_EVERY_HOURS` is invalid. The message names the
-variable.
+variable. (A folder the app user cannot write in has its own message, just above.)
 
 **The web download ends with "too many downloads" or the link was refused.** Three downloads run at a time:
 wait a few seconds and press Download again. A link works once and for 60 seconds; press Download again for a new one.
@@ -609,15 +632,14 @@ With Docker, using a throwaway volume (`rehearsal`) and the image your compose f
 
 ```sh
 docker run --rm -v "$PWD/backup-20261017T223817Z.zip:/restore/backup.zip:ro" -v rehearsal:/data/app critical-notes:latest node admin.mjs restore /restore/backup.zip --yes
-docker run -d --init --rm --name rehearsal-app -p 3999:3000 -e PUBLIC_URL=http://localhost:3999 -v rehearsal:/data/app critical-notes:latest
+docker run -d --rm --name rehearsal-app -p 3999:3000 -e PUBLIC_URL=http://localhost:3999 -v rehearsal:/data/app critical-notes:latest
 # open http://localhost:3999, sign in with your old password, look at a campaign and an image; then:
 docker stop rehearsal-app
 docker volume rm rehearsal
 ```
 
-(`--init` lets `docker stop` end the container at once; without it the app ignores the stop request and
-`docker stop` takes 10 seconds, so `volume rm` would fail with "in use" until it is gone. If `volume rm` still says
-"in use", wait a second and run it again.)
+(The restore report ends with `docker compose up -d`; that line is for compose installs. For the rehearsal you start
+the container with `docker run` as shown. `docker stop` ends the container within a second. If `volume rm` says "in use", wait a moment and run it again.)
 
 (Add `-v "$PWD/5etools-data/5etools-src:/data/5etools-src:ro"` to the second command if you want the rules reference
 in the rehearsal.) Without Docker, from the repository folder, with a scratch data directory:

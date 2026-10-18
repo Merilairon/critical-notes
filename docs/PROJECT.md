@@ -14,7 +14,7 @@
 
 | Release | Theme | PRD items | In this file |
 |---|---|---|---|
-| **1.0** | Trustworthy to self-host | M1 License, M2 Accounts, M3 Backup, M4 Trash, M5 Release process, M6 Phone-width | 40 tasks, 9 waves (§5) |
+| **1.0** | Trustworthy to self-host | M1 License, M2 Accounts, M3 Backup, M4 Trash, M5 Release process, M6 Phone-width | 41 tasks, 10 waves (§5) |
 | **1.1** | Prep and play loop | N1 Page history, N3 Reveal to players, I1 Keep hidden links, I3 Tracker additions, I2 Query views | 21 tasks, 5 waves (§6) |
 | **1.2** | Stay in sync | N2, N4, I4, I5, I10 | Assigned, broken down when scheduled (§7) |
 | **Later** | Grow | N5–N17, I6–I18 | Assigned, broken down when scheduled (§7) |
@@ -293,6 +293,25 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 **Description**: README section: what's in a backup, how to back up and restore with and without Docker, copying backups off the machine.
 **Depends on**: M3.3, M3.4
 
+### [x] Task M3.7: Backup follow-ups (Docker and CLI polish)
+**Owner**: Backend Architect (compose, signals, startup check, CLI messages), Frontend Developer (Backups page hint), Technical Writer (README) · **QA**: DevOps Automator, Evidence Collector
+**Done:** 2026-10-18. Code Reviewer: 2 FAILs (a shutdown test that only passed on a loaded machine because its seed exceeded the 16 MiB upload cap; no test for the production guard on the test-only hold seam), both fixed; QA DevOps Automator: 1 FAIL (an unfinished backup's `.partial`/`.tmp`/`.lock` stayed after a shutdown timeout and blocked new backups for ~2.5 min), fixed, re-tested PASS in real containers; QA Evidence Collector: PASS (page hints, cap and error texts, fallback, axe 0 violations at 390px, download regression). That was the third failure: the Project Manager re-planned a final narrow fix instead of blocking. Compose now passes `BACKUP_EVERY_HOURS` (default 24, B2), `BACKUP_KEEP`, `BACKUP_DIR`, has `init: true` and `stop_grace_period: 15s`; the server always handles SIGTERM/SIGINT (waits up to 8 s for a running backup, removes its own unfinished backup's files, second signal force-quits); non-writable `BACKUP_DIR` refuses to start / CLI exit 73; the Backups page and CLI messages show working commands built from `directory` and `adminPrograms`. Two test-only env seams exist (`CN_TEST_BACKUP_HOLD_FILE`, ignored in production and covered by a test; `SHUTDOWN_BACKUP_WAIT_MS`, 1-8000). Still open (noted, not built): lock-out guard when carry-over leaves no enabled admin; noisy CHECK THESE NOW on an empty-but-started instance; clearer message for an unreadable live `app.sqlite`; app version `0.0.0` until M5.4; the cap detection on the page keys on the server's 409 text (an error code would be sturdier); the header's main nav overflows 35 px at 390px (M6.3). Incident during QA: an Evidence Collector run restored into the real `var/` by mistake (see the session notes); `var/` held only an empty `uploads/` before, nothing was lost.
+**Description**: Small code fixes that QA of M3.6 found behind the backup guide's workarounds. Nothing here changes the backup format or the restore procedure.
+1. **Compose passes the backup settings.** `docker-compose.yml` passes `BACKUP_EVERY_HOURS`, `BACKUP_KEEP` and `BACKUP_DIR` into the container, so a value in `.env` takes effect (an empty value behaves as unset). The default for `BACKUP_EVERY_HOURS` in the shipped compose file follows decision B2 (§8). Bare installs stay off.
+2. **Clean shutdown, always.** The server handles SIGTERM and SIGINT whether or not scheduled backups are on: it stops accepting requests, waits up to 8 s for a running backup (scheduled **or manual**), closes the databases and exits 0. Add `init: true` to the compose service. `docker stop` on an idle container takes under 3 s and Ctrl+C works in `docker run`. A second signal still force-kills.
+3. **`BACKUP_DIR` must be writable.** At startup (and for the CLI) the server checks that the app user can create and write in `BACKUP_DIR` and refuses to start with a clear message naming the fix (`chown 1000:1000`); today the failure only shows in the log about 90 s later. `EACCES` on backup also maps to a readable error.
+4. **Correct restore hints.** The Backups page and the CLI messages (`restore-marker.ts`, `reportText`) show a command that works: `--check` first, the real program path (`apps/server/dist/admin.mjs` for a bare install), and the backups directory the server actually uses (an additive, admin-only field in the list DTO), in both Docker and bare form. The report says `docker compose up -d` when no container exists yet.
+5. **README follows.** Remove the stopgaps from `## Backups`: the compose override recipe, the "docker stop takes 10 seconds" notes, the Backups-page-hint note and the `--init` workaround for `docker run`; keep every other statement true.
+**Acceptance Criteria**:
+- `docker compose config` shows the three variables; a value set in `.env` is visible with `printenv` inside the container (verified in a real container)
+- `docker compose stop app` on an idle container takes under 3 s with the scheduler on **and** off; SIGTERM during a manual web backup waits for it (up to 8 s) and leaves no partial file; Ctrl+C works in `docker run -it`
+- A non-writable `BACKUP_DIR` makes the server and `admin.mjs backup` fail at once with the documented message; nothing is created
+- The page hint and the CLI messages work when pasted from the repo root and in Docker, for the default and a custom `BACKUP_DIR`
+- Tests for each item (spawned-process tests for the signals and the startup refusal); the README matches the behaviour; gate green
+**Files**: `docker-compose.yml`, `apps/server/src/main.ts`, `config.ts`, `cli/restore-marker.ts`, `cli/restore.ts`, `routes/backups.ts`, `packages/shared/src/backups.ts`, `apps/web/src/app/admin/backups-page.ts`, `README.md`, `docs/STATUS.md`
+**Not in this task (kept as noted follow-ups):** the lock-out guard when a restore's carry-over would leave no enabled admin; the noisy "CHECK THESE NOW" block when restoring onto an instance that was started once and left empty (treat zero live users as nothing to compare); a clearer message for an unreadable live `app.sqlite`; the app version stays `0.0.0` until M5.4.
+**Depends on**: M3.6 · **Decision**: B2 (§8)
+
 ### 5.4 Epic M4: Trash
 
 ### [ ] Task M4.1: Trash endpoints
@@ -427,8 +446,9 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 | 5 | M5.2, M5.4, M2.6, M2.9, M3.4 |
 | 6 | M5.3, M5.5, M2.10, M3.3, M3.5 (stretch) |
 | 7 | M5.6, M3.6 |
-| 8 | G1.1, G1.2, G1.3 |
-| 9 | G1.4 |
+| 8 | M3.7 (needs M3.6) |
+| 9 | G1.1, G1.2, G1.3 |
+| 10 | G1.4 |
 
 ## 6. Release 1.1: Prep and play loop
 
@@ -612,6 +632,7 @@ The Senior Project Manager breaks these into tasks at the start of their release
 | D4 | A self-hosted CI runner with a 5etools clone for browser tests | M5.3 | DevOps Automator | Open |
 | D5 | What happens to a deleted user's campaigns (transfer or archive) | M2.4 | Identity & Access Engineer | Decided 2026-10-16: option C (admin chooses per owned campaign, transfer pre-selected; archive only with a co-DM; solo campaign can't be orphaned). Also decided: reset link is `/reset#<token>` (deviation from `/reset/:token`, log in PLAN.md at M2.9); `TRUST_PROXY` stays off in the shipped compose; on user delete, shared homebrew sources go to the acting admin, private ones and user templates stay ownerless |
 | B1 | Backup design decisions (backup.md D1-D10): keep 7, API backups protected 7 days and capped at 3x keep, `BACKUP_DIR`, `checksums.json` entry, durable `restore-log.jsonl`; restore revokes tokens/invites and carries over live restrictions; download needs a password ticket; restore is CLI-only; index rebuilt after restore; no encryption in 1.0; scheduler built as M3.5 | M3.2-M3.6 | Database Reliability Engineer, Security Architect | Decided 2026-10-17: all approved as recommended |
+| B2 | Should the shipped `docker-compose.yml` turn scheduled backups on by default (`BACKUP_EVERY_HOURS` default 24)? Recommended yes: the audience are not database people, disk use is bounded by keep 7, and the scheduler is what protects older backups from being rotated out. Bare installs stay off either way | M3.7 | Database Reliability Engineer | Decided 2026-10-18: yes, 24 (the owner said "do M3.7" after the recommendation; reversible by changing one default in `docker-compose.yml`) |
 
 ### Risks
 | Risk | Impact | Mitigation | Owner |
