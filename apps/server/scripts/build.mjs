@@ -11,6 +11,16 @@ import { writeLicenses } from './licenses.mjs';
 
 const EXTERNAL = ['better-sqlite3', '@node-rs/argon2', 'sharp', '5etools-utils'];
 
+// App version for the backup manifest: the root package.json version if present, else this package's (M5.4 owns the single source)
+const readVersion = (file) => {
+  try {
+    return JSON.parse(readFileSync(file, 'utf8')).version || null;
+  } catch {
+    return null;
+  }
+};
+const APP_VERSION = readVersion('../../package.json') ?? readVersion('package.json') ?? '0.0.0';
+
 rmSync('dist', { recursive: true, force: true });
 const result = await build({
   entryPoints: { main: 'src/main.ts', index: 'src/cli/index.ts', admin: 'src/cli/admin.ts' },
@@ -20,6 +30,7 @@ const result = await build({
   platform: 'node',
   format: 'esm',
   target: 'node24',
+  define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
   external: EXTERNAL,
   sourcemap: true,
   legalComments: 'linked',
