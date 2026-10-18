@@ -3,13 +3,14 @@ import { Router, RouterLink } from '@angular/router';
 import { PAGE_TYPE_LABELS, type TemplateImportReportDto, type TemplateKindDto, type TemplateSummaryDto } from '@cn/shared';
 import { errorMessage } from '../core/http.interceptor';
 import { TemplateApi } from './template-api';
+import { TemplateTrash } from './template-trash';
 
 const SCOPE_LABELS = { campaign: 'This campaign', user: 'My templates', global: 'Built-in' } as const;
 
 /** The template library: built-in, personal and (inside a campaign) campaign templates. */
 @Component({
   selector: 'cn-template-library',
-  imports: [RouterLink],
+  imports: [RouterLink, TemplateTrash],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `<div class="mx-auto w-full max-w-5xl p-4 sm:p-6">
     <div class="flex flex-wrap items-center gap-2">
@@ -57,6 +58,8 @@ const SCOPE_LABELS = { campaign: 'This campaign', user: 'My templates', global: 
     } @empty {
       <p class="mt-6 text-center text-muted">{{ loaded() ? 'No templates.' : 'Loading…' }}</p>
     }
+
+    <cn-template-trash [campaignId]="campaignId()" (changed)="refresh()" />
   </div>`,
 })
 export class TemplateLibrary {
@@ -91,6 +94,16 @@ export class TemplateLibrary {
       const campaignId = this.campaignId();
       untracked(() => void this.reload(campaignId));
     });
+  }
+
+  /** Reload after the deleted-templates section changed something; a failure shows in the library's message. */
+  protected async refresh() {
+    try {
+      await this.reload();
+    } catch (err) {
+      this.isError.set(true);
+      this.message.set(errorMessage(err));
+    }
   }
 
   private async reload(campaignId = this.campaignId()) {

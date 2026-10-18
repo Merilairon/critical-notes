@@ -1,5 +1,5 @@
 /**
- * Purge of old trash (task M4.1): pages deleted more than 30 days ago are removed for good, once shortly after the server starts
+ * Purge of old trash (task M4.1): pages and templates deleted more than 30 days ago are removed for good, once shortly after the server starts
  * and then daily. A chain of unref'd `setTimeout`s like the backup scheduler (no `setInterval`, no cron library). It defers
  * while a backup runs (`BackupService.isRunning()`) or a restore marker exists, re-checking after `RECHECK_MS`, and `stop()`
  * (called by the clean shutdown) cancels the timer and waits for a run in progress.
@@ -17,6 +17,8 @@ export const CLOCK_MARGIN_MS = 10 * 60_000;
 
 export interface TrashPurgerOptions {
   pages: { purgeExpired(cutoff: number): number; newestActivity?(): number };
+  /** Templates deleted more than 30 days ago go too (task M4.7). */
+  templates?: { purgeExpired(cutoff: number): number; newestActivity?(): number };
   backups: { isRunning(): boolean };
   config: { dataDir: string };
   now?: () => number;
@@ -39,6 +41,8 @@ export class TrashPurger {
   private stopped = false;
   private lastRunAt = 0;
   private running = false;
+  /** Whether the last pass had a failing kind (the count it returned is then partial). */
+  lastRunFailed = false;
   private readonly now: () => number;
   private readonly timers: NonNullable<TrashPurgerOptions['timers']>;
   private readonly log: (message: string) => void;
@@ -62,13 +66,13 @@ export class TrashPurger {
     this.handle = null;
   }
 
-  /** One pass. Returns the number of pages purged, or null when deferred (backup or restore running). */
+  /** One pass. Returns the number of pages and templates purged, or null when deferred (backup or restore running). */
   runOnce(): number | null {
     if (this.running || this.opts.backups.isRunning() || restoreMarkerExists(this.opts.config.dataDir)) return null;
     // A wall clock far in the past would still be safe (nothing expires), one far in the future would purge too much; a clock
     // that went BACKWARDS is the sign of a reset clock, so skip the pass. Compared with the newest page change and our last run.
     const now = this.now();
-    const newest = this.opts.pages.newestActivity?.() ?? 0;
+    const newest = Math.max(this.opts.pages.newestActivity?.() ?? 0, this.opts.templates?.newestActivity?.() ?? 0);
     if (now < newest - CLOCK_MARGIN_MS || now < this.lastRunAt - CLOCK_MARGIN_MS) {
       this.log('Trash purge skipped: the system clock looks wrong (earlier than recent changes)');
       return null;
@@ -76,9 +80,24 @@ export class TrashPurger {
     this.running = true;
     try {
       this.lastRunAt = now;
-      const n = this.opts.pages.purgeExpired(now - TRASH_RETENTION_MS);
-      if (n) this.log(`Trash: ${n} page${n === 1 ? '' : 's'} deleted more than 30 days ago removed for good`);
-      return n;
+      const cutoff = now - TRASH_RETENTION_MS;
+      // Pages and templates are isolated: one kind failing is logged and must not stop the other; the failure is reported
+      // through `lastRunFailed` and the log, and both kinds are tried again at the next scheduled run.
+      this.lastRunFailed = false;
+      const attempt = (kind: 'page' | 'template', purge: (cutoff: number) => number): number => {
+        try {
+          const n = purge(cutoff);
+          if (n) this.log(`Trash: ${n} ${kind}${n === 1 ? '' : 's'} deleted more than 30 days ago removed for good`);
+          return n;
+        } catch (e) {
+          this.lastRunFailed = true;
+          this.log(`Trash purge of ${kind}s failed: ${e instanceof Error ? e.message : 'unknown error'}; trying again tomorrow`);
+          return 0;
+        }
+      };
+      const n = attempt('page', (c) => this.opts.pages.purgeExpired(c));
+      const t = this.opts.templates ? attempt('template', (c) => this.opts.templates!.purgeExpired(c)) : 0;
+      return n + t;
     } finally {
       this.running = false;
     }

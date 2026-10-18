@@ -59,7 +59,7 @@ describe('CampaignTrash', () => {
     expect(rows()[1].textContent).toContain('purged in 2 days');
     expect(rows()[1].querySelector('p.text-accent')).not.toBeNull();
     expect(rows()[0].querySelector('p.text-accent')).toBeNull();
-    expect(el.querySelector('[aria-label="Restore Old"]')).not.toBeNull();
+    expect(el.querySelector('[aria-label="Restore: Old"]')).not.toBeNull();
   });
 
   it('shows the error with Try again, and a way back on 403', async () => {
@@ -178,6 +178,19 @@ describe('CampaignTrash', () => {
     http.expectOne('/api/campaigns/c1/trash').flush({ items: [] });
     await tick(fixture);
     expect(document.activeElement).toBe(el.querySelector('h1'));
+  });
+
+  it('keeps the accessible name starting with the visible text, also while busy', async () => {
+    const { fixture, btn, el } = await mount([entry('a', 'Harbour')]);
+    expect(btn(0, 'purge').getAttribute('aria-label')).toBe('Delete permanently: Harbour');
+    const sep = el.querySelector('li .sr-only')!;
+    expect(sep.textContent).toBe(', ');
+    // Present at every width: never hidden by a breakpoint class
+    expect(sep.className).not.toContain('hidden');
+    btn(0, 'restore').click();
+    fixture.detectChanges();
+    expect(btn(0, 'restore').getAttribute('aria-label')).toBe('Restoring…: Harbour');
+    expect(btn(0, 'purge').getAttribute('aria-label')).toBe('Delete permanently: Harbour');
   });
 
   it('marks the busy row button aria-busy', async () => {

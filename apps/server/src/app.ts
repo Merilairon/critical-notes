@@ -84,7 +84,7 @@ export function createServices({ indexDb, db, config }: AppDeps) {
   const backups = new BackupService({ db, config, hooks });
   // Built here, started by main.ts (off unless BACKUP_EVERY_HOURS is set)
   const backupScheduler = new BackupScheduler({ service: backups, config });
-  const trashPurger = new TrashPurger({ pages, backups, config });
+  const trashPurger = new TrashPurger({ pages, templates, backups, config });
   return { backups, backupScheduler, trashPurger, userAdmin, apiTokens, visibility, transfer, migration, reference, homebrewIndex, campaigns, pages, homebrew, homebrewTransfer, properties, pageSearch, uploads, templates, encounters, trackers, inventory };
 }
 

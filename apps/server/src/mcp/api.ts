@@ -14,7 +14,9 @@ const ROUTES: [string, RegExp][] = [
   ['GET', new RegExp(`^/api/campaigns/${ID}/trash$`)],
   ['GET', /^\/api\/reference\/(search|autocomplete\/[a-z]+)$/],
   ['GET', new RegExp(`^/api/homebrew/(sources(/${ID}(/entities)?)?|entities/${ID})$`)],
-  ['GET', new RegExp(`^/api/templates(/${ID})?$`)],
+  // `trash` (the trash list) and `export` (a file download) are fixed routes, not template ids. The id here may hold no
+  // whitespace or control character, so `trash\n` cannot slip past the lookahead; `/:id/purge` never matches (ids have no slash).
+  ['GET', new RegExp(`^/api/templates(/(?!(?:trash|export)$)[^/?#\\s\\x00-\\x1f]+)?$`)],
   ['POST', new RegExp(`^/api/campaigns/${ID}/(pages(/from-template|/${ID}/(move|restore))?|properties|encounters|inventory/(items|coins))$`)],
   ['POST', new RegExp(`^/api/homebrew/(sources(/${ID}/entities)?|entities/${ID}/restore)$`)],
   ['POST', /^\/api\/templates$/],

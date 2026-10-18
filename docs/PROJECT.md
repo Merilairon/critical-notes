@@ -14,7 +14,7 @@
 
 | Release | Theme | PRD items | In this file |
 |---|---|---|---|
-| **1.0** | Trustworthy to self-host | M1 License, M2 Accounts, M3 Backup, M4 Trash, M5 Release process, M6 Phone-width | 41 tasks, 10 waves (§5) |
+| **1.0** | Trustworthy to self-host | M1 License, M2 Accounts, M3 Backup, M4 Trash, M5 Release process, M6 Phone-width | 43 tasks, 10 waves (§5) |
 | **1.1** | Prep and play loop | N1 Page history, N3 Reveal to players, I1 Keep hidden links, I3 Tracker additions, I2 Query views | 21 tasks, 5 waves (§6) |
 | **1.2** | Stay in sync | N2, N4, I4, I5, I10 | Assigned, broken down when scheduled (§7) |
 | **Later** | Grow | N5–N17, I6–I18 | Assigned, broken down when scheduled (§7) |
@@ -350,6 +350,28 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 **Description**: `e2e/trash.spec.ts`: delete a page with a subpage → restore from the trash → content, backlinks and search intact; undo toast works.
 **Depends on**: M4.3
 
+### [x] Task M4.7: Template purge (same behaviour as pages)
+**Owner**: Backend Architect · **QA**: API Tester, Application Security Engineer
+**Done:** 2026-10-18, Code Reviewer PASS (twice, with a hardening round in between), Application Security Engineer: APPROVED (3 Low), QA API Tester: PASS (real isolated instance: permission matrix, live and built-in refused, audit line with scope and campaign, versions/usage/defaults removed, pages keep content, child of a purged parent, aged scheduler purge removes only templates older than 30 days and leaves a built-in alone, pages purge still works in the same pass, MCP `get_template` refuses `trash` and `export`). Route: `DELETE /api/templates/:id/purge` -> `{ purged: [id] }`. The purger now isolates pages and templates, so one failing does not skip the other. Notes for M4.6 (not started, on hold by the owner): a child template whose parent was purged loads with an `issues` entry; an edit that sends a definition keeping the dangling `extendsRef` gets 400 "The template to extend was not found" (clear or change the parent in the same save); a name-only update still succeeds. Not built: a clock that jumps far forward is not detected (same limit as pages).
+**Description**: Trashed templates get the same lifecycle as trashed pages (owner decision D6, 2026-10-18). (1) `DELETE /api/templates/:id/purge`: permanent delete of a trashed template the caller can edit (same permission rule as restore; 400 for a live template, 404 for unknown or not-editable, built-ins impossible), with an audit line `template.purged`. (2) The existing `TrashPurger` also removes templates deleted more than 30 days ago (same cutoff constant `TRASH_RETENTION_DAYS`, same deferral during backups and restores, same clock sanity check). (3) Purge removes the template's versions, usage rows and campaign-default rows; pages created from it keep their content and simply stop being linked; a child template that `extends` a purged template must not break (decide and document: it keeps working with an `issues` entry, or purge is refused while a live child extends it). (4) The list DTO (`TemplateTrashItemDto`) already carries `deletedAt`; nothing leaks to players. (5) MCP: unchanged (no purge tool; the template trash routes stay off the allowlist except where the existing generic rule already matches; tighten the `^/api/templates(/ID)?$` rule so `get_template({templateId:"trash"})` no longer reaches the trash list).
+**Acceptance Criteria**:
+- Tests for purge permissions (owner, co-DM, player, stranger, anonymous), live template refused, aged purge by the scheduler, deferral, instances and children after purge, and the allowlist tightening
+- Sentinel crawl still green; no schema change expected (if one is needed, both schemas + `db:generate`); gate green
+**Files**: `apps/server/src/services/templates.ts`, `routes/templates.ts`, `services/trash-purger.ts`, `mcp/api.ts`, tests, `docs/STATUS.md`, `docs/PLAN.md`
+**Depends on**: M4.2
+
+### [x] Task M4.6: Templates restore in the template manager
+**Owner**: Frontend Developer · **QA**: Evidence Collector, Accessibility Auditor
+**Done:** 2026-10-18. Code Reviewer: PASS after three rounds (stale-response guards across campaign changes, silent reloads, announced 409 message, chain wording, the issues sentence matched too broadly). QA Evidence Collector: PASS (real Chrome: scoping, Restore, Delete permanently, stale rows, the 409 parent flow, campaign switching, error and retry, co-DM, 390px light and dark). QA Accessibility Auditor: partial on the first pass (focus lost to BODY after "Restore the parent first" with a vanished parent and after "Try again"; "Delete permanently" label not containing the visible text), fixed over three rounds, final re-check PASS (axe 44 runs, focus targets, labels, separator, chain). This was the third fix round: the task was not blocked. The UI is a "Deleted templates" section at the bottom of the template library (`/templates` personal only, `/c/:id/templates` that campaign only), no new route. Cross-task change: the page Trash button labels are now `Restore: <name>` and `Delete permanently: <name>` (label in name, WCAG 2.5.3) and its age line has a screen-reader separator. Follow-ups (not built): a child restored after its parent was purged only gets a sentence in the restore status (the editor itself shows no warning); the 400 on saving a template that keeps a dangling parent is untouched; the "refresh()" error message in the library is not cleared by a later success (same as import); two cosmetic string nits in `template-trash.ts`; no e2e for the 409 chain or the co-DM path (unit specs only); no real screen reader tested.
+**Description**: Add a small "Deleted templates" list to the existing template manager UI on top of the M4.2 and M4.7 API (`GET /api/templates/trash[?campaignId=]`, `POST /api/templates/:id/restore`, `DELETE /api/templates/:id/purge`). Each row shows the template name, its scope (personal or campaign), when it was deleted and "purged in N days" (same wording and accent rule as the page Trash), with Restore and Delete permanently (native confirm, as on the page Trash). Restore is instant with no confirm; the row disappears and the template shows up in the normal list. When the server answers 409 because the template's parent (`extends`) is still in the trash, show its message and a "Restore the parent first" action. Empty, loading and error states as on the page Trash. Visible only to those who can edit the templates (the API already scopes this).
+**Acceptance Criteria**:
+- A deleted personal template and a deleted campaign template (as DM and as co-DM) can be restored from the UI; linked instances follow later versions again
+- The 409 parent case is readable and recoverable; a player sees nothing
+- Reuses the Trash page patterns from `docs/design/trash-ui.md` (focus after restore, live region, 44px targets at 390px, light and dark); axe clean; unit spec next to the component; the gate and `pnpm e2e` stay green
+- Delete permanently removes the row and the template for good; a stale row (already restored or purged) disappears without an error
+**Files**: the template manager under `apps/web/src/app/` (find it first), `docs/STATUS.md`
+**Depends on**: M4.2, M4.3, M4.7 · **Decision**: D6 (§8)
+
 ### 5.5 Epic M5: Release process
 
 ### [ ] Task M5.1: Repository and branching
@@ -452,6 +474,7 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 | 6 | M5.3, M5.5, M2.10, M3.3, M3.5 (stretch) |
 | 7 | M5.6, M3.6 |
 | 8 | M3.7 (needs M3.6) |
+| 8b | M4.7 (template purge), then M4.6 (templates restore UI); before the gate tasks |
 | 9 | G1.1, G1.2, G1.3 |
 | 10 | G1.4 |
 
@@ -639,7 +662,7 @@ The Senior Project Manager breaks these into tasks at the start of their release
 | B1 | Backup design decisions (backup.md D1-D10): keep 7, API backups protected 7 days and capped at 3x keep, `BACKUP_DIR`, `checksums.json` entry, durable `restore-log.jsonl`; restore revokes tokens/invites and carries over live restrictions; download needs a password ticket; restore is CLI-only; index rebuilt after restore; no encryption in 1.0; scheduler built as M3.5 | M3.2-M3.6 | Database Reliability Engineer, Security Architect | Decided 2026-10-17: all approved as recommended |
 | B2 | Should the shipped `docker-compose.yml` turn scheduled backups on by default (`BACKUP_EVERY_HOURS` default 24)? Recommended yes: the audience are not database people, disk use is bounded by keep 7, and the scheduler is what protects older backups from being rotated out. Bare installs stay off either way | M3.7 | Database Reliability Engineer | Decided 2026-10-18: yes, 24 (the owner said "do M3.7" after the recommendation; reversible by changing one default in `docker-compose.yml`) |
 
-| D6 | Templates in the trash (PRD §8 M4: "templates get the same" as homebrew). M4.2 built the API only (`GET /api/templates/trash`, `POST /api/templates/:id/restore`). Options: (a) accept the API for 1.0 and note it in the README/STATUS; (b) add a small restore list to the template manager UI (one Frontend Developer task, QA Evidence Collector); and separately, purge trashed templates after 30 days like pages or keep them for good. Recommended: (b) for the UI, keep templates unpurged | G1.4 (release certification) | Product Manager | Open |
+| D6 | Templates in the trash (PRD §8 M4: "templates get the same" as homebrew). M4.2 built the API only (`GET /api/templates/trash`, `POST /api/templates/:id/restore`). Options: (a) accept the API for 1.0 and note it in the README/STATUS; (b) add a small restore list to the template manager UI (one Frontend Developer task, QA Evidence Collector); and separately, purge trashed templates after 30 days like pages or keep them for good. Recommended: (b) for the UI, keep templates unpurged | M4.6, G1.4 | Product Manager | Decided 2026-10-18: add a small restore UI (task M4.6) and purge templates like pages: 30 days, plus Delete permanently (task M4.7) |
 
 ### Risks
 | Risk | Impact | Mitigation | Owner |

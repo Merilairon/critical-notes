@@ -63,15 +63,15 @@ const subpages = (n: number) => (n === 0 ? 'no subpages' : `${n} ${plural(n, 'su
               <p class="text-sm text-muted">{{ labels[it.type] }} · {{ subpageText(it.subpageCount) }}</p>
               <p class="text-sm" [class]="daysLeft(it) <= 3 ? 'text-accent' : 'text-muted'">
                 <time [attr.datetime]="iso(it)" [title]="it.deletedAt | date: 'medium'">
-                  <span class="block sm:inline">{{ deletedText(it) }}</span><span class="hidden sm:inline"> · </span><span class="block sm:inline">{{ purgeText(it) }}</span>
+                  <span class="block sm:inline">{{ deletedText(it) }}</span><span class="sr-only">, </span><span class="hidden sm:inline" aria-hidden="true"> · </span><span class="block sm:inline">{{ purgeText(it) }}</span>
                 </time>
               </p>
             </div>
             <div class="flex flex-col gap-2 sm:flex-row">
-              <button type="button" data-action="restore" class="rounded-md border border-line px-3 py-2.5 hover:border-accent aria-disabled:opacity-60 sm:py-1.5" [attr.aria-label]="'Restore ' + it.title" [attr.aria-disabled]="busy() === it.id || null" [attr.aria-busy]="busy() === it.id || null" (click)="restore(it)">
+              <button type="button" data-action="restore" class="rounded-md border border-line px-3 py-2.5 hover:border-accent aria-disabled:opacity-60 sm:py-1.5" [attr.aria-label]="label('restore', it.title, it.id)" [attr.aria-disabled]="busy() === it.id || null" [attr.aria-busy]="busy() === it.id || null" (click)="restore(it)">
                 {{ busy() === it.id && busyAction() === 'restore' ? 'Restoring…' : 'Restore' }}
               </button>
-              <button type="button" data-action="purge" class="rounded-md border border-line px-3 py-2.5 text-accent hover:border-accent aria-disabled:opacity-60 sm:py-1.5" [attr.aria-label]="'Delete ' + it.title + ' permanently'" [attr.aria-disabled]="busy() === it.id || null" [attr.aria-busy]="busy() === it.id || null" (click)="purge(it)">
+              <button type="button" data-action="purge" class="rounded-md border border-line px-3 py-2.5 text-accent hover:border-accent aria-disabled:opacity-60 sm:py-1.5" [attr.aria-label]="label('purge', it.title, it.id)" [attr.aria-disabled]="busy() === it.id || null" [attr.aria-busy]="busy() === it.id || null" (click)="purge(it)">
                 {{ busy() === it.id && busyAction() === 'purge' ? 'Deleting…' : 'Delete permanently' }}
               </button>
             </div>
@@ -130,6 +130,12 @@ export class CampaignTrash {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  /** Accessible name = visible text first, then the page (WCAG 2.5.3); follows the busy text. */
+  protected label(action: Action, title: string, id: string) {
+    const busy = this.busy() === id && this.busyAction() === action;
+    return action === 'restore' ? `${busy ? 'Restoring…' : 'Restore'}: ${title}` : `${busy ? 'Deleting…' : 'Delete permanently'}: ${title}`;
   }
 
   protected subpageText = subpages;

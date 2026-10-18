@@ -3,7 +3,7 @@
  * propagation to linked instances, block instantiation, pages from page templates (with `extends`, properties,
  * facet defaults and child pages), applying a template to an existing page, and per-type campaign defaults.
  */
-import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import type { BlockNode } from '@cn/blocks';
 import { getRuleset, isObject, type RulesetId } from '@cn/fivetools';
 import {
@@ -324,6 +324,67 @@ export class TemplateService {
     }
     this.db.update(templates).set({ deletedAt: null }).where(eq(templates.id, t.id)).run();
     return this.get(userId, t.id);
+  }
+
+  /** Scope and campaign of a deleted template the user could edit (for the audit line), or null. */
+  trashed(userId: string, id: string): { scope: string; campaignId: string | null } | null {
+    const t = this.db.select().from(templates).where(eq(templates.id, id)).get();
+    return t && t.deletedAt !== null && this.canEdit(t, userId) ? { scope: t.scope, campaignId: t.campaignId } : null;
+  }
+
+  /**
+   * Permanently deletes a template that is in the trash and that the user could edit (same visibility as restore: anything else,
+   * built-ins included, is a plain 404). A live template is refused with 400. Returns the purged ids.
+   */
+  purge(userId: string, id: string): string[] {
+    const t = this.db.select().from(templates).where(eq(templates.id, id)).get();
+    if (!t || !this.canEdit(t, userId)) throw notFound('Template not found');
+    if (t.deletedAt === null) throw badRequest('Only a deleted template can be purged');
+    return this.purgeIds([t.id]);
+  }
+
+  /** The newest `updatedAt` or `deletedAt` of any template (ms; 0 when none): part of the purger's clock sanity check. */
+  newestActivity(): number {
+    const r = this.db.select({ u: sql<number>`max(${templates.updatedAt})`, d: sql<number>`max(${templates.deletedAt})` }).from(templates).get();
+    return Math.max(r?.u ?? 0, r?.d ?? 0);
+  }
+
+  /** Permanently deletes every template deleted before `cutoff` (ms), in all scopes. Returns how many. */
+  purgeExpired(cutoff: number): number {
+    const ids = this.db.select({ id: templates.id }).from(templates).where(and(isNotNull(templates.deletedAt), lt(templates.deletedAt, cutoff), isNull(templates.builtinKey))).all().map((r) => r.id);
+    return this.purgeIds(ids, cutoff).length;
+  }
+
+  /**
+   * Hard delete, only ever of deleted, non built-in templates. Versions and campaign defaults cascade by foreign key, but
+   * `template_usage.template_id` has none, so usage rows go explicitly (and the versions and defaults too, so this does not rely
+   * on cascades being enabled). Pages created from the template keep their content and lose the link (`from_template_id`);
+   * linked instances keep their content (the usage rows are gone, so they no longer follow anything). A child template that
+   * extends a purged one is left alone: it resolves its parent like it does for a trashed one and reports an issue.
+   */
+  private purgeIds(candidates: string[], cutoff?: number): string[] {
+    const purged: string[] = [];
+    for (let i = 0; i < candidates.length; i += 500) {
+      const chunk = candidates.slice(i, i + 500);
+      this.db.transaction((tx) => {
+        // The guard (deleted, not built-in, and past the cutoff when given) is applied first, and every delete below only
+        // touches the ids that passed it.
+        const ids = tx
+          .select({ id: templates.id })
+          .from(templates)
+          .where(and(inArray(templates.id, chunk), isNotNull(templates.deletedAt), isNull(templates.builtinKey), cutoff === undefined ? undefined : lt(templates.deletedAt, cutoff)))
+          .all()
+          .map((r) => r.id);
+        if (!ids.length) return;
+        tx.delete(templateUsage).where(inArray(templateUsage.templateId, ids)).run();
+        tx.update(pages).set({ fromTemplateId: null, fromTemplateVersion: null }).where(inArray(pages.fromTemplateId, ids)).run();
+        tx.delete(campaignTemplateDefaults).where(inArray(campaignTemplateDefaults.templateId, ids)).run();
+        tx.delete(templateVersions).where(inArray(templateVersions.templateId, ids)).run();
+        tx.delete(templates).where(inArray(templates.id, ids)).run();
+        purged.push(...ids);
+      });
+    }
+    return purged;
   }
 
   duplicate(userId: string, id: string, input: { scope: 'user' | 'campaign'; campaignId: string | null; name?: string }): TemplateDto {

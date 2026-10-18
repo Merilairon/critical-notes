@@ -110,3 +110,28 @@ test('apply a template to an existing page', async () => {
   await expect(page.locator('.tiptap', { hasText: 'Hazards' })).toBeVisible();
   await expect(editor(page)).toContainText('UPDATED');
 });
+
+test('deleted templates: restore a personal one, delete a campaign one permanently', async () => {
+  const { page } = shared;
+  const copy = async (scope: 'user' | 'campaign', name: string) => {
+    const t = await api<{ id: string; version: number }>(page, 'POST', `/api/templates/${templateId}/duplicate`, { scope, campaignId: scope === 'campaign' ? campaignId : null });
+    await api(page, 'PUT', `/api/templates/${t.id}`, { version: t.version, name });
+    await api(page, 'DELETE', `/api/templates/${t.id}`);
+    return t.id;
+  };
+  await copy('user', 'Bin personal');
+  await copy('campaign', 'Bin campaign');
+
+  await page.goto('/templates');
+  const deleted = page.locator('cn-template-trash');
+  await expect(deleted.getByRole('heading', { name: 'Deleted templates' })).toBeVisible();
+  await expect(deleted.locator('li', { hasText: 'Bin campaign' })).toHaveCount(0); // personal view
+  await deleted.getByRole('button', { name: 'Restore: Bin personal' }).click();
+  await expect(deleted.locator('div[role=status]')).toContainText('Restored "Bin personal"');
+  await expect(page.locator('cn-template-library a', { hasText: 'Bin personal' })).toBeVisible();
+
+  await page.goto(`/c/${campaignId}/templates`);
+  await deleted.getByRole('button', { name: 'Delete permanently: Bin campaign' }).click();
+  await expect(deleted.locator('div[role=status]')).toContainText('Permanently deleted "Bin campaign"');
+  await expect(deleted.locator('li')).toHaveCount(0);
+});

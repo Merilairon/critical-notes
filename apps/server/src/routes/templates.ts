@@ -60,6 +60,15 @@ export function templateRoutes(templates: TemplateService) {
     return c.json(restored);
   });
 
+  /** Permanent delete of a trashed template the caller can edit (like restore). Irreversible, so not available to MCP. */
+  app.delete('/:id/purge', (c) => {
+    const id = c.req.param('id');
+    const before = templates.trashed(uid(c), id); // scope and campaign, read before the row is gone
+    const purged = templates.purge(uid(c), id);
+    audit('template.purged', { templateId: id, scope: before?.scope ?? null, campaignId: before?.campaignId ?? null, actor: uid(c) });
+    return c.json({ purged });
+  });
+
   app.post('/:id/duplicate', validate('json', duplicateTemplateInput), (c) => c.json(templates.duplicate(uid(c), c.req.param('id'), c.req.valid('json')), 201));
 
   app.get('/:id/usage', (c) => c.json({ usage: templates.usage(uid(c), c.req.param('id')) }));

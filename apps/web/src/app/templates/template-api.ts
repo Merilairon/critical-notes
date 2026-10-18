@@ -9,6 +9,7 @@ import type {
   TemplateImportReportDto,
   TemplateKindDto,
   TemplateSaveResultDto,
+  TemplateTrashItemDto,
   TemplateSummaryDto,
   TemplateUsageDto,
   UpdateTemplateInput,
@@ -38,6 +39,16 @@ export class TemplateApi {
   }
   remove(id: string) {
     return firstValueFrom(this.http.delete<void>(`/api/templates/${id}`));
+  }
+  trash(campaignId: string | null) {
+    const params: Record<string, string> = campaignId ? { campaignId } : {};
+    return firstValueFrom(this.http.get<{ templates: TemplateTrashItemDto[] }>('/api/templates/trash', { params })).then((r) => r.templates);
+  }
+  restore(id: string) {
+    return firstValueFrom(this.http.post<TemplateDto>(`/api/templates/${id}/restore`, {}));
+  }
+  purge(id: string) {
+    return firstValueFrom(this.http.delete<{ purged: string[] }>(`/api/templates/${id}/purge`));
   }
   duplicate(id: string, scope: 'user' | 'campaign', campaignId: string | null) {
     return firstValueFrom(this.http.post<TemplateDto>(`/api/templates/${id}/duplicate`, { scope, campaignId }));

@@ -108,7 +108,7 @@ test('Restore from the Trash view brings everything back', async ({ page }) => {
   await page.waitForURL(`**/c/${w.campaignId}/trash`);
   const row = trashRow(page, w.title);
   await expect(row).toContainText('1 subpage');
-  await row.getByRole('button', { name: `Restore ${w.title}` }).click();
+  await row.getByRole('button', { name: `Restore: ${w.title}` }).click();
   await expect(page.getByRole('status').filter({ hasText: `Restored "${w.title}"` })).toBeVisible();
   await expect(row).toHaveCount(0);
   expect(dialogs, 'restore asks nothing').toEqual([]);
@@ -120,7 +120,7 @@ test('Delete permanently (confirmed) removes the page and its subpage for good',
   await deleteInEditor(page, w);
   await page.goto(`/c/${w.campaignId}/trash`);
   const row = trashRow(page, w.title);
-  await row.getByRole('button', { name: `Delete ${w.title} permanently` }).click();
+  await row.getByRole('button', { name: `Delete permanently: ${w.title}` }).click();
   await expect(page.getByRole('status').filter({ hasText: `Permanently deleted "${w.title}"` })).toBeVisible();
   expect(dialogs.length, 'one confirm').toBe(1);
   expect(dialogs[0]).toContain(w.title);
