@@ -10,6 +10,7 @@
     "start": "tsx src/main.ts",
     "start:dist": "node dist/main.mjs",
     "index": "tsx src/cli/index.ts",
+    "drill": "node scripts/restore-drill.mjs",
     "typecheck": "tsc -p tsconfig.json",
     "db:generate": "drizzle-kit generate && drizzle-kit generate --config drizzle.pg.config.ts"
   },

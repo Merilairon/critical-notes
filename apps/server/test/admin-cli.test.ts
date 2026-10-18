@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app';
-import { CliError, EXIT, resetLinkCommand, SUBCOMMANDS } from '../src/cli/admin-core';
+import { CliError, EXIT, resetLinkCommand, SUBCOMMANDS, type DbSubcommand } from '../src/cli/admin-core';
 import { passwordResets, users } from '../src/db/schema';
 import { hashPassword } from '../src/lib/password';
 import { resetUrl } from '../src/services/users';
@@ -68,17 +68,18 @@ describe('reset-link command', () => {
 });
 
 describe('subcommand registry', () => {
-  it('prints only the url on stdout and the expiry through info', () => {
+  const resetLink = SUBCOMMANDS['reset-link'] as DbSubcommand;
+  it('prints only the url on stdout and the expiry through info', async () => {
     const info: string[] = [];
-    const out = SUBCOMMANDS['reset-link']!.run(['pat'], { db: fx.db, publicUrl: BASE, info: (m) => info.push(m) });
+    const out = (await resetLink.run(['pat'], { db: fx.db, config: fx.config, publicUrl: BASE, info: (m) => info.push(m) })) as string;
     expect(out).toMatch(/^https:\/\/notes\.example\.org\/reset#[\w-]+$/);
     expect(info.join('')).toMatch(/expires/);
     expect(info.join('')).not.toContain(out.split('#')[1]!);
   });
 
   it('rejects missing or extra arguments as usage errors', () => {
-    const ctx = { db: fx.db, publicUrl: BASE, info: () => {} };
-    expect(fails(() => SUBCOMMANDS['reset-link']!.run([], ctx)).exitCode).toBe(EXIT.usage);
-    expect(fails(() => SUBCOMMANDS['reset-link']!.run(['a', 'b'], ctx)).exitCode).toBe(EXIT.usage);
+    const ctx = { db: fx.db, config: fx.config, publicUrl: BASE, info: () => {} };
+    expect(fails(() => resetLink.run([], ctx)).exitCode).toBe(EXIT.usage);
+    expect(fails(() => resetLink.run(['a', 'b'], ctx)).exitCode).toBe(EXIT.usage);
   });
 });
