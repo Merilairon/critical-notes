@@ -18,6 +18,8 @@ export interface AppEnv {
     user: SessionUser | null;
     /** Set for calls made on behalf of an API token (the MCP server); read tokens may not write. */
     tokenScope?: 'read' | 'write';
+    /** Stored id of the browser session behind this request (the token hash); unset for API tokens and anonymous calls. */
+    sessionId?: string;
   };
 }
 
@@ -79,6 +81,7 @@ export function sessionMiddleware(db: AppDb, secure: boolean): MiddlewareHandler
         .get();
       if (row) {
         c.set('user', { id: row.user.id, username: row.user.username, displayName: row.user.displayName, isAdmin: row.user.isAdmin });
+        c.set('sessionId', id);
         if (row.expiresAt - now < SESSION_TTL_MS - RENEW_AFTER_MS) {
           const expiresAt = now + SESSION_TTL_MS;
           db.update(sessions).set({ expiresAt }).where(eq(sessions.id, id)).run();

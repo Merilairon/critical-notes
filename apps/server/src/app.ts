@@ -38,8 +38,14 @@ import { TemplateService } from './services/templates';
 import { ApiTokenService } from './services/api-tokens';
 import { tokenRoutes } from './routes/tokens';
 import { adminRoutes } from './routes/admin';
+import { backupRoutes } from './routes/backups';
+import { BackupScheduler } from './services/backup-scheduler';
+import { BackupService } from './services/backups';
 import { UserAdminService } from './services/users';
 import { mcpRoutes } from './mcp/route';
+
+/** `/api/admin/backups/<name>` (the zip download), whatever the name. */
+const isBackupDownload = (path: string) => /^\/api\/admin\/backups\/[^/]+$/.test(path);
 
 export interface AppDeps {
   config: AppConfig;
@@ -67,7 +73,11 @@ export function createServices({ indexDb, db, config }: AppDeps) {
   const migration = new EditionMigration(db, indexDb, { campaigns, pages, properties });
   const apiTokens = new ApiTokenService(db);
   const userAdmin = new UserAdminService(db);
-  return { userAdmin, apiTokens, visibility, transfer, migration, reference, homebrewIndex, campaigns, pages, homebrew, homebrewTransfer, properties, pageSearch, uploads, templates, encounters, trackers, inventory };
+  // Constructed once: validates BACKUP_DIR (throws on an invalid one, so the server refuses to start) and clears old leftovers
+  const backups = new BackupService({ db, config });
+  // Built here, started by main.ts (off unless BACKUP_EVERY_HOURS is set)
+  const backupScheduler = new BackupScheduler({ service: backups, config });
+  return { backups, backupScheduler, userAdmin, apiTokens, visibility, transfer, migration, reference, homebrewIndex, campaigns, pages, homebrew, homebrewTransfer, properties, pageSearch, uploads, templates, encounters, trackers, inventory };
 }
 
 export type Services = ReturnType<typeof createServices>;
@@ -77,8 +87,7 @@ export function createApp(deps: AppDeps, services: Services = createServices(dep
   const { reference, campaigns, homebrew } = services;
   const app = new Hono<AppEnv>();
 
-  app.use(
-    '*',
+  const headerOptions = (referrerPolicy: 'same-origin' | 'no-referrer') =>
     secureHeaders({
       contentSecurityPolicy: {
         defaultSrc: ["'self'"],
@@ -92,12 +101,16 @@ export function createApp(deps: AppDeps, services: Services = createServices(dep
         formAction: ["'self'"],
       },
       crossOriginResourcePolicy: 'same-origin',
-      referrerPolicy: 'same-origin',
-    }),
-  );
+      referrerPolicy,
+    });
+  const standardHeaders = headerOptions('same-origin');
+  const downloadHeaders = headerOptions('no-referrer');
+  // A backup download says Referrer-Policy: no-referrer (secureHeaders would overwrite a header set by the route)
+  app.use('*', (c, next) => (isBackupDownload(c.req.path) ? downloadHeaders(c, next) : standardHeaders(c, next)));
   // Event streams must not be compressed: gzip buffers, so updates would arrive late
   const compressed = compress();
-  app.use('/api/*', (c, next) => (c.req.path.endsWith('/events') ? next() : compressed(c, next)));
+  // ... and neither must backup zips: deflating a zip wastes CPU, and a multi-gigabyte body must stay a plain stream
+  app.use('/api/*', (c, next) => (c.req.path.endsWith('/events') || isBackupDownload(c.req.path) ? next() : compressed(c, next)));
   app.use('*', sessionMiddleware(db, config.secureCookies));
   app.use('/api/*', originCheck([config.publicUrl]));
 
@@ -106,6 +119,7 @@ export function createApp(deps: AppDeps, services: Services = createServices(dep
   app.route('/api/auth', authRoutes(db, { secureCookies: config.secureCookies, trustProxy: config.trustProxy, invites: campaigns }));
   app.route('/api/invites', inviteRoutes(campaigns));
   app.use('/api/admin/*', requireAdmin);
+  app.route('/api/admin/backups', backupRoutes(services.backups, services.userAdmin, { trustProxy: config.trustProxy, schedule: () => services.backupScheduler.info() }));
   app.route('/api/admin/users', adminRoutes(services.userAdmin, { publicUrl: config.publicUrl, trustProxy: config.trustProxy }));
 
   // Everything below requires a signed-in user

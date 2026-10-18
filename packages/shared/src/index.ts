@@ -12,3 +12,4 @@ export * from './inventory';
 export * from './members';
 export * from './migration';
 export * from './tokens';
+export * from './backups';

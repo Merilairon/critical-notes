@@ -30,6 +30,7 @@ export const routes: Routes = [
       { path: 'campaigns', loadComponent: () => import('./campaigns/campaign-list').then((m) => m.CampaignList), title: 'Campaigns — Critical Notes' },
       { path: 'account', loadComponent: () => import('./account/account-page').then((m) => m.AccountPage), title: 'Account — Critical Notes' },
       { path: 'admin/users', loadComponent: () => import('./admin/users-page').then((m) => m.UsersPage), title: 'Users — Critical Notes', canActivate: [adminGuard] },
+      { path: 'admin/backups', loadComponent: () => import('./admin/backups-page').then((m) => m.BackupsPage), title: 'Backups — Critical Notes', canActivate: [adminGuard] },
       { path: 'reference', children: referenceRoutes },
       { path: 'templates', children: templateRoutes },
       {

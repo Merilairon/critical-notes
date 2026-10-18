@@ -4,6 +4,7 @@ import { afterNextRender, ChangeDetectionStrategy, Component, computed, ElementR
 import { Router, RouterLink } from '@angular/router';
 import type { AdminUpdateUserInput, AdminUserDto } from '@cn/shared';
 import { firstValueFrom } from 'rxjs';
+import { AdminNav } from './admin-nav';
 import { AuthService } from '../core/auth.service';
 import { errorMessage } from '../core/http.interceptor';
 import { DeleteDialog, type DeleteOutcome } from './delete-dialog';
@@ -19,14 +20,15 @@ type DialogState =
 /** Manage accounts: reset links, disable and enable, admin rights, delete. Admins only (route guard and server). */
 @Component({
   selector: 'cn-users-page',
-  imports: [DatePipe, NgTemplateOutlet, RouterLink, StepUpDialog, ResetLinkDialog, DeleteDialog],
+  imports: [DatePipe, NgTemplateOutlet, RouterLink, AdminNav, StepUpDialog, ResetLinkDialog, DeleteDialog],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `<div class="mx-auto max-w-5xl p-4 sm:p-6">
     <div class="flex flex-wrap items-baseline justify-between gap-2">
       <h1 #heading tabindex="-1" class="font-display text-3xl font-bold outline-none">Users</h1>
       @if (users().length) {<span class="rounded border border-line px-2 py-0.5 text-sm text-muted">{{ users().length }} {{ users().length === 1 ? 'user' : 'users' }}</span>}
     </div>
-    <p class="mt-1 text-muted">Manage accounts on this server. Actions that change access ask for your password.</p>
+    <cn-admin-nav current="users" />
+    <p class="mt-2 text-muted">Manage accounts on this server. Actions that change access ask for your password.</p>
 
     <div role="status" class="mt-3 text-sm">{{ status() }}</div>
     <div role="alert" class="text-sm text-accent"><p>{{ actionError() }}</p></div>
