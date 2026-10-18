@@ -17,6 +17,7 @@
     "test:watch": "vitest",
     "e2e": "pnpm build && playwright test",
     "index": "pnpm --filter @cn/server run index",
+    "drill": "pnpm --filter @cn/server build && pnpm --filter @cn/server drill",
     "data:clone": "bash scripts/data-clone.sh",
     "data:update": "bash scripts/data-update.sh"
   },

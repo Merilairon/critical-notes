@@ -48,7 +48,7 @@ The first visit asks you to create the admin account. Players join through invit
 in the campaign's settings (there is no open sign-up).
 
 - The 5etools folders are mounted read-only. Your data (database, search index, uploaded images) lives in the
-  `app-data` volume: back that up.
+  `app-data` volume, and `docker compose down -v` deletes it. Set up [Backups](#backups) before you rely on it.
 - The app runs as an unprivileged user, on port 3000 inside the container (`PORT=8080 docker compose up -d`
   to publish another port).
 - Set `PUBLIC_URL` to the address people use (for example `https://notes.example.org` behind a reverse proxy
@@ -82,6 +82,9 @@ resolved from the repository root.
 | `FIVETOOLS_SRC_PATH` | `./5etools-data/5etools-src` | The 5etools data clone |
 | `FIVETOOLS_IMG_PATH` | `./5etools-data/5etools-img` | The image clone (optional; missing images show a placeholder) |
 | `DATA_DIR` | `./var` | Database, search index and uploads |
+| `BACKUP_KEEP` | `7` | Backups to keep, 1 to 1000 (an invalid value logs a warning and uses 7). Backups made from the web page are protected for 7 days and do not count until then |
+| `BACKUP_EVERY_HOURS` | off | Make a backup in the server every N hours, 1 to 720 (`0` or unset = off; recommended `24`; with Docker add it to the `environment:` of `docker-compose.yml`, see [Backups](#scheduled-backups)). After downtime one catch-up backup is made about a minute after start; it is skipped while a backup or a restore is running. An invalid value stops the server from starting. The Backups page shows the next run |
+| `BACKUP_DIR` | `DATA_DIR/backups` | Where backup zips go; use another disk or mount so the backups survive the data. Must not be inside the web build, the uploads or the 5etools folders, or `DATA_DIR` itself, and must not be world-writable (the server refuses to start) |
 | `PORT` | `3000` | |
 | `PUBLIC_URL` | `http://localhost:4200` | The address people open; requests from other origins are refused |
 | `SECURE_COOKIES` | from `PUBLIC_URL` | `1` or `0` to override (for example behind a TLS-terminating proxy that forwards plain http) |
@@ -104,6 +107,546 @@ earlier link for that user. Reading the settings works as for the server: enviro
 repository `.env` outside Docker (so run it with the same `DATA_DIR` and `PUBLIC_URL` as the server; the
 Docker image has them set). It is safe to run while the app is running, but `admin.mjs` must be the same version as the running server (it applies pending migrations when it opens the database). Exit codes: 1 unknown user, 2 disabled
 user (enable it first; this command cannot), 3 no database found at `DATA_DIR`, 64 wrong usage.
+
+## Backups
+
+Years of campaign notes should not live on one disk. A backup is a single zip file with your whole instance in it,
+and you can make one in a few seconds while the app is running. This section shows how to make backups, how to
+get them off the machine, and how to restore one. Restoring is done on the command line, on purpose.
+
+Jump to: [Quick start](#quick-start) · [What is in a backup](#what-is-in-a-backup) ·
+[Making backups](#making-backups) · [Copying backups off the machine](#copying-backups-off-the-machine) ·
+[Restoring](#restoring) · [Restoring onto a new or wiped machine](#restoring-onto-a-new-or-wiped-machine) ·
+[Exit codes](#exit-codes) · [When something goes wrong](#when-something-goes-wrong) ·
+[If you think you were compromised](#if-you-think-you-were-compromised) ·
+[Rehearse a restore](#rehearse-a-restore) · [File permissions](#file-permissions)
+
+### Quick start
+
+With Docker (run these in the folder with `docker-compose.yml`):
+
+```sh
+# 1. make a backup; it prints its path
+docker compose exec app node admin.mjs backup
+# 2. copy it out of the container (use the name printed in step 1)
+docker compose cp app:/data/app/backups/backup-<time>.zip .
+# 3. prove it would restore; changes nothing
+docker compose run --rm app node admin.mjs restore /data/app/backups/backup-<time>.zip --check
+```
+
+Without Docker (run these in the repository folder, after `pnpm build`):
+
+```sh
+# 1. make a backup; it prints the path, by default var/backups/backup-<time>.zip
+node apps/server/dist/admin.mjs backup
+# 2. a copy somewhere else (see "off the machine" below: encrypt it)
+cp var/backups/backup-<time>.zip /some/other/disk/
+# 3. prove it would restore; changes nothing
+node apps/server/dist/admin.mjs restore var/backups/backup-<time>.zip --check
+```
+
+To restore, see [Restoring](#restoring). Then do two more things today: turn on [scheduled
+backups](#scheduled-backups) so you do not depend on remembering, and decide where the copies go (the backup is on
+the same disk as your data until you move it).
+
+### What is in a backup
+
+`backup-<UTC date and time>.zip`, for example `backup-20261017T223817Z.zip` (the time is UTC), holds:
+
+| In the zip | What it is |
+|---|---|
+| `app.sqlite` | The database: users, **password hashes**, **API-token hashes**, sessions, every campaign with its pages, DM secrets, homebrew, templates, encounters, inventory, invites |
+| `uploads/` | Every uploaded image and its thumbnail |
+| `manifest.json`, `checksums.json` | The app version, the database version, counts, and a checksum of every file, so a damaged copy is noticed |
+
+It does **not** hold the 5etools data or the search index: those are rebuilt from your clones (the index on the
+first start after a restore). It also does not hold your settings (`.env`, `docker-compose.yml`, `PUBLIC_URL`):
+keep those somewhere safe yourself.
+
+> **Treat a backup like the database.** Anyone who gets the file gets every password hash and every DM secret
+> of every campaign, in plain form (the app does not encrypt backups). Do not email it, do not put it in a shared
+> folder, and encrypt every copy that leaves your machine (see [below](#copying-backups-off-the-machine)).
+> Only admins can download one from the web page, and only after typing their password again.
+
+> **A backup next to the data protects you from mistakes, not from a dead disk.** By default backups are in
+> `backups/` inside the data directory, on the same disk. With Docker that is the `app-data` volume, and
+> `docker compose down -v` deletes the volume together with every backup in it. Until a copy is somewhere else,
+> you have protection against "I deleted the wrong campaign", not against "the disk died".
+
+### Making backups
+
+There are three ways. All of them make the same kind of file, safely while the server is running and people are
+editing, and each file is read back and checked before it counts.
+
+**From the web page.** Sign in as an admin and open **Admin > Backups** (`/admin/backups`), then choose
+**Back up now**. The page lists every backup with its size, who made it (web page, command line or scheduled) and
+what it holds, and has the **Download** button. You can make at most 3 backups per 10 minutes this way.
+
+**From the command line.**
+
+```sh
+# with Docker; the path printed is inside the container: /data/app/backups/backup-<time>.zip
+docker compose exec app node admin.mjs backup
+# without Docker, from the repository folder
+node apps/server/dist/admin.mjs backup
+```
+
+It prints the path of the new zip on stdout and nothing else there; the progress, a short audit line and a reminder
+go to stderr. (In a cron job or script use `docker compose exec -T app ...`, which does not need a terminal.) Exit
+code 0 means the backup exists and was verified. If the server is writing constantly, a command-line backup can be
+restarted several times and give up after 10 minutes with exit code 70: run it again when the instance is quiet (see
+[When something goes wrong](#when-something-goes-wrong)).
+
+#### Scheduled backups
+
+Set `BACKUP_EVERY_HOURS` and the server makes a backup by itself every N hours (1 to 720). It is **off by
+default**, and we recommend `24`. This matters for more than convenience: retention keeps only the newest
+backups, so if you only ever make them by hand, the day you finally need one it may be the old one you made last
+spring. A schedule keeps fresh backups coming and is also what protects your older ones from being pushed out (see
+[Retention](#how-long-backups-are-kept)).
+
+Without Docker, add `BACKUP_EVERY_HOURS=24` to `.env` (or the server's environment). With Docker, `docker-compose.yml`
+only passes the variables it lists, so a line in a `.env` file does not reach the app: add the variable to the
+`environment:` block of the `app` service, or put it in a `docker-compose.override.yml` next to it (Compose reads
+that file automatically):
+
+```yaml
+services:
+  app:
+    environment:
+      BACKUP_EVERY_HOURS: 24
+```
+
+Then `docker compose up -d` to apply it. The server log says `Scheduled backups: every 24 h, keeping 7` at start,
+and the Backups page shows `Scheduled backups: every 24 hours, next run <time>`.
+
+- The next run is the newest backup (from any source) plus the interval, so a backup you make by hand postpones
+  the next scheduled one, and a restart does not reset the clock.
+- After downtime, or on the first start, if nothing is newer than the interval, **one** catch-up backup is made
+  about a minute after the server starts (60 to 90 seconds). Missed runs are not repeated.
+- A scheduled run is skipped, not queued, while another backup or a restore is running, and tried again after 5
+  minutes. If a run fails it retries after 15 minutes, then after longer waits; the Backups page shows the last
+  error and the server log has a `backup.failed` line.
+- A value that is not a whole number from 1 to 720 (`24h`, `1.5`) stops the **server** from starting, with
+  `Refusing to start: BACKUP_EVERY_HOURS must be a whole number from 1 to 720 ...`. The command line still works.
+
+#### How long backups are kept
+
+After every successful backup the oldest ones are deleted so that the newest `BACKUP_KEEP` remain (default `7`,
+allowed 1 to 1000). A failed backup deletes nothing. Only files named like `backup-<date>T<time>Z.zip` are ever
+touched; ordering uses the time in the name, so copying a file does not change its age.
+
+- **`BACKUP_KEEP` counts files, not days.** With `BACKUP_EVERY_HOURS=24` and the default 7 you have the last 7
+  days; with `BACKUP_EVERY_HOURS=1` you would have only the last 7 hours. If you might notice a mistake
+  later than that, raise `BACKUP_KEEP` (each backup is about the size of your database plus your uploads) and copy
+  older backups off the machine.
+- **Backups made with Back up now are never removed automatically during their first 7 days and do not count
+  towards `BACKUP_KEEP` until then; after that they count like any other (you can still delete them by hand).**
+  This stops a stolen admin session from clicking "Back up now" a few times and rotating all your real
+  backups out. In practice: right after a busy week of web-page backups you will see more than 7 files; they join
+  the normal count once they are a week old. At most `3 x BACKUP_KEEP` of these young web-page backups are allowed
+  (21 by default); beyond that **Back up now** refuses and says to use the command line, which has no such cap.
+- Deleting a backup by hand (delete the file) is fine. There is no delete button on purpose.
+
+#### Putting backups on another disk (`BACKUP_DIR`)
+
+`BACKUP_DIR` (default `DATA_DIR/backups`) is where zips are written and listed. Point it at another disk or mount
+so a dead data disk does not take the backups with it. The server refuses to start (and the command line refuses
+to run) if it is `DATA_DIR` itself, inside or around the uploads, the web build or the 5etools folders, or
+world-writable. The directory must be writable by the user the app runs as. If you change it later, backups in the
+old place are no longer listed or cleaned up.
+
+With Docker, mount a host folder and set the variable. The app runs as the unprivileged user `node` (uid 1000), so
+the folder must belong to that user.
+
+Create the folder with the right owner **before** the first `docker compose up`; if it does not exist, Docker
+creates it owned by root and the app cannot write to it:
+
+```sh
+mkdir -m 700 /mnt/backupdisk/critical-notes && sudo chown 1000:1000 /mnt/backupdisk/critical-notes
+```
+
+```yaml
+# docker-compose.override.yml
+services:
+  app:
+    environment:
+      BACKUP_DIR: /backups
+    volumes:
+      - /mnt/backupdisk/critical-notes:/backups
+```
+
+Inside the container the files are then in `/backups/` (use that path in the restore commands below). A host folder
+also makes the next section easier: it is a normal folder you can `rsync`.
+
+### Copying backups off the machine
+
+Do this regularly (right after each scheduled backup is a good rhythm), and **encrypt first**: only encrypted
+files should ever leave the machine. Any of these work: `age`, `gpg`, or a backup tool that encrypts, such as
+restic or borg. With gpg, which is on most systems:
+
+```sh
+mkdir -p encrypted-copies
+# encrypt (asks for a passphrase)
+gpg --symmetric --cipher-algo AES256 --output encrypted-copies/backup-20261017T223817Z.zip.gpg backup-20261017T223817Z.zip
+# later: decrypt it again, privately
+( umask 077; gpg --output backup-20261017T223817Z.zip --decrypt encrypted-copies/backup-20261017T223817Z.zip.gpg )
+```
+
+Keep the passphrase in a password manager, not next to the file: a backup you cannot decrypt is not a backup. Copy
+only the `.gpg` file to a cloud drive, another computer, or a USB disk kept elsewhere, and delete the plain zip you
+encrypted from any shared or synced location. (`gpg --decrypt` writes a world-readable file unless you set `umask 077`
+first, as above, or run `chmod 600` on the result.)
+
+**Download from the web page.** On **Admin > Backups**, choose **Download** on a backup and type your password. The
+page swaps the password for a single-use link that works for 60 seconds, and your browser saves the file. If it
+says "too many downloads", wait a few seconds and choose Download again. If you run the app behind a reverse proxy,
+its access log records the full address of the download, which contains the one-time `ticket=` parameter. The
+ticket is useless after one use, but tell your proxy to leave that parameter out of its logs.
+
+**With Docker, copy it out of the container.** Use the name of the file as listed on the Backups page or printed by
+the `backup` command:
+
+```sh
+docker compose cp app:/data/app/backups/backup-20261017T223817Z.zip .
+```
+
+(Run it in the folder with `docker-compose.yml`. The copy has mode 0600 and may belong to uid 1000, so if that is
+not you, you may need `sudo` to read it. `docker compose cp app:/data/app/backups/ ./all` copies the whole
+folder.) If you set `BACKUP_DIR` to a host folder as above, you do not need `cp`: the files are already there.
+
+**Without Docker, or from a host folder**, with `rsync` or `scp`:
+
+```sh
+rsync -av --include='*.gpg' --exclude='*' encrypted-copies/ you@otherbox:/srv/critical-notes-backups/
+scp encrypted-copies/backup-20261017T223817Z.zip.gpg you@otherbox:/srv/critical-notes-backups/
+```
+
+Both send only the encrypted files. `rsync` without `--delete` keeps every backup on the other side, including those the app has since
+rotated out: good for history, but it grows until you clean it up.
+
+### Restoring
+
+**Restoring is only done from the command line, on the machine that runs the app, never from the web page.**
+It replaces all your data, and a restore that anyone with a stolen admin cookie could start would be a way to
+swap in someone else's database. Whoever can run these commands can already read your data directory anyway.
+
+What you need: the backup file, shell access, and the app **stopped**. Restore refuses to run while the server is
+up (exit code 69).
+
+#### It is 3 a.m. and something is wrong
+
+Breathe. Nothing is lost yet if you do these in order and avoid the list at the end.
+
+1. **List your backups.** The newest is last:
+   `docker compose run --rm app ls -1 /data/app/backups` (Docker) or `ls -1 var/backups` (without Docker). If you
+   copied backups elsewhere, use the newest of those.
+2. **Check the one you will use** with `restore <file> --check` (recipes below). It prints the file's `sha256`; compare it
+   with `sha256sum <file>` on a copy you kept elsewhere to know the file is the one you saved.
+3. **Restore it** with the recipe below. Your current data is moved aside, not deleted, so you can still undo.
+
+What **not** to do:
+
+- `docker compose down -v`, `docker volume prune` or `docker system prune --volumes`: they delete the volume with
+  your data **and** your backups.
+- Do not copy `app.sqlite` by hand while the server runs: the newest changes are in a second file (`app.sqlite-wal`),
+  and a copy without it is incomplete or damaged. Use `backup`.
+- Do not start the app (`docker compose up -d`) on a new machine before you restore: it would create an empty
+  instance first.
+- Do not unzip a backup over the data directory, and do not delete `pre-restore-*` before you have checked the
+  restored instance.
+
+*Last resort*, only if the zip is all that survived and `--check` refuses it (for example exit 65 because of an
+extra object in the database): `unzip -p backup.zip app.sqlite > app.sqlite` and `unzip backup.zip 'uploads/*'` give you
+the raw files. This **skips every protection of the restore**: no checksum or schema check, and sessions, API
+tokens and invite links are not cleared. Put them in an empty data directory with the app stopped, start the app,
+then reset your admin password and revoke tokens by hand. Prefer `restore` whenever it accepts the file.
+
+#### With Docker
+
+```sh
+docker compose stop app                  # takes about 10 seconds (instant when BACKUP_EVERY_HOURS is set)
+```
+
+Check the file first. This changes nothing and tells you what is in it:
+
+```sh
+docker compose run --rm app node admin.mjs restore /data/app/backups/backup-20261017T223817Z.zip --check
+```
+
+You should see `... is complete and restorable. Nothing was changed.`, when it was made, how many users, campaigns
+and uploads it holds, and the enabled administrators in it. If the backup is not in the volume (it came from
+somewhere else), mount it for the command; the `-v` needs the full path of the file on the host (here the current
+folder), and the path after the colon is where it appears inside the container:
+
+```sh
+docker compose run --rm -v "$PWD/backup-20261017T223817Z.zip:/restore/backup.zip:ro" app node admin.mjs restore /restore/backup.zip --check
+```
+
+Now restore. Without `--yes` it prints the plan and asks `Replace the current data with this backup? [y/N]`;
+with `--yes` it goes ahead:
+
+```sh
+docker compose run --rm app node admin.mjs restore /data/app/backups/backup-20261017T223817Z.zip --yes
+# starts the app again; the first start rebuilds the search index and takes longer than usual
+docker compose up -d
+```
+
+(The 10 seconds is Docker's stop timeout: the app only reacts to the stop request when scheduled backups are on.
+Harmless.) The report ends with `docker compose start app`; on an existing
+setup both work, and on a machine where the app never ran only `up -d` does.
+
+Verify: open the app, sign in (everyone has to sign in again), open a campaign you know and look at the newest page
+and an image. Then delete the safety copy (below). If it is not what you wanted, restore another backup the same
+way.
+
+#### Without Docker
+
+You need a build (`pnpm build`) and the **same settings as the server**: the commands read the repository `.env`
+and the environment, so run them from the repository folder and with the same `DATA_DIR` (and `BACKUP_DIR`) the
+server uses. If you start the server from a service file that sets variables, set the same ones for these commands.
+
+```sh
+# stop the server first (however you run it: Ctrl+C, systemctl stop, ...)
+node apps/server/dist/admin.mjs restore var/backups/backup-20261017T223817Z.zip --check   # verify only
+node apps/server/dist/admin.mjs restore var/backups/backup-20261017T223817Z.zip --yes     # replace the data
+# start the server again
+```
+
+Run it as the same user as the server. If you run it as root, the restored files are handed to the owner of the
+data directory.
+
+The Backups page shows a shorter hint (`node dist/admin.mjs restore backups/<file> --yes`). Use the commands on this
+page instead: the program is `apps/server/dist/admin.mjs` and the path is relative to where you run the command (the
+repository folder), not to the data directory.
+
+#### What restore does
+
+- **Replaces the database and the uploads** with the backup. Everything done after the backup was made is gone from
+  the running instance, and the report says when that was.
+- **Moves your previous data aside, it does not copy or delete it.** It goes to `pre-restore-<time>/` inside the data
+  directory (in Docker `/data/app/pre-restore-<time>/`) and stays until you remove it. It still contains the old
+  password hashes and tokens, so **delete it once you have verified the restored instance**. With Docker:
+  `docker compose exec app sh -c 'rm -rf /data/app/pre-restore-*'` (this removes every such folder; look at the
+  names in the report first). If you restored something by mistake, the files you need are in that folder.
+- **Signs everyone out.** All sessions and password-reset links are cleared. Make a new reset link for yourself if
+  needed: `node admin.mjs reset-link <username>` (see [Locked out?](#locked-out-recover-an-account)).
+- **Revokes API tokens and invite links** (MCP tokens, player invites), because they may have been made or revoked
+  after the backup. People make new ones. `--keep-tokens --yes` keeps them as they were in the backup; read its
+  warning first, because it brings back tokens that were revoked later, even after a compromise.
+- **Carries over restrictions you made after the backup**: users you disabled, and tokens and invites you revoked,
+  stay disabled and revoked, so a restore does not undo a lock-out. `--no-carry-restrictions` turns that off. The
+  report lists what was carried over. Users created after the backup are *not* in the restored instance (the
+  safety copy still holds them) and the report names them.
+  **If the report says `Enabled administrators: none`**, a carried-over restriction locked out every admin
+  (`reset-link` will say the user is disabled, exit 2). Run the restore again with `--no-carry-restrictions`
+  (and `--yes`), then review Admin > Users. Running restore again is allowed after a finished restore: it treats the
+  just-restored state as the live data, moves it aside to a new `pre-restore-<time>/` folder (the earlier
+  `pre-restore-*` folder stays; the report lists it as an older folder), and installs the backup again. Delete the
+  `pre-restore-*` folders once you are done.
+- **Prints a report on stdout** (the plan and any prompt go to stderr). Read the line `Enabled administrators:`:
+  a name you do not recognise means the backup is compromised. A block starting **`CHECK THESE NOW`** lists
+  admins who were demoted, and users who were deleted, in the live data since the backup; they are back as they
+  were in the backup. Disable or demote them in Admin > Users, or reset their passwords. Restoring onto an instance
+  that had no users (started once and left empty) prints the same block with the backup's admins, and a wiped
+  machine prints a note that the live data `could not be compared`: both are harmless.
+- **Rebuilds the search index on the next start** (the first start is slower). This needs your 5etools data
+  mounted as usual.
+- **Migrates an older backup.** A backup from an older version is upgraded to the current database version as part
+  of the restore (the report says `Migrated N steps`). A backup made by a **newer** version is refused (exit 66):
+  update the app first, then restore. A backup whose migration history does not match (a fork, an edited database)
+  is refused (exit 67); restore it with the same checkout or Docker image that made the backup (check your git history
+  from around the date in the file name).
+- **Does not touch** the 5etools data, `.env`, or the compose file.
+
+Every restore writes a line to `restore-log.jsonl` in the data directory (who, when, which file).
+
+#### Restoring onto a new or wiped machine
+
+1. Get the app ready as in [Running it with Docker](#running-it-with-docker) (or without Docker), but stop before the
+   start command: clone the 5etools data, restore your settings (`.env` or the compose file, especially
+   `PUBLIC_URL`), and with Docker build the image with `docker compose build`.
+2. **Do not run `docker compose up` yet** (or start the server). With Docker, `docker compose run` creates the
+   volume for you.
+3. Get the backup file onto the machine (decrypt it first if you encrypted it) and run the `--check` and the
+   `--yes` restore from above. There is no previous data, so the report says nothing was moved aside.
+4. Start the app and sign in with your old password. With Docker use `docker compose up -d`. The restore ran in a
+   temporary container, so `docker compose start app` finds nothing to start on a machine where the app never ran.
+
+#### Exit codes
+
+The commands use these exit codes (`backup` and `restore` share them; 1 to 3 are also used by `reset-link`):
+
+| Code | Meaning |
+|---:|---|
+| 0 | Done (for `restore --check`: the backup is complete and would restore) |
+| 1 / 2 | `reset-link`: unknown user / disabled user |
+| 3 | No database found at `DATA_DIR` (`backup`), or the backup file does not exist or cannot be read (`restore`) |
+| 64 | Wrong usage, an unknown option, `--keep-tokens` without `--yes`, or no terminal to ask on and no `--yes` |
+| 65 | Not a valid backup (damaged, incomplete, or not one of ours) |
+| 66 | Made by a newer version: update first |
+| 67 | Different migration history: restore with the same checkout or Docker image that made the backup |
+| 69 | The server is running: stop it first |
+| 70 | Failed (the message says why; for example a database copy that could not finish in 10 minutes) |
+| 71 | The restore was rolled back: your data is exactly as before |
+| 72 | You answered no at the prompt: nothing was changed |
+| 74 | Not enough disk space |
+| 75 | A restore is running or was interrupted: finish it first |
+| 76 | A backup is already running |
+| 77 | The rollback itself failed: follow the instructions it printed |
+| 78 | `Cannot lock app.sqlite`: see below |
+
+### When something goes wrong
+
+**The restore was interrupted (power cut, killed terminal, `Ctrl+C`).** The data directory holds a marker file
+(`.restore-in-progress`) and the app refuses to start until the restore is finished. With Docker and the default
+`restart: unless-stopped`, the app container then restarts over and over and prints the same message each time;
+this is harmless. Finish it:
+
+```sh
+docker compose stop app
+docker compose run --rm app node admin.mjs restore /data/app/backups/<the same file> <the same flags>
+docker compose up -d
+```
+
+Use the same backup file and the same flags (`--yes`, `--keep-tokens`...). If the file was not in the volume and you
+gave it with `-v ...:/restore/backup.zip:ro`, use the same `-v` again. The command says
+`Continuing the interrupted restore of ...` and carries on, or starts over if the swap had not begun. If a rollback
+was under way, running it again finishes the rollback and brings your old data back (exit 71); you can then start
+the restore again. Every command except `restore` is refused with exit code 75 until then.
+
+The message printed gives a short version of this ("abort by hand"); this is the complete list: your previous
+data is in `pre-restore-<time>/` inside the data directory; move `app.sqlite` (and `app.sqlite-wal` and
+`app.sqlite-shm`, if they are there) and `uploads/` back to their old places (remove a newly installed
+`app.sqlite` first if one stands there), remove the `.restore-*` folders, then delete the file
+`.restore-in-progress`. Do that only if you cannot run the restore again. If a rollback fails (exit 77), the
+message lists these steps and running the restore command again retries the rollback.
+
+**`A backup is already running` (exit 76, or "Back up now" is refused).** Only one backup runs at a time. If the
+previous one was killed (a reboot, `kill -9`), it looks like it is still running for 2 minutes: wait and try
+again. Half-written files left by a killed backup are cleaned up after an hour and are never listed.
+
+**The command-line backup takes forever or fails with "did not finish within 10 minutes".** A command-line backup
+copies the database in steps and has to start a step again whenever the server writes to it in between. On a
+very busy server it can be starved. Run it when nobody is editing, or make the backup from the web page or
+schedule it (those run inside the server).
+
+**`Not enough free space` (exit 74, or HTTP 507 "Not enough free disk space for a backup" on the page).** A backup
+needs room for about two copies of the database, your uploads, and 64 MiB. Free space, lower `BACKUP_KEEP`, or
+point `BACKUP_DIR` at a bigger disk. A restore needs the larger of three times the zip's size and its unpacked
+size, plus 64 MiB, in the data directory; the message gives the numbers, and nothing has been changed.
+
+**`Cannot lock app.sqlite (...)` (exit 78).** The restore could not get the exclusive lock it needs on the database
+and refuses to go on in case the server is running. It also appears when `app.sqlite` cannot be read by the user
+running the command (for example it became owned by root after a command was run as root). Check that the app is
+really stopped (`docker compose ps`), and that you run the command as a user that can write the data directory
+(inside Docker: use `docker compose run --rm app ...`, not a different image or `--user`). On network drives and
+some odd mounts file locking does not work at all; restore on a local disk.
+
+**`The server is running` (exit 69).** Stop the app first. With Docker, `docker compose stop app`.
+
+**The backup is refused.**
+- Exit 65, `This is not a complete Critical Notes backup`: the file is damaged, cut short (an interrupted copy),
+  or not a backup. Get the copy again and compare its size with the original. The checks apply to the content,
+  so a file that unzips fine can still be refused if it was changed.
+- Exit 66, `made by a newer Critical Notes`: update the app (pull, rebuild, `docker compose up -d --build`) and run
+  the restore again.
+- Exit 67, `The migration history of this backup differs`: it was made by another branch, a fork or with an
+  edited database. Restore it with the same checkout or Docker image that made the backup (check your git history
+  from around the date in the file name).
+- Exit 65, `has an extra schema object (...)`: the restore only accepts a database that contains exactly this
+  app's own tables. A leftover from `ANALYZE` (`sqlite_stat1`) is tolerated; anything else that was added to the
+  database by hand (an index, a view, a trigger) is refused, and the message names it. Remove it from the live
+  database, make a new backup, and restore that.
+- `The new backup failed its verification pass`: the backup was made, read back and did not pass, so nothing was
+  kept (and no older backup was deleted). It happens, rarely, with a database full of repeated blocks that
+  compresses more than 50 to 1. Try again; if it keeps happening, report it.
+
+**Backups fail with `EACCES ... .lock` (or `mkdir`) while the server runs normally.** The app user cannot write
+`BACKUP_DIR`, usually because the host folder did not exist before `docker compose up` and Docker created it owned by
+root. Fix the owner (`sudo chown 1000:1000 <folder>`, mode 700). The Backups page shows the last error.
+
+**The server will not start and says `Refusing to start: BACKUP_DIR ...`** The folder is not allowed (see
+[BACKUP_DIR](#putting-backups-on-another-disk-backup_dir)) or `BACKUP_EVERY_HOURS` is invalid. The message names the
+variable.
+
+**The web download ends with "too many downloads" or the link was refused.** Three downloads run at a time:
+wait a few seconds and press Download again. A link works once and for 60 seconds; press Download again for a new one.
+The password prompt allows 5 attempts a minute.
+
+**Opening a backup by hand.** A backup is a normal zip. To look inside without restoring (a copy of the file on
+another machine is enough):
+
+```sh
+unzip -l backup-20261017T223817Z.zip      # lists manifest.json, app.sqlite, uploads/..., checksums.json
+unzip -p backup-20261017T223817Z.zip manifest.json     # when it was made, counts, database version
+```
+
+This only reads the file; never restore by unpacking it over the data directory. Use `restore`, which checks the
+file first and handles the rest. If your copy of the app is gone, a backup is still a plain zip whose `uploads/`
+folder holds your images and `app.sqlite` is a SQLite database.
+
+If `unzip` stops with "overlapped components ... zip bomb" on a backup that has a single entry over 4 GiB (a very
+big database or image collection), that is a false alarm of the Info-ZIP `unzip` 6.0 checker. The file is valid:
+use `7z x`, Python's `zipfile`, or `UNZIP_DISABLE_ZIPBOMB_DETECTION=TRUE unzip ...`.
+
+### If you think you were compromised
+
+Restore from a backup made **before** the incident, not the newest one: a backup of a compromised instance brings
+the attacker's admin account back with it. Then: reset every admin password, review **Admin > Users**, leave the
+tokens revoked (do not use `--keep-tokens`), restore with `--no-carry-restrictions` if the live data may have been
+tampered with (an attacker may have disabled the real admins, and restore keeps that by default), delete the
+`pre-restore-*` folder (it holds the old state, including what the attacker left; wipe it securely or keep it on an
+encrypted disk), and rotate anything else that was reachable from the server. Scheduled backups help here: they make
+sure a pre-incident backup exists.
+
+### Rehearse a restore
+
+An untested backup is a hope, not a backup. Once, and again after you update, restore one into a scratch copy
+that cannot hurt your real data, on another port. Use a recent backup and your own copy of it, not the live files.
+
+With Docker, using a throwaway volume (`rehearsal`) and the image your compose file built (`critical-notes:latest`):
+
+```sh
+docker run --rm -v "$PWD/backup-20261017T223817Z.zip:/restore/backup.zip:ro" -v rehearsal:/data/app critical-notes:latest node admin.mjs restore /restore/backup.zip --yes
+docker run -d --init --rm --name rehearsal-app -p 3999:3000 -e PUBLIC_URL=http://localhost:3999 -v rehearsal:/data/app critical-notes:latest
+# open http://localhost:3999, sign in with your old password, look at a campaign and an image; then:
+docker stop rehearsal-app
+docker volume rm rehearsal
+```
+
+(`--init` lets `docker stop` end the container at once; without it the app ignores the stop request and
+`docker stop` takes 10 seconds, so `volume rm` would fail with "in use" until it is gone. If `volume rm` still says
+"in use", wait a second and run it again.)
+
+(Add `-v "$PWD/5etools-data/5etools-src:/data/5etools-src:ro"` to the second command if you want the rules reference
+in the rehearsal.) Without Docker, from the repository folder, with a scratch data directory:
+
+```sh
+mkdir /tmp/rehearsal
+DATA_DIR=/tmp/rehearsal node apps/server/dist/admin.mjs restore backup-20261017T223817Z.zip --yes
+DATA_DIR=/tmp/rehearsal PORT=3999 PUBLIC_URL=http://localhost:3999 NODE_ENV=production pnpm --filter @cn/server start:dist
+# check it in the browser, stop it with Ctrl+C, then: rm -rf /tmp/rehearsal
+```
+
+Environment variables take precedence over `.env`, so the scratch directory does not touch the real one. If you set
+`BACKUP_DIR` in your `.env`, set it to something outside the scratch directory as well, or leave it unset.
+
+Developers can run the automated drill, which starts a server on a temporary folder, makes a backup, wipes the
+folder, restores, and checks the data over HTTP (about 15 seconds, no 5etools data or network needed):
+
+```sh
+pnpm --filter @cn/server build && pnpm --filter @cn/server drill      # or: pnpm drill
+```
+
+### File permissions
+
+Backups and the data directory contain secrets, so keep them private. The app creates the `backups/` folder with
+mode 0700 and every backup zip with 0600, whatever your umask is, and the restore log is 0600. It does not change
+the mode of `DATA_DIR` itself, so on a shared machine run `chmod 700 var` (or your `DATA_DIR`) yourself. In Docker
+the app runs as the unprivileged user `node` (uid 1000) and the data lives in a Docker volume; if you put
+`BACKUP_DIR` on a host folder, make it `chown 1000:1000` and `chmod 700`. Copies you make (`docker compose cp`,
+`rsync`) belong to you: keep them as private as the originals, and encrypted.
 
 ## Using it
 

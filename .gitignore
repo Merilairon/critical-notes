@@ -24,3 +24,6 @@ coverage/
 e2e/.auth/
 playwright-report/
 test-results/
+
+# vitest json reporter output
+.vitest/

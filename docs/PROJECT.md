@@ -250,14 +250,16 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 
 ### 5.3 Epic M3: Instance backup and restore
 
-### [ ] Task M3.1: Backup design
+### [x] Task M3.1: Backup design
 **Owner**: Database Reliability Engineer · **QA**: Security Architect
+**Done:** 2026-10-17, QA Security Architect: PASS (3 retries). Design: `docs/design/backup.md` (approved; owner approved its D1-D10 as recommended). Hard-earned notes for M3.2/M3.3: fflate `Unzip` pre-registers method 0, so restore must gate on `file.compression === 8` before `start()`; the highest-risk item is M3.3's blocker test (schema allowlist stable across all historical migration levels), schedule it first; M4's purge must respect `BackupService.isRunning()`; record the checksums.json (4th entry) and manifest `trigger` field in `docs/PLAN.md`.
 **Description**: Format: one zip with `app.sqlite` (SQLite online backup, consistent while the server writes), `uploads/`, and `manifest.json` (app version, migration level, created at). `index.sqlite` is excluded (rebuilt on start). Restore rules (only into a stopped instance; refuse a backup from a newer migration level). Retention. Backups contain password hashes and token hashes: who may download them.
 **Acceptance Criteria**: `docs/design/backup.md` approved; threat notes on backup files
 **Reference**: PRD §8 M3
 
-### [ ] Task M3.2: Backup service
+### [x] Task M3.2: Backup service
 **Owner**: Database Reliability Engineer · **QA**: API Tester
+**Done:** 2026-10-17, Code Reviewer PASS (1 round of fixes), Security Architect APPROVED (2 rounds), QA API Tester: PASS (real server under a concurrent writer, 35 corruption cases, streaming, prune oracle). Deviation approved and logged in PLAN.md and `docs/design/backup.md` §5/§9.1: the restore reader is a central-directory reader on `node:zlib`, not fflate `Unzip` (which fails on incompressible data containing `PK\x07\x08`); the writer emits its own central directory. For M3.3/M3.4/M3.6: busy server can starve a CLI backup (say so in the message); a SIGKILLed backup looks "already running" for 2 min with leftovers for 1 h (guide); a database compressing better than 50:1 fails its own verify with a vague reason (N2, consider a clearer message); cold-process RSS growth is 70-76 MiB, not under 64 MiB as the design said (N1); API-created backups are capped at 3x keep. Follow-ups: tests for the `schemaOf` limit and default verify budget; fresh-DB compression ratio proximity (48.8:1 vs 50:1).
 **Description**: `BackupService.create()` writes `DATA_DIR/backups/backup-<timestamp>.zip` (better-sqlite3 `backup()`, `fflate`); `list()`; `prune(keep)`.
 **Acceptance Criteria**:
 - A backup taken while a test writes pages restores to identical data (automated test)
@@ -265,25 +267,29 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 **Files**: new `apps/server/src/services/backups.ts`, tests
 **Depends on**: M3.1
 
-### [ ] Task M3.3: Backup and restore commands
+### [x] Task M3.3: Backup and restore commands
 **Owner**: Database Reliability Engineer · **QA**: DevOps Automator
+**Done:** 2026-10-17, Code Reviewer PASS, Security Architect APPROVED (1 round: probe failed open on non-BUSY errors, root-run chown followed symlinks, marker validation), QA DevOps Automator: PASS (native against a running server incl. SIGKILL mid-restore and resume; real Docker container as `node` and as root; restart-policy interplay; gate green). Restore drill: `pnpm --filter @cn/server build && pnpm --filter @cn/server drill` (M5.2 should call it). Schema-allowlist blocker test is permanent (`schema-allowlist.test.ts`; a new migration using RENAME/DROP COLUMN/trigger/view/ANALYZE etc. must be reviewed and added to `REVIEWED`). For M3.6 guide (from QA): say the Docker backup lives in the `app-data` volume and how to copy it out (`docker compose cp app:/data/app/backups/<zip> .`); run `docker compose stop app` before an interrupted-restore re-run and `start` after (restart policy crash-loops with a clear message meanwhile); non-Docker commands need a build and the same `DATA_DIR`/`.env`; delete `pre-restore-*` after verifying; a SIGKILLed backup looks "already running" for 2 min; a busy server can starve a CLI backup; Info-ZIP unzip zip-bomb note for entries beyond 4 GiB. Cosmetic: a flipped byte reports "entry app.sqlite exceeds its limit" before the generic invalid-backup line.
 **Description**: `node dist/admin.mjs backup` and `restore <file>` (refuses while the server runs; checks the manifest).
 **Acceptance Criteria**: a restore drill (backup → wipe → restore → start) passes in CI
 **Depends on**: M3.2, M2.6 (shares `admin.mjs`)
 
-### [ ] Task M3.4: Admin backup endpoints and page
+### [x] Task M3.4: Admin backup endpoints and page
 **Owner**: Backend Architect (endpoints), Frontend Developer (page) · **QA**: API Tester, Evidence Collector
+**Done:** 2026-10-17. Endpoints: Code Reviewer PASS (1 round: a test race), Application Security Engineer APPROVED (hardening applied: download idle timeout, FIFO/hardlink refusal, HEAD 405, ip in audit lines), QA API Tester: PASS (live instance, 34 name variants, ticket matrix, streaming, audit). Page: Code Reviewer PASS, QA Evidence Collector: PASS after 1 retry (browser, download sha256 matches, no ticket anywhere, axe 0 violations at 390px). Admin nav Users | Backups on both admin pages; header link unchanged. Follow-ups: refused 409 creates count against the 3-per-10-min limiter budget; lock a session after 10 wrong download passwords (not built); `backup.downloaded` is audited when the file is opened, not at completion; a bare "Download interrupted" stderr line on aborted streams; hardlinked file shows in the list but cannot be downloaded (cosmetic); guide must tell hosts to redact the `ticket` query parameter in proxy logs.
 **Description**: `POST/GET /api/admin/backups`, `GET /api/admin/backups/:name` (download); `/admin/backups` page with "Back up now", list, download.
 **Acceptance Criteria**: admin only; file names validated (no path traversal); not in the MCP allowlist
 **Depends on**: M3.2, M2.8
 
-### [ ] Task M3.5 (stretch): Scheduled backups
+### [x] Task M3.5 (stretch): Scheduled backups
 **Owner**: Database Reliability Engineer · **QA**: API Tester
+**Done:** 2026-10-18, Code Reviewer PASS, QA API Tester: PASS (real processes: off by default, invalid values refuse to start without blocking the CLI, catch-up at 60-90 s exactly once, overlap/restore-marker skips, failure backoff 15 min then 60 min, retention per design §11, SIGTERM/SIGINT with a running backup). Off by default; `BACKUP_EVERY_HOURS` 1-720; the admin page shows one schedule line. Follow-ups (low): with the scheduler on, SIGTERM does not wait for a MANUAL web backup (only scheduled runs are awaited; nothing partial is published); signal handlers are only installed when the scheduler is on, so with it off Node as Docker PID 1 ignores SIGTERM and `docker stop` waits 10 s (pre-existing; consider always installing them); `backup.failed` audit reason can contain an absolute path (server log only); a killed backup's `.lock` blocks new backups for about 2 min; leftovers are removed after 1 h. Guide (M3.6) should recommend enabling the scheduler (it is what protects against old backups being rotated out).
 **Description**: `BACKUP_EVERY_HOURS` and `BACKUP_KEEP` settings; runs in the server process.
 **Depends on**: M3.2
 
-### [ ] Task M3.6: Backup guide
+### [x] Task M3.6: Backup guide
 **Owner**: Technical Writer · **QA**: Database Reliability Engineer
+**Done:** 2026-10-18, QA Database Reliability Engineer: PASS (2 retries). README `## Backups` (quick start, what is in a backup, making/copying/restoring, new machine, exit codes, troubleshooting, 3 a.m. block, compromise checklist, rehearsal). Every recipe was run literally by QA, in Docker and bare, and exit codes 66/67/74/77/78, ANALYZE, older-version migration and CHECK THESE NOW were reproduced. Code follow-ups recommended by QA (NOT built; decide before 1.0): pass `BACKUP_EVERY_HOURS`/`BACKUP_KEEP`/`BACKUP_DIR` through `docker-compose.yml` and consider default-on 24 h; always install SIGTERM/SIGINT handlers and add `init: true` (Node as PID 1 ignores SIGTERM, `docker stop` takes 10 s); fix the Backups page restore hint (shows `restore backups/<file>`; real program is `apps/server/dist/admin.mjs`, path relative to the cwd) and the `dist/admin.mjs` strings in restore-marker.ts/reportText; treat a live instance with zero users as "nothing to compare" (noisy CHECK THESE NOW); lock-out guard when carry-over leaves no enabled admin; check `BACKUP_DIR` writability at startup; report text should say `docker compose up -d` when no container exists; app version is 0.0.0 until M5.4.
 **Description**: README section: what's in a backup, how to back up and restore with and without Docker, copying backups off the machine.
 **Depends on**: M3.3, M3.4
 
@@ -605,6 +611,7 @@ The Senior Project Manager breaks these into tasks at the start of their release
 | D3 | Approval of the first commit and of each release | M5.1, G1.4, G2.1 | Reality Checker | Open |
 | D4 | A self-hosted CI runner with a 5etools clone for browser tests | M5.3 | DevOps Automator | Open |
 | D5 | What happens to a deleted user's campaigns (transfer or archive) | M2.4 | Identity & Access Engineer | Decided 2026-10-16: option C (admin chooses per owned campaign, transfer pre-selected; archive only with a co-DM; solo campaign can't be orphaned). Also decided: reset link is `/reset#<token>` (deviation from `/reset/:token`, log in PLAN.md at M2.9); `TRUST_PROXY` stays off in the shipped compose; on user delete, shared homebrew sources go to the acting admin, private ones and user templates stay ownerless |
+| B1 | Backup design decisions (backup.md D1-D10): keep 7, API backups protected 7 days and capped at 3x keep, `BACKUP_DIR`, `checksums.json` entry, durable `restore-log.jsonl`; restore revokes tokens/invites and carries over live restrictions; download needs a password ticket; restore is CLI-only; index rebuilt after restore; no encryption in 1.0; scheduler built as M3.5 | M3.2-M3.6 | Database Reliability Engineer, Security Architect | Decided 2026-10-17: all approved as recommended |
 
 ### Risks
 | Risk | Impact | Mitigation | Owner |
