@@ -3,12 +3,12 @@
  * lock with atomic stale takeover.
  */
 import { randomBytes } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, realpathSync, statSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, statSync, unlinkSync, writeSync } from 'node:fs';
 import { link, open, readFile, rename, stat, unlink, utimes } from 'node:fs/promises';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import type { AppConfig } from '../config';
 
-export type BackupErrorCode = 'busy' | 'api-cap' | 'disk' | 'restore-in-progress' | 'db-timeout' | 'too-many-files' | 'not-found' | 'invalid-dir';
+export type BackupErrorCode = 'busy' | 'api-cap' | 'disk' | 'restore-in-progress' | 'db-timeout' | 'too-many-files' | 'not-found' | 'invalid-dir' | 'dir-not-writable';
 
 /** A refusal the callers map to a status: 409 busy / api-cap / restore-in-progress, 507 disk, 404 not-found. */
 export class BackupError extends Error {
@@ -85,6 +85,49 @@ export function validateBackupDir(cfg: BackupDirConfig): { dir: string; warnings
     if (st.mode & 0o077) warnings.push(`BACKUP_DIR ${dir} is accessible to other users (mode ${(st.mode & 0o7777).toString(8)}); 0700 is recommended`);
   }
   return { dir, warnings };
+}
+
+/** Errors that mean "this user may not write there". */
+export const NOT_WRITABLE_CODES = ['EACCES', 'EPERM', 'EROFS'];
+
+/** The one sentence for an unwritable backup folder: names the owner fix for Docker (uid 1000) and for a bare install. */
+export function notWritableMessage(dir: string): string {
+  const uid = process.getuid?.() ?? 'unknown';
+  return `The backup folder ${dir} is not writable by this user (uid ${uid}). Fix the owner: chown 1000:1000 ${dir} (Docker: docker compose run --rm --user root app chown 1000:1000 ${dir}; the folder must be a volume or bind mount of the app service), or the mount is read-only (remove :ro or remount it read-write), or on a bare install make it writable for this user (chown $(id -u):$(id -g) ${dir}), or point BACKUP_DIR at another folder`;
+}
+
+/**
+ * Proves the app user can create and write in the backup directory: creates it (0700) when missing, then creates, writes and
+ * removes a temporary file. Throws `BackupError('dir-not-writable')` with `notWritableMessage`. Nothing is left behind; on a
+ * refusal nothing was created except what `mkdir` managed before the failing step. Run after `validateBackupDir`.
+ */
+export function assertBackupDirWritable(dir: string): void {
+  const refuse = (e: unknown): never => {
+    if (NOT_WRITABLE_CODES.includes((e as NodeJS.ErrnoException)?.code ?? '')) throw new BackupError('dir-not-writable', notWritableMessage(dir));
+    throw e;
+  };
+  try {
+    ensureBackupDir(dir);
+  } catch (e) {
+    refuse(e);
+  }
+  const probe = join(dir, `.write-test-${randomBytes(6).toString('hex')}`);
+  try {
+    const fd = openSync(probe, 'wx', 0o600);
+    try {
+      writeSync(fd, 'ok');
+    } finally {
+      closeSync(fd);
+    }
+  } catch (e) {
+    refuse(e);
+  } finally {
+    try {
+      unlinkSync(probe);
+    } catch {
+      // never created, or already gone
+    }
+  }
 }
 
 /** Creates the backup directory with mode 0700 (independent of the umask) when it does not exist yet. */
@@ -177,6 +220,18 @@ export class BackupLock {
       await unlink(aside).catch(() => undefined);
     }
     throw new BackupError('busy', 'A backup is already running');
+  }
+
+  /** Synchronous, never throws: for a process that is about to exit. Removes the lock only when it is still ours (same nonce check). */
+  releaseSync(): void {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+    try {
+      const held = JSON.parse(readFileSync(this.path, 'utf8')) as { nonce?: string };
+      if (this.nonce && held.nonce === this.nonce) unlinkSync(this.path);
+    } catch {
+      // gone already or not ours
+    }
   }
 
   async release(): Promise<void> {

@@ -12,11 +12,21 @@ services:
     environment:
       # The address people open the app at (an https:// address makes session cookies Secure)
       PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
+      # Backups (README "Backups"). Scheduled backups are ON by default here: one every 24 hours, keeping the newest 7.
+      # Set BACKUP_EVERY_HOURS=0 in .env to turn them off. An empty value behaves as unset (the default).
+      BACKUP_EVERY_HOURS: ${BACKUP_EVERY_HOURS:-24}
+      BACKUP_KEEP: ${BACKUP_KEEP:-}
+      # Where backup zips go inside the container (default /data/app/backups). The folder must be writable by uid 1000.
+      BACKUP_DIR: ${BACKUP_DIR:-}
     volumes:
       - ./5etools-data/5etools-src:/data/5etools-src:ro
       - ./5etools-data/5etools-img:/data/5etools-img:ro
       - app-data:/data/app
     restart: unless-stopped
+    # A tiny init process as PID 1: it forwards SIGTERM/SIGINT (`docker stop`, Ctrl+C) and reaps children
+    init: true
+    # The server waits up to 8 s for a running backup (+ up to 2 s for requests) on `docker stop`; Docker's default of 10 s is too tight
+    stop_grace_period: 15s
 
   data-update:
     profiles: [tools]

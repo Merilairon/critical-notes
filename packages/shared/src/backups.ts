@@ -43,6 +43,10 @@ export interface BackupListDto {
   lastWarnings: string[];
   /** Scheduled backups (`BACKUP_EVERY_HOURS`); null = off. `nextRunAt` is an ISO time, null while it is being worked out. */
   schedule: { everyHours: number; nextRunAt: string | null } | null;
+  /** The absolute backups directory the server uses (`BACKUP_DIR`, default `DATA_DIR/backups`). Inside Docker it is the path in the container. Admin-only. */
+  directory: string;
+  /** The program prefix of the admin command line in both forms; append `restore <path> --check` and so on. */
+  adminPrograms: { docker: string; bare: string };
 }
 
 /**

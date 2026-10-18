@@ -33,7 +33,7 @@ const backup = (name: string, extra: Partial<BackupDto> = {}): BackupDto => ({
   missingUploads: null,
   ...extra,
 });
-const list = (extra: Partial<BackupListDto> = {}): BackupListDto => ({ backups: [backup(N2, { trigger: 'cli' }), backup(N1, { missingUploads: 2 })], running: null, lastError: null, lastWarnings: [], schedule: null, ...extra });
+const list = (extra: Partial<BackupListDto> = {}): BackupListDto => ({ backups: [backup(N2, { trigger: 'cli' }), backup(N1, { missingUploads: 2 })], running: null, lastError: null, lastWarnings: [], schedule: null, directory: '/data/app/backups', adminPrograms: { docker: 'docker compose run --rm app node admin.mjs', bare: 'node apps/server/dist/admin.mjs' }, ...extra });
 
 async function mount(initial: BackupListDto | { error: string; status: number } = list()) {
   const navigate = vi.fn();
@@ -157,16 +157,38 @@ describe('BackupsPage list', () => {
     const { el } = await mount();
     const t = el.textContent!;
     expect(t).toContain('docker compose stop app');
-    expect(t).toContain('docker compose run --rm app node admin.mjs restore /data/app/backups/<file> --yes');
     expect(t).toContain('protected for 7 days');
     const labels = Array.from(el.querySelectorAll('button')).map((b) => b.textContent!.trim().toLowerCase());
     expect(labels.some((l) => /delete|restore|remove/.test(l))).toBe(false);
   });
 
+  const code = (el: HTMLElement) => Array.from(el.querySelectorAll('pre')).map((p) => p.textContent!.split('\n'));
+
+  it('builds the restore hints from the DTO, --check first, for Docker and a bare install', async () => {
+    const { el } = await mount(list({ directory: '/srv/cn/backups', adminPrograms: { docker: 'DOCK admin', bare: 'BARE admin' } }));
+    const [docker, bare, backup] = code(el);
+    expect(docker).toEqual(['docker compose stop app', `DOCK admin restore /srv/cn/backups/${N2} --check`, `DOCK admin restore /srv/cn/backups/${N2} --yes`]);
+    expect(bare).toEqual([`BARE admin restore /srv/cn/backups/${N2} --check`, `BARE admin restore /srv/cn/backups/${N2} --yes`]);
+    expect(backup).toEqual(['DOCK admin backup', 'BARE admin backup']);
+    expect(el.textContent).toContain('Backups folder the server reports: /srv/cn/backups');
+  });
+
+  it('uses <file> when there is no backup yet and trims a trailing slash', async () => {
+    const { el } = await mount(list({ backups: [], directory: '/b/' }));
+    expect(code(el)[1][0]).toBe('node apps/server/dist/admin.mjs restore /b/<file> --check');
+  });
+
+  it('shows the README pointer instead of commands when the server reports nothing', async () => {
+    const { el } = await mount({ ...list(), directory: undefined, adminPrograms: undefined } as unknown as BackupListDto);
+    expect(el.querySelectorAll('pre').length).toBe(0);
+    expect(el.querySelector('#hints-missing')!.textContent).toContain('README');
+    expect(el.textContent).not.toContain('admin.mjs');
+  });
+
   it('wraps the restore commands so no keyboard-unreachable scroll area exists', async () => {
     const { el } = await mount();
     const pres = Array.from(el.querySelectorAll('pre'));
-    expect(pres.length).toBe(2);
+    expect(pres.length).toBe(3);
     for (const pre of pres) {
       expect(pre.className).toContain('whitespace-pre-wrap');
       expect(pre.className).not.toContain('overflow-x-auto');
@@ -328,10 +350,11 @@ describe('Back up now', () => {
     expect(actionError(el)).toBe('A restore is running or was interrupted, so backups are refused until it is finished.');
   });
 
-  it('shows the API cap message with the command line hint verbatim', async () => {
-    const msg = 'Too many recent backups were made from the web page (21); older ones are released after 7 days. Use the command line instead: node dist/admin.mjs backup';
-    const { el } = await refuse(409, { error: msg });
-    expect(actionError(el)).toBe(msg);
+  it('maps the API cap to a page sentence that points at the help, not at server text', async () => {
+    const { el } = await refuse(409, { error: 'Too many recent backups were made from the web page (21); older ones are released after 7 days. Use the command line instead (see the help on the Backups page).' });
+    expect(actionError(el)).toBe('Too many backups were made from this page recently. Use the command line instead (see the help below).');
+    expect(el.textContent).toContain('docker compose run --rm app node admin.mjs backup');
+    expect(el.textContent).toContain('node apps/server/dist/admin.mjs backup');
   });
 
   it('maps 429 with Retry-After', async () => {

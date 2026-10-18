@@ -12,9 +12,10 @@ import { createApp, createServices } from './app';
 import { ensureDataDirs, loadConfig } from './config';
 import { openAppDb } from './db';
 import { refuseWhileRestoring } from './lib/restore-marker';
+import { createShutdown, installSignalHandlers } from './lib/shutdown';
 import { openIndexDb } from './reference/index-db';
 import { runIndexer } from './reference/indexer';
-import { BackupError, validateBackupDir } from './services/backups';
+import { assertBackupDirWritable, BackupError, validateBackupDir } from './services/backups';
 import { purgeOldResets } from './services/users';
 
 const config = loadConfig();
@@ -27,13 +28,19 @@ if (config.backupEveryHoursError) {
 refuseWhileRestoring(config.dataDir);
 // An invalid BACKUP_DIR (inside the web build, uploads, 5etools or the data root; world-writable) stops the server now,
 // before the slow indexer (docs/design/backup.md 11). `createServices` builds the BackupService, which validates again.
+// The same call proves this user can write there (creating the folder with mode 0700 when missing): a folder owned by root
+// would otherwise fail the first scheduled backup, about 90 s after start. Refuses at once and names the fix.
 try {
-  validateBackupDir(config);
+  assertBackupDirWritable(validateBackupDir(config).dir);
 } catch (e) {
   if (!(e instanceof BackupError)) throw e;
   console.error(`Refusing to start: ${e.message}`);
   process.exit(1);
 }
+// From here until the server listens (the indexer can take minutes) a stop signal exits at once (143 / 130, like the default);
+// `shutdown.arm` below turns it into the clean shutdown. Handlers are installed whether or not scheduled backups are on.
+const shutdown = createShutdown();
+installSignalHandlers(shutdown);
 ensureDataDirs(config);
 const indexDb = openIndexDb(config.indexDbPath);
 const db = openAppDb(config.appDbPath);
@@ -68,7 +75,7 @@ if (config.isProduction && existsSync(config.webDistDir)) {
   app.get('*', async (c, next) => (c.req.path.startsWith('/api/') ? next() : serveStatic({ path: join(config.webDistDir, 'index.html') })(c, next)));
 }
 
-serve({ fetch: app.fetch, port: config.port }, (info) => {
+const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
   console.log(`Critical Notes server listening on http://localhost:${info.port}`);
 });
 
@@ -77,14 +84,20 @@ const scheduler = services.backupScheduler;
 if (scheduler.enabled) {
   scheduler.start();
   console.log(`Scheduled backups: every ${config.backupEveryHours} h, keeping ${config.backupKeep}`);
-  // No new run after a stop signal; a backup in progress gets a few seconds to finish (an interrupted one leaves nothing
-  // published: it is written aside and removed at the next start, docs/design/backup.md 11).
-  let stopping = false;
-  const shutdown = () => {
-    if (stopping) return;
-    stopping = true;
-    void Promise.race([scheduler.stop(), new Promise((resolve) => setTimeout(resolve, 8000).unref())]).finally(() => process.exit(0));
-  };
-  process.once('SIGTERM', shutdown);
-  process.once('SIGINT', shutdown);
 }
+
+// SIGTERM / SIGINT (docker stop, Ctrl+C): stop accepting requests, wait up to 8 s for a running backup (scheduled or from the
+// web page), close both databases, exit 0. An interrupted backup publishes nothing; a second signal exits at once.
+// SHUTDOWN_BACKUP_WAIT_MS shortens the 8 s wait (tests only; invalid or missing = 8000)
+const waitMs = Number(process.env.SHUTDOWN_BACKUP_WAIT_MS);
+shutdown.arm({
+  backupWaitMs: Number.isInteger(waitMs) && waitMs > 0 && waitMs <= 8000 ? waitMs : undefined,
+  server,
+  stopScheduler: () => scheduler.stop(),
+  backupRunning: () => services.backups.isRunning(),
+  abortBackup: () => services.backups.abortInFlightSync(),
+  closeDatabases: () => {
+    db.$client.close();
+    indexDb.close();
+  },
+});

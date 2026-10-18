@@ -9,7 +9,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { chmodSync, constants as fsc, existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { chmod, link, lstat, mkdir, open, readdir, rename, rm, statfs, unlink, type FileHandle } from 'node:fs/promises';
-import { join } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
@@ -37,9 +37,9 @@ import {
   type ManifestSummary,
   type Trigger,
 } from './backup-zip';
-import { BackupError, BackupLock, ensureBackupDir, validateBackupDir, type LockOptions } from './backup-fs';
+import { assertBackupDirWritable, BackupError, BackupLock, ensureBackupDir, NOT_WRITABLE_CODES, notWritableMessage, validateBackupDir, type LockOptions } from './backup-fs';
 
-export { BackupError, validateBackupDir } from './backup-fs';
+export { assertBackupDirWritable, BackupError, validateBackupDir } from './backup-fs';
 export { BackupZipError, readBackup, type Manifest, type Trigger } from './backup-zip';
 
 const MiB = 1024 * 1024;
@@ -510,7 +510,7 @@ export interface BackupInfo {
 }
 
 /** Why the last backup failed, as a stable code: routes show a fixed sentence per code, never `lastError` text. */
-export type BackupFailureCode = 'disk' | 'no-space' | 'verify' | 'too-many-files' | 'db-timeout' | 'failed';
+export type BackupFailureCode = 'disk' | 'no-space' | 'verify' | 'too-many-files' | 'db-timeout' | 'dir-not-writable' | 'failed';
 
 export interface BackupStatus {
   running: { name: string; startedAt: string } | null;
@@ -598,6 +598,8 @@ export class BackupService {
   private readonly cache = new Map<string, ManifestSummary>();
   private readonly leases = new Map<string, number>();
   private running: { name: string; startedAt: number } | null = null;
+  /** The files this instance's running backup has made aside (removed by `abortInFlightSync` when the process must exit). */
+  private inflightPaths: { partial: string; tmpDir: string } | null = null;
   private lastError: string | null = null;
   private lastErrorCode: BackupFailureCode | null = null;
   private lastWarnings: string[] = [];
@@ -611,7 +613,7 @@ export class BackupService {
     // Throws (the server/CLI refuses to start) for a directory inside the web build, uploads, 5etools or the data root
     const { dir, warnings } = validateBackupDir(opts.config);
     for (const w of warnings) (opts.warn ?? ((m: string) => console.warn(m)))(w);
-    ensureBackupDir(dir);
+    assertBackupDirWritable(dir); // creates it (0700) when missing; refuses at once, naming the fix, when this user cannot write there
     this.dir = dir;
     this.lock = new BackupLock(dir, opts.lock);
     this.maxUploads = Math.min(opts.maxUploadFiles ?? MAX_UPLOAD_FILES, MAX_UPLOAD_FILES);
@@ -622,6 +624,24 @@ export class BackupService {
   /** True while this process runs a backup. A later purge of upload files must not unlink anything while this is true (design 4). */
   isRunning(): boolean {
     return this.running !== null;
+  }
+
+  /**
+   * For a process that must exit while a backup runs (shutdown after the wait ran out): synchronously removes THIS instance's
+   * `.partial-*` file and `.tmp-*` directory and releases the lock it holds (only if it is still ours). Never throws, touches
+   * nothing it did not create, and publishes nothing. A force-killed process cannot call it; the age-based sweep covers that.
+   */
+  abortInFlightSync(): void {
+    const f = this.inflightPaths;
+    if (!f) return;
+    for (const p of [f.partial, f.tmpDir]) {
+      try {
+        rmSync(p, { recursive: true, force: true });
+      } catch {
+        // best effort
+      }
+    }
+    this.lock.releaseSync();
   }
 
   status(): BackupStatus {
@@ -713,7 +733,7 @@ export class BackupService {
   async assertApiCreateAllowed(): Promise<void> {
     const young = (await this.list()).filter((b) => b.trigger === 'api' && this.now() - (timestampOfName(b.name) as number) < API_PRUNE_MIN_AGE_MS).length;
     if (young >= API_CREATE_CAP_FACTOR * this.cfg.backupKeep) {
-      throw new BackupError('api-cap', `Too many recent backups were made from the web page (${young}); older ones are released after ${API_PRUNE_MIN_AGE_DAYS} days. Use the command line instead: node dist/admin.mjs backup`);
+      throw new BackupError('api-cap', `Too many recent backups were made from the web page (${young}); older ones are released after ${API_PRUNE_MIN_AGE_DAYS} days. Use the command line instead (see the help on the Backups page).`);
     }
   }
 
@@ -796,6 +816,7 @@ export class BackupService {
     const tmpDir = join(this.dir, `.tmp-${randomBytes(6).toString('hex')}`);
     const partial = join(this.dir, `.partial-${randomBytes(6).toString('hex')}.zip`);
     let locked = false;
+    this.inflightPaths = { partial, tmpDir };
     try {
       ensureBackupDir(this.dir); // it may have been removed (or a mount gone) since the service started
       if (trigger === 'api') await this.assertApiCreateAllowed();
@@ -926,7 +947,8 @@ export class BackupService {
       }
       this.lastWarnings = warnings;
       return { name: finalName, size, sha256, trigger, missingUploads: missing, warnings };
-    } catch (e) {
+    } catch (raw) {
+      const e = this.classifyFsError(raw);
       const reason = describeFailure(e);
       if (!(e instanceof BackupError && (e.code === 'busy' || e.code === 'restore-in-progress'))) {
         this.lastError = reason;
@@ -938,8 +960,19 @@ export class BackupService {
       await rm(partial, { force: true }).catch(() => undefined);
       await rm(tmpDir, { recursive: true, force: true }).catch(() => undefined);
       if (locked) await this.lock.release();
+      this.inflightPaths = null;
       this.running = null;
     }
+  }
+
+  /** EACCES/EPERM/EROFS on a path inside the backup folder becomes `dir-not-writable` (a readable message, a fixed sentence on the list). */
+  private classifyFsError(e: unknown): unknown {
+    const err = e as NodeJS.ErrnoException;
+    if (e instanceof Error && NOT_WRITABLE_CODES.includes(err.code ?? '') && typeof err.path === 'string') {
+      const rel = relative(this.dir, resolve(err.path));
+      if (rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))) return new BackupError('dir-not-writable', notWritableMessage(this.dir));
+    }
+    return e;
   }
 
   /** Atomic, no-clobber publish: `link()` fails with EEXIST instead of overwriting; the timestamp advances a second until free. */
@@ -978,7 +1011,7 @@ async function fsyncDir(dir: string): Promise<void> {
 
 export function failureCode(e: unknown): BackupFailureCode {
   if (e instanceof BackupZipError) return 'verify';
-  if (e instanceof BackupError) return e.code === 'disk' || e.code === 'too-many-files' || e.code === 'db-timeout' ? e.code : 'failed';
+  if (e instanceof BackupError) return e.code === 'disk' || e.code === 'too-many-files' || e.code === 'db-timeout' || e.code === 'dir-not-writable' ? e.code : 'failed';
   if ((e as NodeJS.ErrnoException)?.code === 'ENOSPC') return 'no-space';
   return 'failed';
 }

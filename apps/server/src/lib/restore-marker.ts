@@ -4,6 +4,7 @@
  */
 import { lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { adminCommandLines, START_SERVER_HINT } from './admin-hints';
 
 export const RESTORE_MARKER = '.restore-in-progress';
 
@@ -88,10 +89,10 @@ export function restoreBlockedMessage(dataDir: string): string {
   const lines = ['A restore is running or was interrupted, so this is refused until it is finished.'];
   if (m && m !== 'unreadable') {
     lines.push(`  Restore of ${clean(m.zip.name)} started ${clean(m.startedAt)} by ${clean(m.user.name)}; stopped at step "${clean(m.next)}"${m.rollingBack ? ' while rolling back' : ''}.`);
-    lines.push('  To FINISH it: stop the server (docker compose stop app) and run the same command again:');
-    lines.push('    node dist/admin.mjs restore <the same backup file> [the same flags]');
+    lines.push('  To FINISH it: stop the server (docker compose stop app; a bare install: stop the node process) and run the same command again:');
+    lines.push(...adminCommandLines('restore <the same backup file> [the same flags]'));
     lines.push(m.rollingBack ? '  A rollback was under way: running restore again continues the rollback and brings the old state back.' : '  If the swap had not started yet, running it again simply starts over.');
-    lines.push('  With Docker: docker compose run --rm app node admin.mjs restore <the same backup file> [the same flags]');
+    lines.push(`  Then start the server again. ${START_SERVER_HINT}`);
     lines.push(`  To ABORT by hand: your previous data is in ${clean(m.preRestore)}/ inside the data directory (restore its files and uploads/ to their old places), then delete ${where}.`);
   } else {
     lines.push(`  The marker ${where} cannot be read. Look at the data directory for pre-restore-* and .restore-* folders, finish or undo the restore by hand, then delete the marker.`);

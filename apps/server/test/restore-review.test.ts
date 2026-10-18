@@ -130,6 +130,24 @@ describe('R2: nothing follows links, nothing untrusted is trusted', () => {
     );
     expect(restoreBlockedMessage(data())).toMatch(/docker compose run --rm app node admin\.mjs restore/);
   });
+
+  it('the blocked message shows the right program for both forms and ends with docker compose up -d', async () => {
+    s = await seededInstance();
+    writeFileSync(
+      join(data(), '.restore-in-progress'),
+      JSON.stringify({ v: 1, startedAt: 'now', user: { uid: 1, name: 'u' }, zip: { name: 'a.zip', sha256: 'a'.repeat(64), size: 1 }, staging: '.restore-20261017T093000Z', preRestore: 'pre-restore-20261017T093000Z', flags: { keepTokens: false, carryRestrictions: true }, phase: 'started', next: 'stage', liveMoved: null, uploadsLive: null }),
+    );
+    const msg = restoreBlockedMessage(data());
+    expect(msg).toContain('Docker:       docker compose run --rm app node admin.mjs restore <the same backup file> [the same flags]');
+    expect(msg).toContain('Bare install: node apps/server/dist/admin.mjs restore <the same backup file> [the same flags]   (from the repository folder)');
+    expect(msg).not.toMatch(/node dist\/admin\.mjs/);
+    expect(msg).toContain('docker compose up -d (works whether or not the container exists)');
+    expect(msg).not.toContain('start app');
+    // substrings the README quotes
+    expect(msg).toMatch(/To FINISH it: stop the server \(docker compose stop app/);
+    expect(msg).toMatch(/run the same command again/);
+    expect(msg).toMatch(/To ABORT by hand/);
+  });
 });
 
 describe('R3: messages and the planner statistics', () => {
@@ -410,6 +428,9 @@ describe('Code Reviewer items', () => {
       stopServer(s2.env);
       const r2 = await runCli(['restore', s2.zip, '--yes'], s2.env.config);
       expect(r2.out).toMatch(/CHECK THESE NOW[^]*gm[^]*reset-link/);
+      expect(r2.out).toContain('Docker: docker compose run --rm app node admin.mjs reset-link <username>; bare install: node apps/server/dist/admin.mjs reset-link <username>');
+      expect(r2.out).toContain('docker compose up -d (works whether or not the container exists)');
+      expect(r2.out).not.toMatch(/node dist\/admin\.mjs|docker compose start app/);
       expect(r2.out.indexOf('CHECK THESE NOW')).toBeLessThan(r2.out.indexOf('The first start rebuilds'));
     } finally {
       s2.env.cleanup();

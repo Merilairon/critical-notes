@@ -1,6 +1,7 @@
 /**
  * HTTP application. Built from explicit dependencies so tests can create isolated instances.
  */
+import { existsSync } from 'node:fs';
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import { secureHeaders } from 'hono/secure-headers';
@@ -74,7 +75,12 @@ export function createServices({ indexDb, db, config }: AppDeps) {
   const apiTokens = new ApiTokenService(db);
   const userAdmin = new UserAdminService(db);
   // Constructed once: validates BACKUP_DIR (throws on an invalid one, so the server refuses to start) and clears old leftovers
-  const backups = new BackupService({ db, config });
+  // Test seam, ignored in production: with CN_TEST_BACKUP_HOLD_FILE set, a backup pauses before its snapshot until that file exists
+  const holdFile = config.isProduction ? undefined : process.env.CN_TEST_BACKUP_HOLD_FILE;
+  const hooks = holdFile
+    ? { beforeSnapshot: async () => { while (!existsSync(holdFile)) await new Promise<void>((r) => setTimeout(r, 25)); } }
+    : undefined;
+  const backups = new BackupService({ db, config, hooks });
   // Built here, started by main.ts (off unless BACKUP_EVERY_HOURS is set)
   const backupScheduler = new BackupScheduler({ service: backups, config });
   return { backups, backupScheduler, userAdmin, apiTokens, visibility, transfer, migration, reference, homebrewIndex, campaigns, pages, homebrew, homebrewTransfer, properties, pageSearch, uploads, templates, encounters, trackers, inventory };

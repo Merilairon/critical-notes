@@ -61,6 +61,8 @@ export function mapBackupError(e: unknown): CliError {
         return new CliError(e.message, EXIT.restoreInProgress);
       case 'disk':
         return new CliError(e.message, EXIT.diskFull);
+      case 'dir-not-writable':
+        return new CliError(e.message, EXIT.dirNotWritable);
       default:
         return new CliError(e.message, EXIT.failed);
     }

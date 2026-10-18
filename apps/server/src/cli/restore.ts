@@ -41,6 +41,7 @@ import {
   type StoppedProbe,
 } from '../services/backups';
 import { BackupZip, MAX_MANIFEST_BYTES, parseManifest, RATIO_LIMIT, safeText } from '../services/backup-zip';
+import { adminCommandInline, START_SERVER_HINT } from '../lib/admin-hints';
 import { CliError, EXIT } from './errors';
 
 const MiB = 1024 * 1024;
@@ -1011,7 +1012,7 @@ function reportText(mf: Manifest, p: PrepareReport, m: RestoreMarker, preSize: n
     `Everything done after ${safeText(mf.createdAt)} is gone from this instance.`,
   ];
   if (p.migratedSteps) lines.push(`Migrated ${plural(p.migratedSteps, 'step')} to this version.`);
-  lines.push(`Cleared ${plural(p.purged.sessions, 'session')} (everyone signs in again) and ${plural(p.purged.passwordResets, 'password reset link')}; issue new ones with: node dist/admin.mjs reset-link <username>.`);
+  lines.push(`Cleared ${plural(p.purged.sessions, 'session')} (everyone signs in again) and ${plural(p.purged.passwordResets, 'password reset link')}; issue new ones with the command for your setup. ${adminCommandInline('reset-link <username>')}.`);
   lines.push(
     m.flags.keepTokens
       ? `${KEEP_TOKENS_WARNING} Tokens and invite links were kept as in the backup.`
@@ -1030,9 +1031,9 @@ function reportText(mf: Manifest, p: PrepareReport, m: RestoreMarker, preSize: n
   if (others.length) lines.push(`Older pre-restore folders still on disk: ${others.map((o) => `${o.name} (${fmtBytes(o.size)})`).join(', ')}.`);
   const check = [...new Set([...p.carry.adminsDemotedOrDeletedLive, ...p.carry.usersDeletedLive])];
   if (p.carry.liveCompared && check.length) {
-    lines.push(`CHECK THESE NOW (demoted or deleted in the live data before the restore; they are back as they were in the backup): ${names(check)}. Disable or demote them in Admin > Users, or reset their passwords with: node dist/admin.mjs reset-link <username>.`);
+    lines.push(`CHECK THESE NOW (demoted or deleted in the live data before the restore; they are back as they were in the backup): ${names(check)}. Disable or demote them in Admin > Users, or reset their passwords with the command for your setup. ${adminCommandInline('reset-link <username>')}.`);
   }
-  lines.push('The first start rebuilds the search index from the restored data and takes longer than usual. Start the server now (Docker: docker compose start app).');
+  lines.push('The first start rebuilds the search index from the restored data and takes longer than usual. Start the server now. ' + START_SERVER_HINT);
   return lines.join('\n');
 }
 

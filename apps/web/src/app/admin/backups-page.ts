@@ -1,6 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { BACKUP_NAME_PATTERN, type BackupDto, type BackupListDto, type BackupStartedDto, type BackupTicketDto, type BackupTrigger } from '@cn/shared';
 import { firstValueFrom } from 'rxjs';
@@ -128,12 +128,22 @@ const TRIGGERS: Record<BackupTrigger, string> = { api: 'Web page', cli: 'Command
     <section class="mt-6 rounded-xl border border-line bg-panel p-4 text-sm" aria-labelledby="restore-h">
       <h2 id="restore-h" class="font-display text-lg font-bold">Restoring and keeping backups</h2>
       <p class="mt-1">Restoring is done on the server, from the command line, never from this page. It replaces all data, so stop the app first.</p>
-      <p class="mt-2 font-medium">With Docker</p>
-      <pre class="mt-1 whitespace-pre-wrap rounded bg-panel-2 p-2 text-xs [overflow-wrap:anywhere]"><code>{{ dockerStop }}
-{{ dockerRestore }}</code></pre>
-      <p class="mt-2 font-medium">Without Docker</p>
-      <pre class="mt-1 whitespace-pre-wrap rounded bg-panel-2 p-2 text-xs [overflow-wrap:anywhere]"><code>{{ nativeRestore }}</code></pre>
-      <p class="mt-1 text-muted">Run it with the same data directory and settings as the server.</p>
+      @if (hints(); as h) {
+        <p class="mt-1 text-muted">Backups folder the server reports: <code class="[overflow-wrap:anywhere]">{{ h.directory }}</code>. On a bare install use the host path of your DATA_DIR/backups or BACKUP_DIR. Check first, then restore.</p>
+        <p class="mt-2 font-medium">With Docker</p>
+        <pre class="mt-1 whitespace-pre-wrap rounded bg-panel-2 p-2 text-xs [overflow-wrap:anywhere]"><code>{{ dockerStop }}
+{{ h.dockerCheck }}
+{{ h.dockerRestore }}</code></pre>
+        <p class="mt-2 font-medium">Without Docker (from the repository folder)</p>
+        <pre class="mt-1 whitespace-pre-wrap rounded bg-panel-2 p-2 text-xs [overflow-wrap:anywhere]"><code>{{ h.bareCheck }}
+{{ h.bareRestore }}</code></pre>
+        <p class="mt-1 text-muted">Run it with the same data directory and settings as the server.</p>
+        <p id="backup-cli" class="mt-2 font-medium">Make a backup from the command line</p>
+        <pre class="mt-1 whitespace-pre-wrap rounded bg-panel-2 p-2 text-xs [overflow-wrap:anywhere]" aria-labelledby="backup-cli"><code>{{ h.dockerBackup }}
+{{ h.bareBackup }}</code></pre>
+      } @else {
+        <p id="hints-missing" class="mt-1">This server did not report its backups folder or admin command. See the Backups section of the README for the exact commands.</p>
+      }
       <p class="mt-2">Old backups are removed automatically: the newest few are kept. Backups made from this page are protected for 7 days.</p>
     </section>
 
@@ -154,10 +164,26 @@ export class BackupsPage {
 
   protected readonly warning = BACKUP_WARNING;
   protected readonly dockerStop = 'docker compose stop app';
-  protected readonly dockerRestore = 'docker compose run --rm app node admin.mjs restore /data/app/backups/<file> --yes';
-  protected readonly nativeRestore = 'node dist/admin.mjs restore backups/<file> --yes';
+  /** Commands built from what the server reports; null when it reports nothing (older server). */
+  protected readonly hints = computed(() => {
+    const d = this.directory();
+    const p = this.programs();
+    if (!d || !p) return null;
+    const file = `${d.replace(/\/+$/, '')}/${this.backups()[0]?.name ?? '<file>'}`;
+    return {
+      directory: d,
+      dockerCheck: `${p.docker} restore ${file} --check`,
+      dockerRestore: `${p.docker} restore ${file} --yes`,
+      bareCheck: `${p.bare} restore ${file} --check`,
+      bareRestore: `${p.bare} restore ${file} --yes`,
+      dockerBackup: `${p.docker} backup`,
+      bareBackup: `${p.bare} backup`,
+    };
+  });
 
   protected readonly backups = signal<BackupDto[]>([]);
+  protected readonly directory = signal<string | undefined>(undefined);
+  protected readonly programs = signal<BackupListDto['adminPrograms'] | undefined>(undefined);
   protected readonly running = signal(false);
   protected readonly lastError = signal<string | null>(null);
   protected readonly lastWarnings = signal<string[]>([]);
@@ -242,6 +268,8 @@ export class BackupsPage {
       const list = await firstValueFrom(this.http.get<BackupListDto>('/api/admin/backups'));
       this.streak = 0;
       this.backups.set(list.backups);
+      this.directory.set(list.directory);
+      this.programs.set(list.adminPrograms);
       this.running.set(list.running !== null);
       this.lastError.set(list.lastError);
       this.lastWarnings.set(list.lastWarnings);
@@ -308,8 +336,7 @@ export class BackupsPage {
       case 409:
         if (/already running/i.test(message)) return 'A backup is already running. This page updates when it is done.';
         if (/restore/i.test(message)) return 'A restore is running or was interrupted, so backups are refused until it is finished.';
-        // The API cap: the server sentence carries the count and the command line hint
-        if (message.includes('node dist/admin.mjs backup')) return message;
+        if (/too many recent backups/i.test(message)) return 'Too many backups were made from this page recently. Use the command line instead (see the help below).';
         return 'The backup was refused.';
       case 429: {
         const secs = Number(err.headers.get('Retry-After'));

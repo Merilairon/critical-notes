@@ -2,7 +2,7 @@
 import { execFileSync } from 'node:child_process';
 import { linkSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BackupListDto, BackupStartedDto, BackupTicketDto } from '@cn/shared';
 import { createApp, createServices } from '../src/app';
@@ -164,6 +164,21 @@ describe('access', () => {
 });
 
 describe('create and list', () => {
+  it('the list tells an admin the backups directory the server uses and the admin program in both forms', async () => {
+    const body = (await admin.get('/api/admin/backups')).body as BackupListDto;
+    expect(body.directory).toBe(service.dir);
+    expect(isAbsolute(body.directory!)).toBe(true);
+    expect(body.adminPrograms).toEqual({ docker: 'docker compose run --rm app node admin.mjs', bare: 'node apps/server/dist/admin.mjs' });
+  });
+
+  it('a custom BACKUP_DIR is reported as that directory', async () => {
+    boot({}, undefined, { backupDir: join(fx.root, 'elsewhere', 'my-backups') });
+    admin = await login('dm');
+    const dir = ((await admin.get('/api/admin/backups')).body as BackupListDto).directory;
+    expect(dir).toBe(service.dir);
+    expect(dir!.endsWith('/elsewhere/my-backups')).toBe(true);
+  });
+
   it('the list carries the schedule: null when off, the interval (and the next run once started) when on', async () => {
     expect(((await admin.get('/api/admin/backups')).body as BackupListDto).schedule).toBeNull();
     boot({}, undefined, { backupEveryHours: 3 });
@@ -204,7 +219,7 @@ describe('create and list', () => {
     const created = auditOf('backup.created');
     expect(created).toHaveLength(1);
     expect(created[0]).toMatchObject({ actor: adminId, trigger: 'api', name: b.name }); // the id, not the username
-    expect(JSON.stringify(list)).not.toContain(fx.root); // no absolute path anywhere
+    expect(JSON.stringify({ ...list, directory: undefined })).not.toContain(fx.root); // no absolute path anywhere but the one `directory` field (admin-only, by design)
   });
 
   it('nothing in the request can set the trigger', async () => {
@@ -253,7 +268,8 @@ describe('create and list', () => {
     const res = await admin.post('/api/admin/backups');
     expect(res.status).toBe(409);
     expect(res.body.error).toContain('Too many recent backups were made from the web page (3)');
-    expect(res.body.error).toContain('node dist/admin.mjs backup');
+    expect(res.body.error).toContain('Use the command line instead');
+    expect(res.body.error).not.toContain('admin.mjs');
     expect(service.isRunning()).toBe(false);
     expect((await fsp.readdir(bdir())).filter((n) => n.startsWith('backup-'))).toHaveLength(3);
   });
@@ -293,7 +309,7 @@ describe('create and list', () => {
     await vi.waitFor(() => expect(service.isRunning()).toBe(false));
     const list = (await admin.get('/api/admin/backups')).body as BackupListDto;
     expect(list.lastError).toBe(FAILURE_TEXT.failed);
-    expect(JSON.stringify(list)).not.toMatch(/EACCES|secret|\/tmp/);
+    expect(JSON.stringify({ ...list, directory: undefined })).not.toMatch(/EACCES|secret|\/tmp/); // `directory` is the one path, on purpose
     expect(list.backups).toHaveLength(0);
     expect(auditOf('backup.failed')[0]).toMatchObject({ actor: adminId }); // the server log keeps the detail
   });

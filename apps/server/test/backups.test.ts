@@ -815,7 +815,7 @@ describe('backup service: prune', () => {
       const capped = (await svc.create({ actor: 'thief', trigger: 'api' }).catch((e: unknown) => e)) as BackupError;
       expect(capped.code).toBe('api-cap');
       expect(capped.httpStatus).toBe(409);
-      expect(capped.message).toMatch(/node dist\/admin\.mjs backup/);
+      expect(capped.message).toMatch(/Use the command line instead/);
       expect(zips()).toHaveLength(8);
 
       // more than 24 hours later: still blocked, and an API prune still cannot evict anything younger than 7 days

@@ -14,6 +14,7 @@ import {
   type BackupTicketDto,
 } from '@cn/shared';
 import type { AppEnv } from '../auth/session';
+import { BARE_ADMIN, DOCKER_ADMIN } from '../lib/admin-hints';
 import { DownloadTickets, TICKET_TTL_MS } from '../lib/download-tickets';
 import { audit } from '../lib/audit';
 import { forbidden, HttpError, notFound, validate } from '../lib/http';
@@ -27,6 +28,7 @@ export const FAILURE_TEXT: Record<BackupFailureCode, string> = {
   'no-space': 'The last backup failed: the disk filled up while writing it. Nothing was kept.',
   verify: 'The last backup failed its own verification pass. Nothing was kept; check the server log.',
   'too-many-files': 'The last backup failed: the uploads folder holds more files than a backup can hold.',
+  'dir-not-writable': 'The last backup failed: the server may not write in the backup folder (BACKUP_DIR). Fix the folder owner (Docker: chown 1000:1000 on the folder); the server log has its path.',
   'db-timeout': 'The last backup failed: the database was too busy to copy in time. Try again when the instance is quiet.',
   failed: 'The last backup failed. Nothing was kept; check the server log.',
 };
@@ -93,6 +95,8 @@ export function backupRoutes(backups: BackupService, users: UserAdminService, op
       lastError: s.lastErrorCode ? FAILURE_TEXT[s.lastErrorCode] : null,
       lastWarnings: s.lastWarnings,
       schedule: opts.schedule?.() ?? null,
+      directory: backups.dir,
+      adminPrograms: { docker: DOCKER_ADMIN, bare: BARE_ADMIN },
     };
     c.header('Cache-Control', 'no-store');
     return c.json(body);
