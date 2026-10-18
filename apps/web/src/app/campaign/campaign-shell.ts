@@ -8,10 +8,11 @@ import { PageTemplateDialog } from '../templates/page-template-dialog';
 import { ContextService } from '../core/context.service';
 import { CampaignStore } from './campaign.store';
 import { PageTree } from './page-tree';
+import { UndoToast } from './undo-toast';
 
 @Component({
   selector: 'cn-campaign-shell',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, PageTree, PageTemplateDialog],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, PageTree, PageTemplateDialog, UndoToast],
   providers: [CampaignStore],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'flex min-h-0 flex-1' },
@@ -83,12 +84,13 @@ import { PageTree } from './page-tree';
       }
       <section class="flex min-h-0 min-w-0 flex-1 flex-col">
         <button type="button" class="m-2 self-start rounded border border-line px-2 py-1 text-sm lg:hidden" (click)="sidebarOpen.set(true)">☰ Campaign</button>
-        <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <div class="flex min-h-0 flex-1 flex-col overflow-y-auto" [class.pb-32]="toastShown()" [class.scroll-pb-32]="toastShown()" data-campaign-main tabindex="-1">
           @if (store.campaign()) {
             <router-outlet />
           }
         </div>
       </section>
+      <cn-undo-toast />
     }`,
 })
 export class CampaignShell implements OnDestroy {
@@ -118,6 +120,7 @@ export class CampaignShell implements OnDestroy {
     { path: ['inventory'], label: 'Inventory', icon: '💰' },
     { path: ['reference'], label: 'Reference', icon: '📚' },
     { path: ['templates'], label: 'Templates', icon: '🧩', gm: true },
+    { path: ['trash'], label: 'Trash', icon: '🗑️', gm: true },
     { path: ['settings'], label: 'Settings', icon: '⚙️' },
   ];
   protected readonly visibleNav = computed(() =>
@@ -126,6 +129,8 @@ export class CampaignShell implements OnDestroy {
       // Players get members and house rules there, not settings
       .map((n) => (n.path[0] === 'settings' && !this.store.isGm() ? { ...n, label: 'Members & rules', icon: '👥' } : n)),
   );
+  /** The fixed toast covers the bottom of the content: leave room so focused elements scroll clear of it. */
+  protected readonly toastShown = computed(() => !!this.store.undo() || !!this.store.toast());
   protected readonly activeCombats = signal<{ id: string; name: string; round: number }[]>([]);
   /** Game masters run the combat; players open the player view. */
   protected combatLink(trackerId: string) {

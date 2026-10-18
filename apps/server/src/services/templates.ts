@@ -3,7 +3,7 @@
  * propagation to linked instances, block instantiation, pages from page templates (with `extends`, properties,
  * facet defaults and child pages), applying a template to an existing page, and per-type campaign defaults.
  */
-import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import type { BlockNode } from '@cn/blocks';
 import { getRuleset, isObject, type RulesetId } from '@cn/fivetools';
 import {
@@ -20,6 +20,7 @@ import {
   type TemplateKindDto,
   type TemplateScope,
   type TemplateSummaryDto,
+  type TemplateTrashItemDto,
   type TemplateUsageDto,
   type UpdateTemplateInput,
 } from '@cn/shared';
@@ -73,7 +74,7 @@ export class TemplateService {
     return this.db
       .select({ id: campaignMembers.campaignId })
       .from(campaignMembers)
-      .where(and(eq(campaignMembers.userId, userId), eq(campaignMembers.role, 'dm')))
+      .where(and(eq(campaignMembers.userId, userId), inArray(campaignMembers.role, ['dm', 'codm'])))
       .all()
       .map((r) => r.id);
   }
@@ -279,6 +280,50 @@ export class TemplateService {
       tx.update(templates).set({ deletedAt: Date.now() }).where(eq(templates.id, t.id)).run();
       tx.delete(campaignTemplateDefaults).where(eq(campaignTemplateDefaults.templateId, t.id)).run();
     });
+  }
+
+  /**
+   * Deleted templates the user could edit (their own, and those of campaigns they run as DM or co-DM), newest first.
+   * Built-ins and other people's templates never appear. Definitions are not returned.
+   */
+  listDeleted(userId: string, opts: { campaignId?: string | null } = {}): TemplateTrashItemDto[] {
+    const campaignIds = opts.campaignId ? [opts.campaignId].filter((c) => this.dmCampaignIds(userId).includes(c)) : this.dmCampaignIds(userId);
+    const rows = this.db
+      .select()
+      .from(templates)
+      .where(
+        and(
+          isNotNull(templates.deletedAt),
+          or(
+            opts.campaignId ? sql`0` : and(eq(templates.scope, 'user'), eq(templates.ownerUserId, userId)),
+            campaignIds.length ? and(eq(templates.scope, 'campaign'), inArray(templates.campaignId, campaignIds)) : sql`0`,
+          ),
+        ),
+      )
+      .orderBy(desc(templates.deletedAt))
+      .all();
+    return rows.map((r) => ({ ...this.summary(r, userId), deletedAt: r.deletedAt! }));
+  }
+
+  /**
+   * Brings a deleted template back with its versions. Linked instances (their usage rows were kept) follow it again
+   * from the next version. The campaign default it may have been is not restored.
+   */
+  restore(userId: string, id: string): TemplateDto {
+    const t = this.db.select().from(templates).where(eq(templates.id, id)).get();
+    // Same visibility as editing: anything else is a plain 404, so ids do not leak.
+    if (!t || !t.deletedAt || !this.canEdit(t, userId)) throw notFound('Template not found');
+    if (t.kind === 'page') {
+      const ref = (t.definition as PageTemplateDef).extendsRef;
+      if (ref) {
+        const parent = ref.startsWith('builtin:')
+          ? this.db.select().from(templates).where(eq(templates.builtinKey, ref.slice(8))).get()
+          : this.db.select().from(templates).where(eq(templates.id, ref)).get();
+        if (parent?.deletedAt) throw conflict(`This template extends "${parent.name}", which is in the trash. Restore that one first.`, { templateId: parent.id });
+      }
+    }
+    this.db.update(templates).set({ deletedAt: null }).where(eq(templates.id, t.id)).run();
+    return this.get(userId, t.id);
   }
 
   duplicate(userId: string, id: string, input: { scope: 'user' | 'campaign'; campaignId: string | null; name?: string }): TemplateDto {

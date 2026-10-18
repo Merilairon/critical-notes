@@ -48,6 +48,7 @@ export class PageEditor implements OnDestroy {
   protected readonly loadedDoc = signal<BlockDoc | null>(null);
   protected readonly status = signal<'idle' | 'saving' | 'saved' | 'error' | 'conflict'>('idle');
   protected readonly error = signal('');
+  protected readonly deleting = signal(false);
   protected readonly notFound = signal(false);
   /** Increments after each successful save (refreshes backlinks). */
   protected readonly savedCount = signal(0);
@@ -255,10 +256,23 @@ export class PageEditor implements OnDestroy {
 
   protected async remove() {
     const p = this.page();
-    if (!p || !confirm(`Delete "${p.title}" and its subpages?`)) return;
+    // No confirm: the "Deleted · Undo" toast and the 30-day trash make this recoverable
+    if (!p || this.deleting()) return;
+    this.deleting.set(true);
     clearTimeout(this.timer);
     this.pending = {};
-    await this.store.deletePage(p.id);
+    try {
+      await this.store.deletePage(p.id);
+    } catch (err) {
+      // deletePage offers Undo before it reloads: only a failed DELETE leaves the page in place
+      if (this.store.undo()?.pageId !== p.id) {
+        this.status.set('error');
+        this.error.set(errorMessage(err));
+        this.deleting.set(false);
+        return;
+      }
+    }
+    this.deleting.set(false);
     await this.router.navigate(['/c', this.store.id()]);
   }
 

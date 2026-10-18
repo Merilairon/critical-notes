@@ -71,10 +71,11 @@ describe('API tokens', () => {
   it('read tokens get the read tools only', async () => {
     const reader = await mcpClient(app, await makeToken(dm, 'read'));
     const names = (await reader.listTools()).tools.map((t) => t.name);
-    expect(names).toEqual(expect.arrayContaining(['list_campaigns', 'get_campaign', 'get_page', 'search_rules', 'get_inventory', 'list_templates']));
+    expect(names).toEqual(expect.arrayContaining(['list_campaigns', 'get_campaign', 'get_page', 'search_rules', 'get_inventory', 'list_templates', 'list_trash']));
     expect(names.some((n) => /^(create|update|delete|save|add|remove|change|restore)_/.test(n))).toBe(false);
     const writer = (await mcp.listTools()).tools;
     expect(writer.find((t) => t.name === 'delete_page')?.annotations).toMatchObject({ destructiveHint: true, readOnlyHint: false });
+    expect(writer.find((t) => t.name === 'list_trash')?.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
     expect(writer.find((t) => t.name === 'get_page')?.annotations).toMatchObject({ readOnlyHint: true });
   });
 });
@@ -149,10 +150,14 @@ describe('pages through MCP', () => {
     const child = await callTool(mcp, 'create_page', { campaignId, title: 'Cellar', parent: tavernId });
     const deleted = await callTool(mcp, 'delete_page', { campaignId, pageId: tavernId });
     expect(deleted.data.deleted).toEqual([tavernId, child.data.id]);
+    const trash = await callTool(mcp, 'list_trash', { campaignId });
+    expect(trash.data).toEqual([expect.objectContaining({ id: tavernId, title: 'Stonehill Inn', subpageCount: 1 })]);
+    expect(JSON.stringify(trash.data)).not.toContain('body');
     expect((await dm.get(`${base()}/pages/${child.data.id}`)).status).toBe(404);
     const restored = await callTool(mcp, 'restore_page', { campaignId, pageId: tavernId });
     expect(restored.data.restored).toEqual([tavernId, child.data.id]);
     expect(((await dm.get(`${base()}/pages/${child.data.id}`)).body as { parentId: string }).parentId).toBe(tavernId);
+    expect((await callTool(mcp, 'list_trash', { campaignId })).data).toEqual([]);
   });
 
   it('creates a page from a template', async () => {

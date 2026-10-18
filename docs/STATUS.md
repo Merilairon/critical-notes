@@ -27,7 +27,7 @@ The plan, its milestone table and the list of deviations live in [PLAN.md](PLAN.
 | `pnpm -s lint` (ESLint and the raw-HTML guard) | ✅ |
 | `pnpm -s test` | ✅ 322 tests (packages and server), 42 tests (web) |
 | `pnpm build` | ✅ server bundle (with the MCP SDK and the Markdown libraries); web initial bundle unchanged |
-| `pnpm e2e` (Playwright, fresh server from the bundle) | ✅ 55/55, no browser errors |
+| `pnpm e2e` (Playwright, fresh server from the bundle) | ✅ 64/64 (about 41 s), no browser errors |
 | Docker image (`docker compose up`, fresh volume) | ✅ rebuilt with the MCP server; Playwright 55/55 against it |
 
 ### Nothing is committed yet
@@ -231,7 +231,7 @@ AI assistants (Claude Code, Claude Desktop through `mcp-remote`, any MCP client)
   - Bearer tokens are accepted only here; cross-origin browser requests are refused.
   - The tools call the REST API in-process as the token's user (`mcp/api.ts`, an allowlist of method and path). `sessionMiddleware` recognizes the call by a module-private symbol in the request env, so role checks, validation and player projections are the web app's.
   - Read tokens get only the read tools.
-- **31 tools (11 read, 20 write):** `list_campaigns`, `get_campaign` (pages, page-type details, properties, members), `search_pages`, `search_rules`, `get_page`, `create_page` (also from a page template), `update_page` (fields, full Markdown with revision, find/replace edits, append, move), `delete_page`, `restore_page`, `save_property`, `delete_property`, `list_encounters` (with difficulty), `create/update/delete_encounter`, `get_inventory`, `add/update/remove_inventory_item`, `change_coins`, `list_homebrew`, `get_homebrew_entry`, `save_homebrew_source` (also sharing), `create/update/delete/restore_homebrew_entry`, `list_templates`, `get_template`, `save_template`, `delete_template`. The server's `instructions` (`mcp/instructions.ts`) explain the Markdown dialect.
+- **32 tools (12 read, 20 write):** `list_campaigns`, `get_campaign` (pages, page-type details, properties, members), `search_pages`, `search_rules`, `get_page`, `create_page` (also from a page template), `update_page` (fields, full Markdown with revision, find/replace edits, append, move), `delete_page`, `list_trash` (GM only; deleted pages with id, title, type, subpageCount, deletedAt; titles only), `restore_page`, `save_property`, `delete_property`, `list_encounters` (with difficulty), `create/update/delete_encounter`, `get_inventory`, `add/update/remove_inventory_item`, `change_coins`, `list_homebrew`, `get_homebrew_entry`, `save_homebrew_source` (also sharing), `create/update/delete/restore_homebrew_entry`, `list_templates`, `get_template`, `save_template`, `delete_template`. The server's `instructions` (`mcp/instructions.ts`) explain the Markdown dialect.
 - **Markdown ↔ blocks** (`@cn/blocks/markdown`, kept out of the web bundle):
   - the dialect: `:::secret`, `:::dm`, `:::callout`, `:::read-aloud`, `:::details[…]`, `:::roll-table`, `:::columns`, `:::tabs`, `::embed{uid}`, `{@tags}`, `[[links]]`, `{{fields}}`;
   - blocks Markdown can't show become `<!-- cn:block <id> … -->` lines (templates: by position, `@2.1`);
@@ -444,3 +444,43 @@ Everything in PLAN.md is built. Candidates for what comes next, roughly by value
 - UI code that sits in the initial bundle (app shell, command palette) must not import values from `@cn/shared`'s main entry, which pulls in zod. Use `@cn/shared/page-types` or type-only imports.
 - An `effect` that calls an async method must wrap the call in `untracked`, or every signal the method reads before its first `await` becomes a dependency.
 - TypeScript stays pinned to 6.0.x until Angular supports 7.
+
+## Trash endpoints (Task M4.1)
+
+- `GET /api/campaigns/:cid/trash` (GM only, 403 for players): `{ items: [{ id, title, type, icon, subpageCount, deletedAt }] }`, newest first. An item is a deleted tree root (a deleted page whose parent was not deleted at the same moment); `subpageCount` counts the descendants deleted with it. A subpage deleted earlier than its parent is its own entry. No page bodies.
+- `DELETE /api/campaigns/:cid/pages/:pid/purge` (GM only): permanently deletes a trashed page and the subpages deleted with it, answers `{ purged: [ids] }`. 404 for an unknown page (or one of another campaign), 400 "Only a deleted page can be purged" for a live page. Audit line `page.purged`.
+- Purge removes the page rows and (by foreign key) tags, viewers, facets, outgoing links, entity references, property values, template usage and loot awards; incoming `page_links` rows and the search rows are deleted explicitly. Inventory and facet page references become null. Uploads belong to the campaign, not to a page, so purge never touches them: images stay valid for every page still showing them.
+- Automatic purge (`src/services/trash-purger.ts`): pages deleted more than 30 days ago are removed 60 s after server start and then daily (unref'd `setTimeout` chain). It defers (re-check after 5 min) while `BackupService.isRunning()` or a restore marker exists, and is stopped by the clean shutdown (`stopScheduler` in `main.ts`). It logs one line when it purged something.
+- `POST /pages/:pid/restore` (unchanged, verified by tests): brings back the subpages deleted with the page, rebuilds links, references and the search row; backlinks from other pages survive because their link rows are kept while a page is in the trash. If the parent is still deleted the page returns at the top level.
+- MCP: `GET /campaigns/:cid/trash` is on the allowlist and exposed as the read tool `list_trash` (a player's token gets the route's 403 as a tool error). Purge stays off the allowlist (tested).
+- UI: see "Trash view and undo (Task M4.3)" below.
+- Co-DMs may view, restore and purge the trash (the same `requireDm` rule as the other DM-only routes). Owner decision.
+- `encounters.locationPageId` and the page ids inside an encounter's creature JSON have no foreign key, so they may point at a purged page (same as after a soft delete).
+- The purger skips a pass, with a log line, when the system clock is more than 10 minutes behind the newest page change or its own last run.
+
+## Templates restore (Task M4.2)
+
+- `GET /api/templates/trash[?campaignId=]`: `{ templates: [TemplateTrashItemDto] }` (a template summary plus `deletedAt`, no definition), newest deletion first. Lists only what the caller could edit: their own personal templates and the templates of campaigns they run as DM or co-DM (`?campaignId=` narrows to one campaign and drops personal ones). Built-ins never appear; players get an empty list.
+- `POST /api/templates/:id/restore`: clears `deletedAt` and answers the full `TemplateDto` (200). 404 for an unknown, live, built-in or not-editable template (ids do not leak). 409 "This template extends "X", which is in the trash. Restore that one first." when a page template's parent is still deleted. Audit line `template.restored`.
+- Versions and usage rows are kept by the soft delete, so after a restore linked instances follow new versions again and `/usage` lists them. The campaign default the template may have been is not restored (deleting it removed that row).
+- Names are not unique, so restoring has no name clash.
+- Fix on the way: the template library's "campaign DM" check (`dmCampaignIds`) only counted the owner (`dm`); it now counts `dm` and `codm`, so co-DMs see, edit and restore campaign templates like `create` already allowed.
+- Templates are not purged automatically (the 30-day purge covers pages only). Not on the MCP allowlist.
+- Restore checks only the direct `extends` parent, not the whole chain (a deeper ancestor in the trash shows up in the restored template's `issues`).
+
+## Trash view and undo (Task M4.3)
+
+- **Trash page** (`apps/web/src/app/campaign/trash.ts`, lazy route `/c/:id/trash`, `gmGuard`, GM-only nav entry "Trash"): lists deleted page trees newest first with type, subpage count, "Deleted N days ago · purged in N days" (accent colour at 3 days or fewer). **Restore** (no confirm; reloads the sidebar tree; "Open page" link) and **Delete permanently** (native `confirm()` naming the subpage count). Per-row busy state uses `aria-disabled`; focus moves to the next row's button, or the heading when the list empties; 404/400 from a stale row reads as "no longer in the trash" and refreshes the list; other errors show in a `role="alert"` region. Loading, empty and load-error (with Try again, and a way back on 403) states. Phone width: buttons stack at full width.
+- **"Deleted · Undo" toast**: `CampaignStore.deletePage()` counts the subpages, deletes, and sets `undo`; `undoDelete()` restores, reloads the tree and sets a short "Restored" notice. `UndoToast` (`undo-toast.ts`, rendered by `CampaignShell` right after the content section, live region always in the DOM) shows `Deleted "x" and N subpages` with Undo and Dismiss for 10 s; the timer pauses on hover or focus, Esc dismisses, a second delete replaces the first, a failed undo shows a persistent alert with a Trash link. Focus is never moved automatically; after Undo or Dismiss it goes to the main content.
+- **The page delete in the editor no longer asks `confirm()`** (owner decision): the toast and the 30-day trash replace it.
+- Retention: `TRASH_RETENTION_DAYS` (30) is exported from `@cn/shared` and used by the Trash page and by the server's `TRASH_RETENTION_MS`.
+- Review round 1: `deletePage` offers Undo before reloading the tree and clears an old `undoFailed`; `undoDelete` ignores results for an offer that was replaced or a campaign that was left; the editor's Delete is guarded against double clicks (`aria-disabled`) and shows an error when the DELETE fails; Restore and Delete permanently on the Trash page clear a toast that still offers the same page; the stale-row refresh is silent and focus moves after the next render.
+- Dangling `pageLink` (target purged): the editor's `PageLinkView` shows the stored label with the `cn-page-link-missing` class and no link, so it is fine. The read-only block renderer (`blocks/block-view.ts`, `InlineContent`) still renders a purged target as a normal link (to a page that then says not found); left as is, not part of this task.
+- Specs: `trash.spec.ts`, `undo-toast.spec.ts`. Not yet done: browser check at 390px in light and dark, axe run and contrast measurement (Evidence Collector); the e2e is `e2e/trash.spec.ts` (Task M4.5, below).
+- Accessibility round: Dismiss/Esc focus the content container when the page has no focusable heading, Undo waits (up to 1 s) for the restored page's title field, a failed Undo moves focus to the Trash link, the shell adds bottom padding and scroll-padding while a toast is shown so focused elements are not hidden behind it, Trash "Try again" refocuses the heading, busy buttons carry `aria-busy`, and the toast buttons are at least 44px wide on phones.
+
+## Trash e2e (Task M4.5)
+
+- `e2e/trash.spec.ts`, 4 tests, about 4 s, no trace, screenshot or video. Each test builds its own campaign through the API (a page with a unique word, a subpage, a second page with a `pageLink` to it) and unique names: (1) Delete in the editor shows no `confirm()` and the "Deleted ... and 1 subpage" toast, the search misses the page; Undo lands on the page and content, subpage, backlink ("Linked from") and search hit are back; (2) delete, open Trash from the nav, Restore (no confirm, status message, row gone): same checks; (3) Delete permanently: one native confirm naming the title and "1 subpage", the page and subpage answer 404, search misses, the page cannot be opened, the trash is empty; (4) a player (one sign-up through an invite) has no Trash link, `/trash` redirects to the campaign, and the API answers 403.
+- Sign-up budget: the file registers one person, so `pnpm e2e` registers 8 in total (admin 6, players 1, trash 1), exactly the limit of 8 per minute per address. A new test that registers someone must share a person or the suites must be spread out.
+- Runs: the file alone 3 times in a row, each on a fresh data folder: 5/5 (setup plus 4), about 10.7 s each; full `pnpm e2e` 64/64. The Docker image (`E2E_BASE`) was not run for this task.

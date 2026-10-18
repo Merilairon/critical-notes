@@ -27,6 +27,7 @@ import type { PageSearchIndex } from '../reference/page-search';
 import type { PropertyService } from '../services/properties';
 import type { UploadService } from '../services/uploads';
 import { requireUser, type AppEnv } from '../auth/session';
+import { audit } from '../lib/audit';
 import { badRequest, forbidden, notFound, validate } from '../lib/http';
 import type { ReferenceService } from '../reference/service';
 import type { CampaignService } from '../services/campaigns';
@@ -264,6 +265,22 @@ export function campaignRoutes(deps: {
     const restored = pages.restore(campaignId, c.req.param('pageId'));
     campaigns.touch(campaignId);
     return c.json({ restored });
+  });
+
+  /** Deleted page trees (GM only). */
+  app.get('/:campaignId/trash', (c) => {
+    const campaignId = c.req.param('campaignId');
+    campaigns.requireDm(campaignId, uid(c));
+    return c.json({ items: pages.trash(campaignId) });
+  });
+
+  /** Permanently deletes a page that is already in the trash, with the subpages deleted together with it. */
+  app.delete('/:campaignId/pages/:pageId/purge', (c) => {
+    const campaignId = c.req.param('campaignId');
+    campaigns.requireDm(campaignId, uid(c));
+    const purged = pages.purge(campaignId, c.req.param('pageId'));
+    audit('page.purged', { campaignId, pageId: c.req.param('pageId'), actor: uid(c), count: purged.length });
+    return c.json({ purged });
   });
 
   app.get('/:campaignId/pages/:pageId/backlinks', (c) => {

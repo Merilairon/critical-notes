@@ -314,8 +314,9 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 
 ### 5.4 Epic M4: Trash
 
-### [ ] Task M4.1: Trash endpoints
+### [x] Task M4.1: Trash endpoints
 **Owner**: Backend Architect · **QA**: API Tester, Application Security Engineer
+**Done:** 2026-10-18, Code Reviewer PASS, QA API Tester: PASS (real isolated instance: access matrix, nested trees, restore, purge, aged 30-day purge), Application Security Engineer: APPROVED (4 Low). Owner decision: co-DMs may view, restore and purge the trash (same `requireDm` rule as the other DM-only routes). Follow-ups queued as one fix round before M4.2: purge-test search assertions, purge-then-restore test for an earlier-deleted subpage, `start()` guard, MCP-allowlist negative tests for trash and purge (purge stays off the allowlist by design), purger clock-jump sanity check. Noted, not built: purge of a huge trash is one synchronous pass; `encounters.locationPageId` can point at a purged page; the purge route does not touch the campaign; dangling `pageLink` nodes in bodies after purge (check the editor renders them gracefully in M4.3). Design for M4.3: `docs/design/trash-ui.md`.
 **Description**: `GET /api/campaigns/:cid/trash` (deleted page trees: root, subpage count, deleted at), `DELETE /pages/:pid/purge` (permanent), purge of items older than 30 days at start and daily. `POST /pages/:pid/restore` already exists (`PageService.restore`).
 **Acceptance Criteria**:
 - GM only; players get 403; the sentinel crawl includes the trash route
@@ -323,25 +324,29 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 **Files**: `apps/server/src/routes/campaigns.ts`, `services/pages.ts`, `test/visibility.test.ts`
 **Reference**: PRD §8 M4
 
-### [ ] Task M4.2: Templates restore
+### [x] Task M4.2: Templates restore
 **Owner**: Backend Architect · **QA**: API Tester
+**Done:** 2026-10-18, Code Reviewer PASS (+ one tests/docs round), QA API Tester: PASS (real isolated instance: personal and campaign permission matrix, built-ins, extends 409 then parent-first, usage and propagation after restore, campaign default not restored, audit lines, no content to players). Routes: `GET /api/templates/trash[?campaignId=]`, `POST /api/templates/:id/restore`. Side effect to know: `dmCampaignIds` now counts co-DMs, so co-DMs can also list, edit, delete and see usage of campaign templates (consistent with pages; logged in PLAN.md for the Product Manager). Follow-ups: templates are not purged after 30 days (decide whether to); restore checks only the direct `extends` parent; players never see campaign templates at all (pre-existing, worth one line in the PRD/STATUS).
 **Description**: Templates are soft-deleted already (`deletedAt`); add list-deleted and restore for the user's own and campaign templates.
 **Depends on**: M4.1
 
-### [ ] Task M4.3: Trash view and undo
+### [x] Task M4.3: Trash view and undo
 **Owner**: Frontend Developer · **QA**: Evidence Collector
+**Done:** 2026-10-18. Code Reviewer: FAIL (2 blockers: stuck Undo state after a failed Undo; focus lost after a stale row), fixed, then PASS twice. QA Evidence Collector: PASS (browser, design §7 checklist: no confirm on delete, Undo restores subpages/backlinks/search, Trash restore and permanent delete, stale rows, aged items, states, 390px light and dark, dangling link). Accessibility Auditor: partial on the first pass (3 moderate focus defects: Dismiss/Esc and failed Undo dropped focus to BODY; the toast could cover focused elements on short screens), fixed, re-verified PASS (focus targets, cover fraction, `aria-busy`, 44px Dismiss, axe 0 violations in 8 runs at 390px). Owner decision (2026-10-18): page delete has no `confirm()`; Undo plus the 30-day trash replaces it. `TRASH_RETENTION_DAYS` now lives in `@cn/shared`. Follow-ups (not built): the post-Undo wait for the title input is not cancelled on destroy (rare focus steal within ~1 s); the read-only block renderer still shows a purged page link as a normal link; the dice toast and Undo toast may overlap at phone width for ~4 s (not reproduced); focus does not move on route change after an editor delete (by design, app-wide, G1.2); co-DM access of the Trash view was not browser-tested; app-wide issues sent to G1.2/M6.3 (sidebar `listitem`, header overflow at 390px, editor field names). Design: `docs/design/trash-ui.md`.
 **Description**: Campaign "Trash" view (GM only) with Restore and Delete permanently; a toast "Deleted · Undo" after deleting a page.
 **Acceptance Criteria**: restoring brings back subpages, backlinks and search results (checked in the browser)
 **Files**: `apps/web/src/app/campaign/` (new `trash.ts`), `campaign-shell.ts`, `page-editor.ts`
 **Depends on**: M4.1 · **Design**: UX Architect
 
-### [ ] Task M4.4: MCP tools for the trash
+### [x] Task M4.4: MCP tools for the trash
 **Owner**: MCP Builder · **QA**: API Tester
+**Done:** 2026-10-18, Code Reviewer PASS (+ explicit field mapping), QA API Tester: PASS (real /mcp with real tokens: 32 tools = 12 read / 20 write; GM, co-DM, player, outsider, bad ids; delete_page, list_trash, restore_page round trip; purge unreachable over MCP). `list_trash` returns `{id, title, type, icon, subpageCount, deletedAt}` only. `restore_page` and `delete_page` already existed. Follow-up (low, not built): the templates allowlist rule `^/api/templates(/ID)?$` also matches `GET /api/templates/trash`, so `get_template({templateId:"trash"})` would return the caller's own template-trash list (no definitions, only what the caller can edit; harmless, but tighten the rule or add a test if M4.2 routes ever grow).
 **Description**: `list_trash` (read) for the assistant, so it can find what it deleted; allowlist the route.
 **Depends on**: M4.1
 
-### [ ] Task M4.5: Trash tests
+### [x] Task M4.5: Trash tests
 **Owner**: Test Automation Engineer · **QA**: Reality Checker
+**Done:** 2026-10-18, QA Reality Checker: PASS. `e2e/trash.spec.ts` (4 tests: Undo, Restore from Trash, Delete permanently, player has no Trash). Reality Checker's own runs: gate green; `pnpm e2e` 64/64; the spec 5/5 on two extra runs; the spec 5/5 against a Docker image built from the tree (`E2E_BASE`); a mutation that loses subpages on restore fails 2 tests. **Epic M4 certified against PRD §8 M4 with caveats** (no hard blockers): the "restore from the UI with links, backlinks and search intact" criterion is MET; templates have an API only (see D6 in §8). Caveats: the e2e would not notice a missing reindex on restore and never asserts the backlink is absent while trashed (the server test covers both); the full e2e suite uses exactly the 8 sign-ups per minute allowed, so no new spec may register another person without sharing one (M5.3 CI should watch it); no browser test of the co-DM Trash view or at 390px.
 **Description**: `e2e/trash.spec.ts`: delete a page with a subpage → restore from the trash → content, backlinks and search intact; undo toast works.
 **Depends on**: M4.3
 
@@ -633,6 +638,8 @@ The Senior Project Manager breaks these into tasks at the start of their release
 | D5 | What happens to a deleted user's campaigns (transfer or archive) | M2.4 | Identity & Access Engineer | Decided 2026-10-16: option C (admin chooses per owned campaign, transfer pre-selected; archive only with a co-DM; solo campaign can't be orphaned). Also decided: reset link is `/reset#<token>` (deviation from `/reset/:token`, log in PLAN.md at M2.9); `TRUST_PROXY` stays off in the shipped compose; on user delete, shared homebrew sources go to the acting admin, private ones and user templates stay ownerless |
 | B1 | Backup design decisions (backup.md D1-D10): keep 7, API backups protected 7 days and capped at 3x keep, `BACKUP_DIR`, `checksums.json` entry, durable `restore-log.jsonl`; restore revokes tokens/invites and carries over live restrictions; download needs a password ticket; restore is CLI-only; index rebuilt after restore; no encryption in 1.0; scheduler built as M3.5 | M3.2-M3.6 | Database Reliability Engineer, Security Architect | Decided 2026-10-17: all approved as recommended |
 | B2 | Should the shipped `docker-compose.yml` turn scheduled backups on by default (`BACKUP_EVERY_HOURS` default 24)? Recommended yes: the audience are not database people, disk use is bounded by keep 7, and the scheduler is what protects older backups from being rotated out. Bare installs stay off either way | M3.7 | Database Reliability Engineer | Decided 2026-10-18: yes, 24 (the owner said "do M3.7" after the recommendation; reversible by changing one default in `docker-compose.yml`) |
+
+| D6 | Templates in the trash (PRD §8 M4: "templates get the same" as homebrew). M4.2 built the API only (`GET /api/templates/trash`, `POST /api/templates/:id/restore`). Options: (a) accept the API for 1.0 and note it in the README/STATUS; (b) add a small restore list to the template manager UI (one Frontend Developer task, QA Evidence Collector); and separately, purge trashed templates after 30 days like pages or keep them for good. Recommended: (b) for the UI, keep templates unpurged | G1.4 (release certification) | Product Manager | Open |
 
 ### Risks
 | Risk | Impact | Mitigation | Owner |

@@ -59,6 +59,10 @@ beforeAll(async () => {
   await patch('selectedMe', { viewers: [playerId] });
   await create('childOfHidden', { title: 'Cellar', visibility: 'all', parentId: ids['hidden'] });
 
+  // A deleted page: the trash is GM only
+  await create('trashed', { title: 'SENTINEL trashed page', visibility: 'all', body: doc(para('SENTINEL trashed body')) });
+  expect((await dm.delete(`${base()}/pages/${ids['trashed']}`)).status).toBe(200);
+
   const enc = await dm.post(`${base()}/encounters`, { name: 'SENTINEL ambush', creatures: [{ id: 'a', kind: 'custom', name: 'SENTINEL brute', xp: 100 }] });
 
   // A shared page full of things players must not get
@@ -91,6 +95,8 @@ beforeAll(async () => {
   // House rules, a campaign template, a tracker
   await dm.patch(base(), { houseRules: doc(para('Flanking is on.'), para('SENTINEL house secret', { visibility: 'dm' })) });
   await dm.post('/api/templates', { kind: 'block', scope: 'campaign', campaignId, name: 'SENTINEL template', definition: { content: [para('x')] } });
+  const deletedTpl = await dm.post('/api/templates', { kind: 'block', scope: 'campaign', campaignId, name: 'SENTINEL deleted template', definition: { content: [para('x')] } });
+  await dm.delete(`/api/templates/${deletedTpl.body.id}`);
   const tracker = await dm.post(`${base()}/trackers`, {
     name: 'Fight',
     combatants: [
@@ -139,6 +145,10 @@ describe('sentinel crawl: nothing DM-only reaches a player', () => {
       await get(`${base()}/pages/${p.id}/backlinks`);
     }
     for (const type of ['npc', 'pc', 'location', 'generic']) await get(`${base()}/pages?type=${type}`);
+    // The trash is for the GM: players are refused, even for a page that was visible to them
+    expect((await get(`${base()}/trash`)).status).toBe(403);
+    expect((await player.delete(`${base()}/pages/${ids['trashed']}/purge`)).status).toBe(403);
+    expect((await get(`${base()}/pages/${ids['trashed']}`)).status).toBe(404);
     // Pages a player cannot see answer like pages that do not exist
     for (const key of ['hidden', 'selectedOther']) {
       expect((await get(`${base()}/pages/${ids[key]}`)).status).toBe(404);
@@ -168,6 +178,8 @@ describe('sentinel crawl: nothing DM-only reaches a player', () => {
     await get(`/api/reference/kinds/monster?campaignId=${campaignId}`);
     await get(`/api/reference/sources?campaignId=${campaignId}`);
     await get(`/api/templates?campaignId=${campaignId}`);
+    await get('/api/templates/trash');
+    await get(`/api/templates/trash?campaignId=${campaignId}`);
     await get('/api/homebrew/sources');
     // DM-only areas refuse
     for (const path of [`${base()}/encounters`, `${base()}/invites`, `${base()}/trackers/${ids['tracker']}`, `${base()}/template-defaults`, `${base()}/trackers/${ids['tracker']}/events?view=dm`]) {
@@ -201,6 +213,8 @@ describe('sentinel crawl: nothing DM-only reaches a player', () => {
     const templates = await read('list_templates', { campaignId });
     for (const tpl of templates.data as { id: string }[]) await read('get_template', { templateId: tpl.id });
     expect((await read('list_encounters', { campaignId })).isError).toBe(true);
+    const trash = await read('list_trash', { campaignId });
+    expect(trash.isError).toBe(true);
     const tools = (await mcp.listTools()).tools;
     outputs.push(JSON.stringify(tools));
 

@@ -16,6 +16,11 @@ export class CampaignStore {
   readonly pages = signal<PageSummaryDto[]>([]);
   readonly propertyDefs = signal<PropertyDefDto[]>([]);
   readonly members = signal<MemberDto[]>([]);
+  /** The latest page delete, offered as "Deleted · Undo" by the campaign shell. */
+  readonly undo = signal<{ pageId: string; title: string; subpages: number } | null>(null);
+  readonly undoFailed = signal(false);
+  /** Short confirmation text (no button), e.g. after an undo. */
+  readonly toast = signal<string | null>(null);
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
 
@@ -72,6 +77,9 @@ export class CampaignStore {
   }
 
   leave() {
+    this.undo.set(null);
+    this.undoFailed.set(false);
+    this.toast.set(null);
     this.context.campaign.set(null);
   }
 
@@ -92,9 +100,61 @@ export class CampaignStore {
     await this.reloadPages();
   }
 
+  /** Deletes a page tree (recoverable from the trash) and offers "Undo" for UNDO_SECONDS. */
   async deletePage(pageId: string) {
+    const page = this.byId().get(pageId);
+    const subpages = this.countDescendants(pageId);
     await firstValueFrom(this.http.delete(this.base(`/pages/${pageId}`)));
+    // Offer Undo before the reload: the page is gone even if the reload fails
+    this.toast.set(null);
+    this.undoFailed.set(false);
+    if (page) this.undo.set({ pageId, title: page.title, subpages });
     await this.reloadPages();
+  }
+
+  private countDescendants(pageId: string): number {
+    let n = 0;
+    const walk = (id: string, seen: Set<string>) => {
+      for (const c of this.childrenOf().get(id) ?? []) {
+        if (seen.has(c.id)) continue;
+        seen.add(c.id);
+        n++;
+        walk(c.id, seen);
+      }
+    };
+    walk(pageId, new Set([pageId]));
+    return n;
+  }
+
+  /** Restores the most recent delete. Returns the page id, or null when it failed (then `undoFailed` is set). */
+  async undoDelete(): Promise<string | null> {
+    const u = this.undo();
+    const campaignId = this.id();
+    if (!u) return null;
+    const stale = () => this.undo() !== u || this.id() !== campaignId;
+    try {
+      await firstValueFrom(this.http.post(this.base(`/pages/${u.pageId}/restore`), {}));
+      if (this.id() !== campaignId) return u.pageId;
+      await this.reloadPages().catch(() => undefined);
+      if (stale()) return u.pageId;
+      this.undo.set(null);
+      this.undoFailed.set(false);
+      this.toast.set(`Restored "${u.title}"`);
+      return u.pageId;
+    } catch {
+      if (!stale()) this.undoFailed.set(true);
+      return null;
+    }
+  }
+
+  /** The trash page restored or purged this page: a toast still offering it must go. */
+  clearUndoFor(pageId: string) {
+    if (this.undo()?.pageId === pageId) this.dismissUndo();
+  }
+
+  dismissUndo() {
+    this.undo.set(null);
+    this.undoFailed.set(false);
   }
 
   /** Updates a page's summary fields locally after an edit (title, icon, type) without refetching the tree. */

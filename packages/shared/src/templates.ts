@@ -133,6 +133,11 @@ export interface TemplateSummaryDto {
   updatedAt: number;
 }
 
+/** A deleted template in the trash list (no definition). Templates are not purged automatically. */
+export interface TemplateTrashItemDto extends TemplateSummaryDto {
+  deletedAt: number;
+}
+
 export interface TemplateDto extends TemplateSummaryDto {
   definition: Record<string, unknown>;
   /** Variables of the template with its `extends` chain (page templates), ready for a values form. */

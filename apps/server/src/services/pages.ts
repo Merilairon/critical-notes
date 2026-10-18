@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { docLinks, mergePlayerEdit, projectDoc, queryFilterSchema, runQuery, sanitizeDoc, type BlockDocument, type QueryablePage, type QueryFilterInput } from '@cn/blocks';
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { generateKeyBetween } from 'fractional-indexing';
@@ -17,6 +17,7 @@ import {
   type PageSummaryDto,
   type PageType,
   type PageVisibility,
+  type TrashEntryDto,
   type UpdatePageInput,
   type BacklinkDto,
   type QueryRowDto,
@@ -28,6 +29,7 @@ import {
   itemFacets,
   locationFacets,
   npcFacets,
+  pageLinks,
   pages,
   pageTags,
   pageViewers,
@@ -340,7 +342,6 @@ export class PageService {
     this.db.update(npcFacets).set({ statblockUid: uid }).where(eq(npcFacets.statblockHomebrewEntityId, entityId)).run();
   }
 
-  /** Soft-deletes a page and its descendants. Returns the deleted ids. */
   /**
    * Brings back a deleted page and the subpages deleted with it. If its parent is still deleted, it comes
    * back at the top level.
@@ -349,15 +350,7 @@ export class PageService {
     const row = this.db.select().from(pages).where(and(eq(pages.id, pageId), eq(pages.campaignId, campaignId))).get();
     if (!row) throw notFound('Page not found');
     if (row.deletedAt === null) throw badRequest('This page is not deleted');
-    const together = this.db.select({ id: pages.id, parentId: pages.parentId }).from(pages).where(and(eq(pages.campaignId, campaignId), eq(pages.deletedAt, row.deletedAt))).all();
-    const children = new Map<string | null, string[]>();
-    for (const p of together) children.set(p.parentId, [...(children.get(p.parentId) ?? []), p.id]);
-    const ids: string[] = [];
-    const walk = (id: string) => {
-      ids.push(id);
-      for (const c of children.get(id) ?? []) walk(c);
-    };
-    walk(pageId);
+    const ids = this.trashTree(campaignId, pageId, row.deletedAt);
     const parentLive = row.parentId !== null && !!this.db.select({ id: pages.id }).from(pages).where(and(eq(pages.id, row.parentId), isNull(pages.deletedAt))).get();
     this.db.transaction((tx) => {
       tx.update(pages).set({ deletedAt: null, updatedAt: Date.now() }).where(inArray(pages.id, ids)).run();
@@ -370,6 +363,80 @@ export class PageService {
     return ids;
   }
 
+  /** The page and the descendants deleted together with it (same `deletedAt`), parents before children. */
+  private trashTree(campaignId: string, pageId: string, deletedAt: number): string[] {
+    const together = this.db.select({ id: pages.id, parentId: pages.parentId }).from(pages).where(and(eq(pages.campaignId, campaignId), eq(pages.deletedAt, deletedAt))).all();
+    const children = new Map<string | null, string[]>();
+    for (const p of together) children.set(p.parentId, [...(children.get(p.parentId) ?? []), p.id]);
+    const ids: string[] = [];
+    const walk = (id: string) => {
+      ids.push(id);
+      for (const c of children.get(id) ?? []) walk(c);
+    };
+    walk(pageId);
+    return ids;
+  }
+
+  /** Deleted page trees of a campaign, newest first. A root is a deleted page whose parent was not deleted with it. */
+  trash(campaignId: string): TrashEntryDto[] {
+    const rows = this.db
+      .select({ id: pages.id, parentId: pages.parentId, title: pages.title, type: pages.type, icon: pages.icon, deletedAt: pages.deletedAt })
+      .from(pages)
+      .where(and(eq(pages.campaignId, campaignId), isNotNull(pages.deletedAt)))
+      .all();
+    const deletedAtOf = new Map(rows.map((r) => [r.id, r.deletedAt as number]));
+    const children = new Map<string, string[]>();
+    for (const r of rows) {
+      if (r.parentId !== null && deletedAtOf.get(r.parentId) === r.deletedAt) children.set(r.parentId, [...(children.get(r.parentId) ?? []), r.id]);
+    }
+    const count = (id: string): number => (children.get(id) ?? []).reduce((n, c) => n + 1 + count(c), 0);
+    return rows
+      .filter((r) => r.parentId === null || deletedAtOf.get(r.parentId) !== r.deletedAt)
+      .map((r) => ({ id: r.id, title: r.title, type: r.type as PageType, icon: r.icon, subpageCount: count(r.id), deletedAt: r.deletedAt as number }))
+      .sort((a, b) => b.deletedAt - a.deletedAt || a.id.localeCompare(b.id));
+  }
+
+  /** Permanently deletes a page that is already in the trash, with the subpages deleted together with it. Returns the ids. */
+  purge(campaignId: string, pageId: string): string[] {
+    const row = this.db.select({ deletedAt: pages.deletedAt }).from(pages).where(and(eq(pages.id, pageId), eq(pages.campaignId, campaignId))).get();
+    if (!row) throw notFound('Page not found');
+    if (row.deletedAt === null) throw badRequest('Only a deleted page can be purged');
+    const ids = this.trashTree(campaignId, pageId, row.deletedAt);
+    this.purgeIds(ids);
+    return ids;
+  }
+
+  /** The newest `updatedAt` or `deletedAt` of any page (ms; 0 when none): the purger's clock sanity check. */
+  newestActivity(): number {
+    const r = this.db.select({ u: sql<number>`max(${pages.updatedAt})`, d: sql<number>`max(${pages.deletedAt})` }).from(pages).get();
+    return Math.max(r?.u ?? 0, r?.d ?? 0);
+  }
+
+  /** Permanently deletes every page deleted before `cutoff` (ms), in all campaigns. Returns how many. */
+  purgeExpired(cutoff: number): number {
+    const ids = this.db.select({ id: pages.id }).from(pages).where(and(isNotNull(pages.deletedAt), lt(pages.deletedAt, cutoff))).all().map((r) => r.id);
+    this.purgeIds(ids);
+    return ids.length;
+  }
+
+  /**
+   * Hard delete. Foreign keys cascade tags, viewers, facets, outgoing links, entity references, property values, template usage
+   * and loot awards, and null out inventory and facet references. Links FROM other pages TO these ids have no foreign key, so they
+   * go explicitly, and so do the search rows (already removed at soft delete; repeated to be safe). Uploads belong to the
+   * campaign, not to a page, so none is touched: an image used by a purged page stays valid for every page that still shows it.
+   */
+  private purgeIds(ids: string[]) {
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500);
+      this.db.transaction((tx) => {
+        tx.delete(pageLinks).where(inArray(pageLinks.toPageId, chunk)).run();
+        tx.delete(pages).where(inArray(pages.id, chunk)).run();
+      });
+      this.indexer.remove(chunk);
+    }
+  }
+
+  /** Soft-deletes a page and its descendants. Returns the deleted ids. */
   remove(campaignId: string, pageId: string): string[] {
     this.row(campaignId, pageId);
     const all = this.livePages(campaignId);

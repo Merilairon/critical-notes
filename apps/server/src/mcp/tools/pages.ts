@@ -1,7 +1,7 @@
 /** Pages: read as Markdown, create, edit, move, delete and restore; custom properties. */
 import type { BlockDocument } from '@cn/blocks';
 import { docToMarkdown, markdownToDoc } from '@cn/blocks/markdown';
-import { PAGE_TYPES, PROPERTY_TYPES, type PageDto, type PageType, type PropertyDefDto } from '@cn/shared';
+import { PAGE_TYPES, PROPERTY_TYPES, type PageDto, type PageType, type PropertyDefDto, type TrashEntryDto } from '@cn/shared';
 import { z } from 'zod';
 import { ApiError, path } from '../api';
 import { PageDirectory } from '../pages';
@@ -193,6 +193,17 @@ export function pageTools(t: Tools) {
       return { data: { deleted, restoreWith: `restore_page with pageId ${id}` } };
     },
     { destructive: true },
+  );
+
+  t.read(
+    'list_trash',
+    'List deleted pages',
+    'Lists the deleted pages of a campaign that can still be restored, newest first (game masters only; players get an error). Each item is a deleted page with id, title, type, icon, subpageCount (subpages deleted together with it, restored with it) and deletedAt (epoch milliseconds). Titles only, no page text. Deleted pages are removed for good 30 days after deletion. Use the id with restore_page.',
+    z.object({ campaignId }),
+    async ({ campaignId: cid }) => {
+      const { items } = await t.api.get<{ items: TrashEntryDto[] }>(path`/api/campaigns/${cid}/trash`);
+      return { data: items.map(({ id, title, type, icon, subpageCount, deletedAt }) => ({ id, title, type, icon, subpageCount, deletedAt })) };
+    },
   );
 
   t.write(

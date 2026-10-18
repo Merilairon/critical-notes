@@ -80,7 +80,7 @@ All of the following is built and tested (unit, API and browser tests; see [STAT
 | **Encounters and combat** | Encounter builder with difficulty for both editions; initiative tracker (turns, HP, temporary HP, conditions with durations, hidden combatants, keyboard control); a live player screen; ending combat writes the characters' HP back; loot blocks award items and coins to the inventory. |
 | **Inventory** | The party's stash and each character's items and coins; attunement (max 3); unidentified items shown as such to players. |
 | **Players and sharing** | Roles (DM, co-DM, player); invite links with expiry and use limits; members and roles; pages shared with everyone or chosen players; players edit their own character; secrets are removed on the server from every response a player gets. |
-| **AI assistants** | MCP endpoint with personal tokens (read only, or read and write); 31 tools covering pages, encounters, inventory, homebrew and templates; page text as Markdown with lossless edits; the same permissions as the user. |
+| **AI assistants** | MCP endpoint with personal tokens (read only, or read and write); 32 tools covering pages, encounters, inventory, homebrew and templates; page text as Markdown with lossless edits; the same permissions as the user. |
 | **Platform** | Docker image and compose file (non-root, read-only rules data), bundled server build, image uploads cleaned of metadata, SQLite database (Postgres schema ready, not yet usable), README and architecture docs. |
 
 ## 7. Prioritization

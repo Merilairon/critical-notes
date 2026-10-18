@@ -68,6 +68,19 @@ export interface PageSummaryDto {
   updatedAt: number;
 }
 
+/** Days a deleted page stays in the trash before the automatic purge removes it. */
+export const TRASH_RETENTION_DAYS = 30;
+
+/** One deleted page tree in the campaign trash: its root, how many subpages went with it, and when. */
+export interface TrashEntryDto {
+  id: string;
+  title: string;
+  type: PageType;
+  icon: string | null;
+  subpageCount: number;
+  deletedAt: number;
+}
+
 export interface PageDto extends PageSummaryDto {
   campaignId: string;
   cover: string | null;

@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { createTemplateInput, duplicateTemplateInput, TEMPLATE_KINDS, updateTemplateInput, type TemplateKindDto } from '@cn/shared';
 import type { AppEnv } from '../auth/session';
+import { audit } from '../lib/audit';
 import { validate } from '../lib/http';
 import type { TemplateService } from '../services/templates';
 
@@ -26,6 +27,9 @@ export function templateRoutes(templates: TemplateService) {
     });
   });
 
+  /** Deleted templates the user could edit (`?campaignId=` limits to one campaign). Registered before `/:id`. */
+  app.get('/trash', (c) => c.json({ templates: templates.listDeleted(uid(c), { campaignId: c.req.query('campaignId') || null }) }));
+
   app.post('/', validate('json', createTemplateInput), (c) => c.json(templates.create(uid(c), c.req.valid('json')), 201));
 
   /** Export one or more templates (`?ids=a,b`) as a file. */
@@ -48,6 +52,12 @@ export function templateRoutes(templates: TemplateService) {
   app.delete('/:id', (c) => {
     templates.remove(uid(c), c.req.param('id'));
     return c.body(null, 204);
+  });
+
+  app.post('/:id/restore', (c) => {
+    const restored = templates.restore(uid(c), c.req.param('id'));
+    audit('template.restored', { templateId: restored.id, scope: restored.scope, campaignId: restored.campaign?.id ?? null, actor: uid(c) });
+    return c.json(restored);
   });
 
   app.post('/:id/duplicate', validate('json', duplicateTemplateInput), (c) => c.json(templates.duplicate(uid(c), c.req.param('id'), c.req.valid('json')), 201));

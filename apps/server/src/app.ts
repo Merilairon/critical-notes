@@ -41,6 +41,7 @@ import { tokenRoutes } from './routes/tokens';
 import { adminRoutes } from './routes/admin';
 import { backupRoutes } from './routes/backups';
 import { BackupScheduler } from './services/backup-scheduler';
+import { TrashPurger } from './services/trash-purger';
 import { BackupService } from './services/backups';
 import { UserAdminService } from './services/users';
 import { mcpRoutes } from './mcp/route';
@@ -83,7 +84,8 @@ export function createServices({ indexDb, db, config }: AppDeps) {
   const backups = new BackupService({ db, config, hooks });
   // Built here, started by main.ts (off unless BACKUP_EVERY_HOURS is set)
   const backupScheduler = new BackupScheduler({ service: backups, config });
-  return { backups, backupScheduler, userAdmin, apiTokens, visibility, transfer, migration, reference, homebrewIndex, campaigns, pages, homebrew, homebrewTransfer, properties, pageSearch, uploads, templates, encounters, trackers, inventory };
+  const trashPurger = new TrashPurger({ pages, backups, config });
+  return { backups, backupScheduler, trashPurger, userAdmin, apiTokens, visibility, transfer, migration, reference, homebrewIndex, campaigns, pages, homebrew, homebrewTransfer, properties, pageSearch, uploads, templates, encounters, trackers, inventory };
 }
 
 export type Services = ReturnType<typeof createServices>;

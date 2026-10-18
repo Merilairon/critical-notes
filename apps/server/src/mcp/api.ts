@@ -7,8 +7,11 @@ import type { Hono } from 'hono';
 import { internalAuth, type AppEnv, type InternalAuth } from '../auth/session';
 
 const ID = '[^/?#]+';
+// Only the read of the trash (`GET /campaigns/:cid/trash`) is allowed. `DELETE /campaigns/:cid/pages/:pid/purge` is deliberately
+// absent: purge is irreversible, so it never becomes available to assistants.
 const ROUTES: [string, RegExp][] = [
   ['GET', new RegExp(`^/api/campaigns(/${ID}(/(pages|properties|search|members|encounters|inventory)(/${ID})?)?)?$`)],
+  ['GET', new RegExp(`^/api/campaigns/${ID}/trash$`)],
   ['GET', /^\/api\/reference\/(search|autocomplete\/[a-z]+)$/],
   ['GET', new RegExp(`^/api/homebrew/(sources(/${ID}(/entities)?)?|entities/${ID})$`)],
   ['GET', new RegExp(`^/api/templates(/${ID})?$`)],

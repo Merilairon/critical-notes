@@ -85,7 +85,7 @@
         </button>
         <button type="button" class="rounded-md border border-line px-2 py-1 text-muted hover:border-accent" (click)="openApply()">🧩 Apply template</button>
         <button type="button" class="rounded-md border border-line px-2 py-1 text-muted hover:border-accent" (click)="addSubpage()">+ Subpage</button>
-        <button type="button" class="rounded-md border border-line px-2 py-1 text-muted hover:border-accent hover:text-accent" (click)="remove()">Delete</button>
+        <button type="button" class="rounded-md border border-line px-2 py-1 text-muted hover:border-accent hover:text-accent" [attr.aria-disabled]="deleting() || null" [attr.aria-busy]="deleting() || null" (click)="remove()">Delete</button>
       </div>
     </div>
     @if (p.visibility === 'selected') {

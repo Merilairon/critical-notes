@@ -67,6 +67,7 @@ export const routes: Routes = [
           { path: 'p/:pageId', loadComponent: () => import('./campaign/page-editor').then((m) => m.PageEditor) },
           { path: 'reference', children: referenceRoutes },
           { path: 'templates', children: templateRoutes, canActivate: [gmGuard] },
+          { path: 'trash', loadComponent: () => import('./campaign/trash').then((m) => m.CampaignTrash), title: 'Trash', canActivate: [gmGuard] },
         ],
       },
     ],
