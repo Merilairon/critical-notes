@@ -151,6 +151,7 @@ function setups(origin: string, token: string) {
       }
       @if (error()) {<p class="mt-2 text-sm text-accent" role="alert">{{ error() }}</p>}
     </section>
+    @if (version()) {<p class="mt-6 text-xs text-muted">Critical Notes {{ version() }}</p>}
   </div>`,
 })
 export class AccountPage {
@@ -161,6 +162,8 @@ export class AccountPage {
   protected readonly copied = signal<string | null>(null);
   protected readonly busy = signal(false);
   protected readonly error = signal('');
+  /** The server's version from `/api/health`; stays empty if that fails (the line is then hidden). */
+  protected readonly version = signal('');
   protected readonly nameBusy = signal(false);
   protected readonly nameError = signal('');
   protected readonly nameDone = signal('');
@@ -180,6 +183,7 @@ export class AccountPage {
 
   constructor() {
     void this.reload();
+    this.http.get<{ version?: string }>('/api/health').subscribe({ next: (h) => this.version.set(h.version ?? ''), error: () => undefined });
   }
 
   protected async saveName(value: string) {

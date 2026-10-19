@@ -43,6 +43,18 @@ describe('AccountPage', () => {
     expect(el.textContent).toContain('Read and write');
   });
 
+  it('shows the server version from /api/health, small, and hides it when the call fails', async () => {
+    const { fixture, el, http } = await mount([]);
+    http.expectOne('/api/health').flush({ ok: true, version: '1.2.3-dev' });
+    fixture.detectChanges();
+    expect(el.textContent).toContain('Critical Notes 1.2.3-dev');
+    TestBed.resetTestingModule();
+    const second = await mount([]);
+    second.http.expectOne('/api/health').flush('x', { status: 500, statusText: 'err' });
+    second.fixture.detectChanges();
+    expect(second.el.textContent).not.toContain('Critical Notes 1');
+  });
+
   it('lists tokens, marks expired ones and revokes', async () => {
     const { fixture, el, http } = await mount([token('old', { expiresAt: 1, scope: 'read' }), token('new')]);
     expect(el.textContent).toContain('Expired');

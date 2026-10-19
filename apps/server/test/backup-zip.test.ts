@@ -387,6 +387,13 @@ describe('backup zip: manifest', () => {
     await expectRefused(zipFile('j.zip', rawZip(validEntries({ db, uploads: {}, manifest: 'junk' as never }))));
   });
 
+  it('app.version is informational: an older (0.0.0) or newer version of the same format is accepted', async () => {
+    for (const version of ['0.0.0', '1.0.0-dev', '99.1.0']) {
+      const r = await readBackup(zipFile(`v-${version}.zip`, rawZip(validEntries({ db, uploads: {}, manifest: testManifest(db.length, { app: { version } }) }))));
+      expect(r.manifest.app.version).toBe(version);
+    }
+  });
+
   it('a lying manifest can only lower the accepted database size', async () => {
     const path = zipFile('lie.zip', rawZip(validEntries({ db, uploads: {}, manifest: testManifest(db.length - 1) })));
     await expectRefused(path);

@@ -9,6 +9,7 @@ import { requireAdmin, requireUser, originCheck, sessionMiddleware, type AppEnv 
 import type { AppConfig } from './config';
 import type { AppDb } from './db';
 import { HttpError } from './lib/http';
+import { appVersion } from './lib/version';
 import { HomebrewIndex } from './reference/homebrew-index';
 import type { IndexDb } from './reference/index-db';
 import { ReferenceService } from './reference/service';
@@ -122,7 +123,7 @@ export function createApp(deps: AppDeps, services: Services = createServices(dep
   app.use('*', sessionMiddleware(db, config.secureCookies));
   app.use('/api/*', originCheck([config.publicUrl]));
 
-  app.get('/api/health', (c) => c.json({ ok: true }));
+  app.get('/api/health', (c) => c.json({ ok: true, version: appVersion() }));
   app.route('/api/auth/tokens', tokenRoutes(services.apiTokens));
   app.route('/api/auth', authRoutes(db, { secureCookies: config.secureCookies, trustProxy: config.trustProxy, invites: campaigns }));
   app.route('/api/invites', inviteRoutes(campaigns));
