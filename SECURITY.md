@@ -6,7 +6,7 @@ Please report security problems privately. Do not open a public issue, pull requ
 
 - Use the private vulnerability reporting of the host where this repository lives (for example a "Report a
   vulnerability" button under the Security tab), or
-- contact the maintainer directly: **[TODO: maintainer contact address, to be filled in before release]**.
+- contact the maintainer directly: baetens-jan@hotmail.com.
 
 Include what you found, the version or commit, how you installed it (Docker or from source), and the steps to
 reproduce it. Do not include rules content (5etools text or art) or other people's data.
@@ -16,7 +16,7 @@ you in the release notes if you wish.
 
 ## Supported versions
 
-Critical Notes is pre-alpha. Only the latest release (or the latest commit on the main branch, until the
+Critical Notes is alpha. Only the latest release (or the latest commit on the main branch, until the
 first release) receives security fixes.
 
 ## What counts
