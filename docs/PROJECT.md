@@ -400,15 +400,17 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 **Description**: One version source (root `package.json`), returned by `/api/health` and shown in the app footer or Account page; written into backups' manifests.
 **Depends on**: M5.1
 
-### [ ] Task M5.5: Release workflow
+### [x] Task M5.5: Release workflow
 **Owner**: DevOps Automator · **QA**: Reality Checker
+**Done:** 2026-10-19 (local scope), QA Reality Checker: PASS for local scope, NOT yet certified for the full acceptance. Code Reviewer PASS (1 round: README fallback, build stage on the builder platform, env passing). Verified: verify-job logic with fake inputs (tag regex, tag == version, pre-release, tag lists), changelog extraction, actionlint (1 cosmetic SC2034 at release.yml:145), compose config for both file sets, image content/non-root/migrations on start, and (Database Reliability Engineer) update + rollback with local images and a local registry. **Only a real tag push can prove:** linux/arm64 build, GHCR push and attestations, release creation, the in-CI smoke test, and an anonymous pull once the package is public. Cut `v1.0.0-rc.1` first (docs/RELEASE.md). Version policy: tag must equal root `package.json` version. Known gap: no highest-version guard for `latest`.
 **Description**: On tag `v*`: build and push the Docker image to GHCR for `linux/amd64` and `linux/arm64` (home servers, Raspberry Pi), tags `X.Y.Z`, `X.Y`, `latest`; attach release notes from the CHANGELOG.
 **Acceptance Criteria**: `docker compose pull && docker compose up -d` upgrades a running instance; migrations run on start
 **Files**: `.github/workflows/release.yml`, `docker-compose.yml` (use the published image)
 **Depends on**: M5.2, M5.4
 
-### [ ] Task M5.6: Changelog and upgrade notes
+### [x] Task M5.6: Changelog and upgrade notes
 **Owner**: Technical Writer · **QA**: Product Manager
+**Done:** 2026-10-19, QA Product Manager: PASS (1 retry). `CHANGELOG.md`, `docs/RELEASE.md`, README "Updating" (recipes run for real by the Database Reliability Engineer in Docker). The 1.0.0 entry sits under `[Unreleased]`; rename to `[1.0.0] - date` at release (the release job needs it). Open: **D7** (M6 before 1.0 or moved), SECURITY.md contact placeholder and "pre-alpha" wording (on the release gate).
 **Description**: `CHANGELOG.md` (Keep a Changelog), `docs/RELEASE.md` (how to cut a release, the gate checklist), README "Updating" (pin a version, read the changelog, back up first).
 **Depends on**: M5.5
 
