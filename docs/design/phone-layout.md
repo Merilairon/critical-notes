@@ -13,7 +13,7 @@ Design only. No application code changed. Inputs: `docs/qa/phone-audit.md` (M6.1
 | D3 | **Header height is fixed in px, not rem**: 56 px (portrait phones and tablets), 48 px in short landscape. One row, never wraps, at any text size. | The audit measured 159-199 px and up to 483 px at 200 % text. |
 | D4 | **Touch targets are px, text is rem.** Primary actions are at least 44 x 44 CSS px; secondary controls at least 24 px with spacing. Applies to every touch device (`pointer: coarse`) or any width below 640 px, so landscape phones are covered. | Landscape phones are wider than `sm`, so a width-only rule misses them. |
 | D5 | **Form text is 16 px or more on touch** (iOS Safari zooms on focus below 16 px), control height 44 px, shared classes `.cn-input`, `.cn-btn`, `.cn-btn-primary` in `styles.css` instead of copy-pasted utilities. | Audit #10, #11. |
-| D6 | **Lanes, not a pile, for overlays.** The dice log is a popover under the header (never a fixed bottom panel). Dice result toast: top lane under the header on phones, bottom right from `sm`. Undo/notice toast: bottom lane. Nothing else may be `fixed` at the bottom. A new roll never shows a toast while the log is open. | Audit #6; avoids a shared-state stack between the app shell and the campaign shell. |
+| D6 | **Lanes, not a pile, for overlays.** The dice log is a popover under the header (never a fixed bottom panel). Dice result toast: top lane under the header below `lg` (right aligned from `sm`), bottom right from `lg`. Undo/notice toast: bottom lane (bottom left from `sm`). On phones (< `sm`) nothing else may be `fixed` at the bottom. A new roll never shows a toast while the log is open. | Audit #6; avoids a shared-state stack between the app shell and the campaign shell. |
 | D7 | **One z-index scale** (section 2.6). | Audit stacking section. |
 | D8 | **Safe areas:** keep `viewport-fit` at its default (do not add `cover`), add `interactive-widget=resizes-content`, and write `env(safe-area-inset-*)` into the fixed elements anyway (it resolves to 0 today). | See section 2.5. |
 | D9 | Long text wraps inside its box (`overflow-wrap: anywhere`); wide things (tables, statblocks, code) scroll inside their own `overflow-x-auto` wrapper. The page never scrolls sideways. | Audit #12, #13. |
@@ -30,14 +30,16 @@ Tailwind v4 defaults are kept (`sm` 640, `md` 768, `lg` 1024, `xl` 1280). Phone 
 | touch | `pointer: coarse` or width < 640 | `touch:` (custom variant below) | 44 px targets, 16 px form text |
 | short | landscape and height <= 500 px | `short:` (custom variant below) | 48 px header, two-column drawer nav |
 
-Add to `apps/web/src/styles.css` next to the existing `@custom-variant dark`:
+Add to `apps/web/src/styles.css` next to the existing `@custom-variant dark`. Both forms were compiled with the installed Tailwind (4.3.3) in a scratch directory: the variant needs the `or` form (a comma list inside `@custom-variant` compiles to invalid CSS); plain `@media` blocks keep the comma list. Also verified to compile: `px-0!`, `z-35`, `z-45`, `wrap-anywhere`, `h-[56px] short:h-[48px] lg:h-auto`. Note the emitted order is `lg:` before `short:`, so in a window 1024 px or wider and 500 px high or less `short:` wins (a 48 px header on a very flat desktop window: harmless).
 
 ```css
-@custom-variant touch (@media (pointer: coarse), (max-width: 639.98px));
+@custom-variant touch (@media (pointer: coarse) or (max-width: 639.98px));
 @custom-variant short (@media (orientation: landscape) and (max-height: 500px));
 ```
 
 Rules that follow from this:
+
+- `touch:` thresholds are px/media queries (not rem) while `sm:`/`lg:` are rem-based breakpoints; at 200 % browser text size `sm` can therefore trigger later than the 640 px media query used by `touch:` and the shared CSS blocks. This is intended: touch sizes must not depend on text zoom.
 
 - Mobile first: write the phone layout without prefix, add `sm:` / `lg:` for wider. Exception: where the existing code is desktop-first (`max-lg:` on the drawer), leave it.
 - **Phone landscape (844 x 390, 667 x 375)** is `sm` and `md` wide, below `lg`, `touch` and `short`. It gets: sm-style 2-column content, compact header at 48 px, 44 px targets, two-column drawer navigation.
@@ -63,46 +65,45 @@ Use `min-h-[44px] min-w-[44px]` (px) for targets, not `min-h-11` (rem, 2.75rem),
 
 ### 2.2 Shared form and button classes
 
-Replace the per-file utility strings in `auth/*.ts`, `invites/invite-page.ts`, `account/account-page.ts`, `campaigns/campaign-list.ts`, `play/inventory-page.ts`, `campaign/facet-form.ts` and `.cn-prop-input` with these. Plain CSS like the rest of `styles.css` (no `@apply`).
+Replace the per-file utility strings in `auth/*.ts`, `invites/invite-page.ts`, `account/account-page.ts`, `campaigns/campaign-list.ts`, `play/inventory-page.ts`, `campaign/facet-form.ts` with the classes below. Plain CSS like the rest of `styles.css` (no `@apply`), raw tokens (`var(--line)`, `var(--bg)`, `var(--ink)`, `var(--accent)`, `var(--accent-ink)`) as the existing rules use them.
+
+**Edit in place, do not duplicate.** Two rules already exist, unlayered, in `styles.css`: `.cn-prop-input` (line 840) and `.cn-badge` (line 373). Change them where they are:
 
 ```css
-.cn-input, .cn-prop-input {
-  width: 100%;
-  border: 1px solid var(--color-line);
-  border-radius: 0.375rem;
-  background: var(--color-bg);
-  color: var(--color-ink);
-  padding: 0.375rem 0.625rem;
-  font-size: 0.875rem;
-  line-height: 1.4;
+/* line 840: keep the name and add only the touch block; do NOT add width (inventory sets w-24 / w-16 on it) */
+.cn-prop-input { border-radius: 0.375rem; border: 1px solid var(--line); background: var(--bg); padding: 0.25rem 0.5rem; font-size: 0.875rem; }
+/* line 373: .cn-badge font-size 0.68rem -> 0.75rem (12 px floor, audit #15); no touch override needed */
+```
+
+New classes (these three are new, so put them in `@layer components` so Tailwind utilities such as `w-24`, `w-full`, `sm:w-20` win on the same element):
+
+```css
+@layer components {
+  .cn-input { width: 100%; border: 1px solid var(--line); border-radius: 0.375rem; background: var(--bg); color: var(--ink); padding: 0.375rem 0.625rem; font-size: 0.875rem; line-height: 1.4; }
+  .cn-btn, .cn-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; border-radius: 0.375rem; padding: 0.5rem 0.875rem; font-size: 0.875rem; font-weight: 500; }
+  .cn-btn { border: 1px solid var(--line); background: transparent; color: var(--ink); }
+  .cn-btn:hover { border-color: var(--accent); }
+  .cn-btn-primary { background: var(--accent); color: var(--accent-ink); border: 1px solid transparent; }
+  .cn-btn:disabled, .cn-btn-primary:disabled { opacity: 0.6; }
 }
-.cn-btn, .cn-btn-primary {
-  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
-  border-radius: 0.375rem; padding: 0.5rem 0.875rem;
-  font-size: 0.875rem; font-weight: 500;
-}
-.cn-btn { border: 1px solid var(--color-line); background: transparent; color: var(--color-ink); }
-.cn-btn:hover { border-color: var(--color-accent); }
-.cn-btn-primary { background: var(--color-accent); color: var(--color-accent-ink); border: 1px solid transparent; }
-.cn-btn:disabled, .cn-btn-primary:disabled { opacity: 0.6; }
 
 @media (pointer: coarse), (max-width: 639.98px) {
-  .cn-input, .cn-prop-input, select.cn-input, select.cn-prop-input { min-height: 44px; font-size: 1rem; }
+  .cn-input, .cn-prop-input { min-height: 44px; font-size: 1rem; }
   textarea.cn-input { min-height: 5.5rem; }
   .cn-btn, .cn-btn-primary { min-height: 44px; min-width: 44px; font-size: 1rem; }
-  input[type='checkbox'], input[type='radio'] { width: 1.5rem; height: 1.5rem; accent-color: var(--color-accent); }
-  .cn-badge { font-size: 0.75rem; }
+  input[type='checkbox'], input[type='radio'] { width: 1.5rem; height: 1.5rem; accent-color: var(--accent); }
 }
-.cn-badge { font-size: 0.75rem; } /* was 0.68rem = 10.9 px; floor is 12 px everywhere (audit #15) */
 ```
+
+(The media block is unlayered, so it beats layered `.cn-input` rules but not the utilities' own `min-h-*` only if those are layered; do not put `min-h-*` utilities on these classes.)
 
 Details:
 
-- `.cn-prop-input` keeps its name (used by `properties-panel.ts`, `inventory-page.ts`); it inherits the new rule. Put all the `.cn-input`, `.cn-btn` rules above (including the media block) inside `@layer components { ... }`, so Tailwind utilities such as `w-24`, `w-full` or `sm:w-20` on the same element win. (Do not layer the `fieldset:disabled` rule of 6.1.)
-- 16 px applies to `input`, `select`, `textarea` (iOS zooms on all three). The `font-size: 1rem` lives in the `touch` media block; on a desktop browser narrowed to 360 px the width clause makes it 16 px as well, which is fine.
-- Checkboxes and radios: the control is 24 px, the **label** around it is the 44 px target (`<label class="flex min-h-[44px] items-center gap-3">`). Never leave a bare 13 px checkbox (header "Legacy" box, inventory "attuned").
-- Buttons that were `px-2 py-0.5` (Add, Spend, "Add" custom item, "Save name", "Change password", "Leave this campaign", "Sign in", "Create account and join", "Go to sign in", reset submit) become `.cn-btn` or `.cn-btn-primary`. On phone, form submit buttons are `w-full`: `class="cn-btn-primary w-full sm:w-auto"`.
-- Autofill and keyboards: add `inputmode="numeric"` to quantity, coin amount, level and ability score inputs; `autocapitalize="off" autocorrect="off" spellcheck="false"` stays on username and token fields. Leave `type="number"` where it is.
+- `.cn-btn-primary` uses `--accent-ink` on `--accent`, which is correct in both themes. It replaces the `text-white` on an accent background in `properties-panel.ts` (white on the lighter dark-theme accent `#e2735f` is low contrast); M6.4 swaps those buttons for `.cn-btn-primary`.
+- 16 px applies to `input`, `select` and `textarea` (iOS zooms on all three). On a desktop browser narrowed below 640 px the width clause also gives 16 px, which is fine.
+- Checkboxes and radios: the control is 24 px, the **label** around it is the 44 px target (`<label class="flex min-h-[44px] items-center gap-3">`). Never leave a bare 13 px checkbox (the "Legacy"/cross-edition box, inventory "attuned").
+- Buttons that were `px-2 py-0.5` (Add, Spend, custom item "Add", "Save name", "Change password", "Leave this campaign", "Sign in", "Create account and join", "Go to sign in", reset submit) become `.cn-btn` or `.cn-btn-primary`. On phone, form submit buttons are `w-full`: `class="cn-btn-primary w-full sm:w-auto"`.
+- `inputmode="numeric"` on quantity, coin amount, level and ability score inputs; `autocapitalize="off" autocorrect="off" spellcheck="false"` stays on username and token fields. Leave `type="number"`.
 
 ### 2.3 Long text and wide content
 
@@ -138,9 +139,9 @@ Rules, because the audit's header growth (552/736 px documents) came from rem-ba
   - Header: `pt-[env(safe-area-inset-top)] pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]` (with `min-h-[calc(56px+env(safe-area-inset-top))]` if `cover` is ever turned on; today `min-h-[56px]`).
   - Drawer (`aside`): `pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]`.
   - Undo toast and notices: `bottom-[max(0.75rem,env(safe-area-inset-bottom))]`, `left-[max(0.75rem,env(safe-area-inset-left))]`, `right-[max(0.75rem,env(safe-area-inset-right))]`.
-  - Dice toast: top lane `top-[calc(var(--cn-header-h)+0.5rem)]`; bottom lane `bottom-[max(0.75rem,env(safe-area-inset-bottom))]`.
+  - Dice toast: top lane `top-[calc(var(--cn-header-h)+0.5rem)]` below `lg`; from `lg` `bottom-[max(1rem,env(safe-area-inset-bottom))]`.
   - Combat player screen (no header): `pt-[max(1rem,env(safe-area-inset-top))] px-[max(1rem,env(safe-area-inset-left))]`.
-- **`interactive-widget=resizes-content`** makes Android Chrome shrink the layout viewport when the keyboard opens, so the root `h-dvh` column, the editor and the bottom lane fit above the keyboard. iOS Safari ignores the key and keeps its own behaviour (visual viewport scroll). Not testable in desktop emulation; it is a one-attribute change and can be reverted. Owner decision requested (section 9).
+- **`interactive-widget=resizes-content`** makes Android Chrome shrink the layout viewport when the keyboard opens, so the root `h-dvh` column, the editor and the bottom lane fit above the keyboard. iOS Safari ignores the key and keeps its own behaviour (visual viewport scroll). Not testable in desktop emulation; it is a one-attribute change and can be reverted. Decided default Q1 (section 10).
 - Main scroller: add `scroll-pb-24` (scroll-padding-bottom 6rem) so a focused field scrolls clear of toasts and the keyboard edge. The shell already has `scroll-pb-32` while a toast is shown; keep it, and add `pb-[calc(8rem+env(safe-area-inset-bottom))]` there.
 
 ### 2.6 z-index scale
@@ -176,7 +177,7 @@ Compact tier (below `lg`), left to right, **one row, `flex-nowrap`**:
 
 Everything else moves into the app menu, in this order:
 
-1. **Navigate:** Campaigns, Reference, Homebrew, Templates (see open question Q2 about Templates for players).
+1. **Navigate:** Campaigns, Reference, Homebrew, Templates (Templates stays visible to everyone; decided default Q2, section 10).
 2. **Rules:** on campaign pages the line "`<campaign name>` · 2014 rules" as read-only text, then the "Sources…" button, then the cross-edition checkbox row. On other pages: the rules edition `<select>` (16 px, 44 px tall) in a labelled row, then the cross-edition checkbox row, then "Sources…".
 3. **Administration** (only `auth.user()?.isAdmin`): Users, Backups.
 4. **Preferences:** Theme row (button showing "Theme: System / Light / Dark", cycles with the existing `theme.cycle()`).
@@ -184,38 +185,88 @@ Everything else moves into the app menu, in this order:
 
 On `lg` and up the existing inline header is untouched (nav links, search with the `Ctrl K` hint, campaign label, sources, dice, theme, account, sign out). The nav list is one array in `app.ts` (`navLinks`: label, path, `adminOnly`) iterated by both tiers, so the two cannot drift.
 
-### 3.2 Structure and classes
+### 3.2 Full header template, both tiers
+
+One `<header>`; the desktop items and the compact items live in the same row, switched by classes. Rules for what is rendered once and what twice:
+
+- **Rendered once:** brand link, drawer button, campaign-name link, search button, dice button, menu button, and every desktop item (they carry `max-lg:hidden`, the menu button `lg:hidden`).
+- **Rendered twice, from one array:** the navigation links. `app.ts` exposes `navLinks = computed(() => [...])` (`label`, `path`, `adminOnly`, filtered by `auth.user()?.isAdmin`). The desktop `<nav>` loops it always (hidden below `lg` by CSS); the menu panel loops it inside `@if (menuOpen())`. So the menu is the only conditional duplicate and it is absent from the DOM until opened.
+- **jsdom ignores CSS**, so in unit tests the `max-lg:hidden` desktop group is present. `app.spec.ts` queries `a[href="/admin/users"]` with `querySelector` (line 16): with the menu closed in the test there is exactly one match (the desktop nav), as today. Do not render the menu panel by default and do not add a second always-present `/admin/users` link.
 
 ```html
-<header class="relative z-30 flex shrink-0 items-center gap-1 border-b border-line bg-panel
-               min-h-[56px] short:min-h-[48px]
-               pt-[env(safe-area-inset-top)] pr-[max(0.5rem,env(safe-area-inset-right))] pl-[max(0.5rem,env(safe-area-inset-left))]
-               lg:min-h-0 lg:flex-wrap lg:gap-3 lg:px-3 lg:py-2">
-  <!-- 1. only on campaign pages, below lg -->
-  <button type="button" class="cn-hdr-btn lg:hidden" aria-label="Campaign navigation" [attr.aria-expanded]="layout.drawerOpen()" aria-controls="campaign-drawer" (click)="layout.drawerOpen.set(true)"><span aria-hidden="true">☰</span></button>
-  <!-- 2. text slot -->
-  <a routerLink="/" class="min-w-0 flex-1 truncate font-display text-lg font-bold tracking-tight text-accent lg:flex-none">Critical Notes</a>
-  <!-- on campaign pages below lg the text slot is the campaign name instead -->
-  ...
+@if (!bare()) {
+<header
+  class="relative z-30 flex shrink-0 items-center gap-1 overflow-visible border-b border-line bg-panel px-2
+         h-[calc(56px+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] short:h-[calc(48px+env(safe-area-inset-top))]
+         pr-[max(0.5rem,env(safe-area-inset-right))] pl-[max(0.5rem,env(safe-area-inset-left))]
+         lg:h-auto lg:flex-wrap lg:gap-3 lg:px-3 lg:py-2"
+  [attr.inert]="layout.drawerOpen() ? '' : null"
+  (focusout)="onHeaderFocusOut($event)" (keydown.escape)="closePopovers(true)">
+
+  @if (auth.user()) {
+    <!-- drawer button: campaign pages, below lg only -->
+    @if (context.campaign(); as c) {
+      <button type="button" class="cn-hdr-btn lg:hidden" #drawerBtn aria-label="Campaign navigation"
+              aria-controls="campaign-drawer" [attr.aria-expanded]="layout.drawerOpen()"
+              (click)="layout.drawerOpen.set(true)"><span aria-hidden="true">☰</span></button>
+      <!-- compact text slot on campaign pages: the campaign name -->
+      <a [routerLink]="['/c', c.id]" class="min-w-0 flex-1 truncate font-display text-base leading-[24px] font-bold text-accent lg:hidden">{{ c.name }}</a>
+    }
+  }
+  <!-- brand: always on non-campaign pages; on campaign pages only from lg -->
+  <a routerLink="/" class="min-w-0 flex-1 truncate font-display text-lg leading-[24px] font-bold tracking-tight text-accent lg:flex-none"
+     [class.max-lg:hidden]="!!context.campaign() && !!auth.user()">Critical Notes</a>
+
+  @if (auth.user()) {
+    <!-- desktop nav (lg and up): same loop as the menu -->
+    <nav class="items-center gap-1 text-sm max-lg:hidden lg:flex" aria-label="Main">
+      @for (l of navLinks(); track l.path) { <a [routerLink]="l.path" routerLinkActive="bg-panel-2 text-ink" class="rounded px-2 py-1 text-muted hover:text-ink">{{ l.label }}</a> }
+    </nav>
+
+    <div class="ml-auto flex items-center gap-1 lg:flex-wrap lg:gap-2">
+      <!-- search: icon button below lg, the existing labelled button at lg -->
+      <button type="button" class="cn-hdr-btn lg:gap-2 lg:rounded-md lg:border lg:border-line lg:px-2.5 lg:py-1 lg:text-sm" aria-label="Search (Ctrl K)" (click)="paletteOpen.set(true)">
+        <span aria-hidden="true" class="lg:hidden">🔍</span><span class="max-lg:sr-only">Search</span>
+        <kbd class="hidden rounded border border-line px-1 text-xs lg:inline">Ctrl K</kbd>
+      </button>
+      <!-- desktop-only group: today's context label, ruleset select, cross-edition, Sources (unchanged markup) -->
+      <div class="contents max-lg:hidden"> ... existing items ... </div>
+      <button type="button" class="cn-hdr-btn" aria-label="Dice log" aria-controls="dice-log" [attr.aria-expanded]="diceLogOpen()" (click)="toggleDiceLog()"><span aria-hidden="true">🎲</span></button>
+      <!-- desktop-only: theme, account link, sign out (unchanged markup, text buttons) -->
+      <div class="contents max-lg:hidden"> theme button, account link, Sign out </div>
+      <!-- compact: menu button -->
+      <button type="button" class="cn-hdr-btn lg:hidden" #menuBtn aria-label="Menu" aria-controls="app-menu" aria-haspopup="true" [attr.aria-expanded]="menuOpen()" (click)="toggleMenu()"><span aria-hidden="true">⋯</span></button>
+    </div>
+
+    @if (menuOpen()) { <!-- section 3.4 --> }
+    @if (diceLogOpen()) { <!-- section 5.1 --> }
+  } @else {
+    <span class="flex-1"></span>
+    <button type="button" class="cn-hdr-btn" (click)="theme.cycle()" [attr.aria-label]="'Theme: ' + theme.mode()">{{ themeIcon() }}</button>
+  }
 </header>
+}
 ```
 
-with, in `styles.css`:
+(`c` is the `context.campaign()` value; use the real field names of `ContextService`. In a campaign page the drawer button and the name link are only shown below `lg`.) Class notes:
+
+- `contents` plus `max-lg:hidden` on the same element: the media-query rule is emitted later and wins below `lg`; at `lg` and up the group contributes its children to the flex row, so the desktop layout is the current one.
+- **Height is real, not a minimum:** `h-[calc(56px+env(safe-area-inset-top))]` (env is 0 today), `short:h-[...48px...]`, `lg:h-auto`; overflow stays visible so popovers can hang from it. Text inside the row has a **px line-height** (`leading-[24px]`) and truncates on one line, so 200 % text cannot make the row taller. Nothing in the row wraps below `lg` (no `flex-wrap`, no multi-line text).
+- **Glyph sizing:** `.cn-hdr-btn` (below) is a 44 x 44 px box with a 20 px glyph; `aria-hidden` glyph, the button carries `aria-label`. The button keeps its 44 px box in `short` (48 px header leaves 2 px each side, no vertical padding on the row).
+- **Campaign pages at 320:** the brand is absent (the campaign name takes its slot). Home is reachable only through the menu ("Campaigns", which is the list, and `/` redirects there). This is deliberate: there is no room for both at 320.
+- **Drawer open:** the header gets `inert` below `lg` (`layout.drawerOpen()`; the layout service resets `drawerOpen` to false when a `(min-width: 1024px)` media listener matches, so `inert` never sticks on desktop). The shell sets `inert` on `main` as well; only the drawer and its backdrop remain interactive, so focus cannot leave the drawer. On close, un-inert first, then move focus to the ☰ button (`afterNextRender` + `viewChild('drawerBtn')`).
 
 ```css
 .cn-hdr-btn {
-  display: inline-flex; align-items: center; justify-content: center;
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
   min-width: 44px; min-height: 44px; border-radius: 0.375rem;
-  color: var(--color-muted); font-size: 20px; line-height: 1;
+  color: var(--muted); font-size: 20px; line-height: 1;
 }
-.cn-hdr-btn:hover { background: var(--color-panel-2); color: var(--color-ink); }
-.cn-hdr-btn[aria-expanded='true'] { background: var(--color-panel-2); color: var(--color-ink); }
+.cn-hdr-btn:hover, .cn-hdr-btn[aria-expanded='true'] { background: var(--panel-2); color: var(--ink); }
 @media (min-width: 1024px) { .cn-hdr-btn { min-width: 0; min-height: 0; padding: 0.25rem 0.5rem; font-size: 1rem; } }
 ```
 
-Glyphs are 20 px fixed pictograms (not scaled by text zoom, they carry `aria-hidden` and the button has an `aria-label`). Text in the row (brand, campaign name) uses `text-base`/`text-lg` in rem and truncates.
-
-Visible names that must exist (the e2e suite and screen readers rely on them): `Search (Ctrl K)`, `Dice log`, `Theme: <mode>`, link `Campaigns`, `Reference`, `Users` (admin only), button `Sign out`. In the compact tier these live in the menu; in the `lg` tier they are inline. See section 8 for the e2e consequence.
+Names the e2e suite and screen readers rely on: `Search (Ctrl K)`, `Dice log`, `Theme: <mode>`, links `Campaigns`, `Reference`, `Users` (admin only), button `Sign out`. Below `lg` they live in the menu, at `lg` inline. The app `<header>` must not contain an `<h1>`/`<h2>`, nor a button named Create or Delete, nor a `.cn-badge`: `e2e/homebrew.spec.ts` selects `header button` "Create"/"Delete" and `header .cn-badge`, and `e2e/campaign.spec.ts:64` looks for page headings. See section 8.
 
 ### 3.3 Width budget (the proof it fits)
 
@@ -232,12 +283,20 @@ At 200 % text the brand and the name truncate with an ellipsis; buttons keep 44 
 
 ### 3.4 The app menu (disclosure, not a modal)
 
-- Trigger: `<button class="cn-hdr-btn" aria-label="Menu" aria-expanded aria-controls="app-menu"><span aria-hidden="true">⋯</span></button>`.
-- Panel (render with `@if (menuOpen())`; never both a hidden copy and the visible one, so `getByRole` counts stay correct): `<div id="app-menu" class="absolute inset-x-2 top-full z-30 mt-1 max-h-[calc(100dvh-var(--cn-header-h)-0.5rem)] overflow-y-auto rounded-lg border border-line bg-panel p-1 shadow-xl sm:inset-x-auto sm:right-2 sm:w-80">`.
-- Every row: `<a|button class="flex min-h-[44px] w-full items-center gap-3 rounded-md px-3 text-left text-base hover:bg-panel-2">` and the active route row `bg-panel-2 font-semibold text-ink` plus `aria-current="page"`. Group labels: `<h2 class="px-3 pt-2 pb-1 text-xs font-semibold tracking-wide text-muted uppercase">`. Separator `<hr class="my-1 border-line">`.
-- Dismiss: outside tap (a `fixed inset-0 -z-10` sibling inside the header's stacking context catches it), `Escape` (focus returns to the trigger), any route change (`NavigationEnd`, already observed in `app.ts`), opening another popover. Opening it moves focus to the first row. There is no focus trap (it is non-modal); the panel also closes when focus leaves the header and the panel together.
-- State: `menuOpen = signal(false)` and `diceLogOpen` in `app.ts`; opening one sets the other to false. Layout state shared with the campaign shell (`drawerOpen`) lives in a small root-provided service (`core/layout.service.ts`, `drawerOpen = signal(false)`), because the shell and the header are siblings, not parent and child.
-- Max height with the keyboard-sized viewport (480 px high): the panel scrolls (`overflow-y-auto`); verify the Sign out row is reachable.
+- Trigger: the `⋯` button of 3.2. Panel (rendered only inside `@if (menuOpen())`): `<div id="app-menu" class="absolute inset-x-2 top-full z-30 mt-1 max-h-[calc(100dvh-var(--cn-header-h)-0.5rem)] overflow-y-auto rounded-lg border border-line bg-panel p-1 shadow-xl sm:inset-x-auto sm:right-2 sm:w-80">`.
+- Rows: `<a|button class="flex min-h-[44px] w-full items-center gap-3 rounded-md px-3 text-left text-base hover:bg-panel-2">`; active route `bg-panel-2 font-semibold text-ink` plus `aria-current="page"`. Separator `<hr class="my-1 border-line">`.
+- **Group labels are not headings** (no `<h2>` inside the header: `e2e/campaign.spec.ts:64` and the audit's heading checks count headings). Use `<div role="group" aria-labelledby="menu-nav">` with `<p id="menu-nav" class="px-3 pt-2 pb-1 text-xs font-semibold tracking-wide text-muted uppercase">Navigate</p>`; same for Rules, Administration, Preferences, Account.
+- Items in order: Navigate (the `navLinks` loop minus the admin ones), Rules, Administration (admin only: Users, Backups), Preferences (Theme row), Account (display name link, Sign out). Admin links are `navLinks` entries with `adminOnly` shown in their own group.
+- **Rules group:** on campaign pages the read-only line "`<campaign name>` · 2014 rules" (wrapping), then the "Sources..." button (closes the menu, opens the panel), then the cross-edition label row (44 px, checkbox 24 px). On other pages: the ruleset `<select class="cn-input">` in a labelled row, then the cross-edition row, then "Sources...". Changing the select or the checkbox keeps the menu open (the user sees the effect and may change more); the OS picker of a native select must not close it, which the focusout rule below guarantees.
+- **Dismiss mechanisms:**
+  - Outside tap: a `fixed inset-0 -z-10` sibling inside the header's stacking context (it sits under the header content, above the page).
+  - `Escape`: `(keydown.escape)` on the header calls `closePopovers(true)`; `true` returns focus to the button that opened it.
+  - Route change: `NavigationEnd` (already observed in `app.ts`).
+  - Opening the other popover, or the drawer, closes it.
+  - **Focus leaving:** `(focusout)` on the `<header>`: close only when `event.relatedTarget` is a `Node` that is **outside** the header. A `null` relatedTarget (iOS/Android native pickers, tapping non-focusable page areas) never closes the menu; the backdrop handles those taps.
+- Opening moves focus to the first row. No focus trap (non-modal). While the drawer is open the whole header is `inert` (3.2).
+- State: `menuOpen` and `diceLogOpen` signals in `app.ts`, mutually exclusive. Drawer state shared with the campaign shell lives in a small root service (`core/layout.service.ts`: `drawerOpen = signal(false)`), because the shell and the header are siblings.
+- With the keyboard-sized viewport (480 px high) the panel scrolls; verify Sign out is reachable.
 
 ### 3.5 Budget summary (M6.3 acceptance numbers)
 
@@ -264,7 +323,7 @@ File: `campaign/campaign-shell.ts`. Fixes audit #3 (drawer rows), #4 (no close c
 - Nav rows: `<a class="flex min-h-[44px] items-center gap-2 rounded px-3 text-base text-muted hover:text-ink lg:min-h-0 lg:px-2 lg:py-1 lg:text-sm">`. In `short` the nav list is two columns: `<nav class="flex flex-col p-2 short:grid short:grid-cols-2 short:gap-x-1">`. Active combat row stays first (it spans both columns: `short:col-span-2`), same 44 px height.
 - "Pages" header row: the "+ New" button gets `cn-hdr-btn`-sized target (`min-h-[44px] min-w-[44px]`) below `lg`. Its menu (`absolute right-0 z-20`) stays `w-48`; items `min-h-[44px]` on touch.
 - Page tree rows (`page-tree.ts`): `min-h-[44px]` on touch for the row link and the expand toggle; indent steps capped so a depth-4 page still leaves 120 px of text at 320 px (indent `pl-3` per level, not `pl-4`).
-- Behaviour: opens with focus on the close button; `Escape` and backdrop tap close it and return focus to the header ☰ button; following a link closes it (already true). While open, `main` gets `inert` (set from the shell's host binding) so Tab does not wander behind the backdrop.
+- Behaviour: opens with focus on the close button; `Escape` and backdrop tap close it and return focus to the header ☰ button; following a link closes it (already true). While open, `main` gets `inert` (shell host binding) and so does the app header (`layout.drawerOpen()` binding in app.html, section 3.2); only the drawer and its backdrop stay reachable, so focus cannot wander. On close the header is un-inerted first, then focus moves to the ☰ button (`afterNextRender`).
 - Safe area: `pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]` on the `aside`; the `fixed inset-0` backdrop is `z-35` and `bg-black/30` (works in both themes).
 - Do not render the drawer's backdrop at `lg` (`lg:hidden`, already).
 
@@ -275,27 +334,26 @@ Files: `app.html`, `app.ts`. Fixes audit #6, #7 (log "clear" button), E7 (Undo/d
 ### 5.1 Lanes
 
 ```
-        phone (< sm)                         sm and up
-+---------------------------+        +----------------------------------------+
-| header 56 px              |        | header                                  |
-+---------------------------+        +----------------------------------------+
-|  [dice toast, top lane]   |        |                                         |
-|  centred, 4 s, no pointer |        |                                         |
-|  ...content...            |        |  ...content...                          |
-|                           |        |                                         |
-| [Undo / notice, bottom]   |        | [Undo toast, bottom left]   [dice toast,|
-+---------------------------+        |  max-w-md                    bottom right]
-                                     +----------------------------------------+
-dice log: popover hanging from the 🎲 button in the header at every width.
+   below lg (phone, tablet, landscape)            lg and up
++---------------------------------+      +--------------------------------------+
+| header 56/48 px                 |      | header                                |
++---------------------------------+      +--------------------------------------+
+| [dice toast, TOP lane]          |      |                                       |
+|  centred < sm, right aligned sm+|      |  ...content...                        |
+|  ...content...                  |      |                                       |
+| [Undo / notice, BOTTOM lane]    |      | [Undo toast, bottom left] [dice toast,|
++---------------------------------+      |                            bottom right]
+dice log: popover hanging from the dice button in the header at every width.
 ```
 
-1. **Dice log** becomes a popover anchored to the header: `<section id="dice-log" aria-label="Dice log" class="absolute right-2 top-full z-30 mt-1 max-h-[min(60dvh,calc(100dvh-var(--cn-header-h)-1rem))] w-[min(20rem,calc(100vw-1rem))] overflow-y-auto rounded-lg border border-line bg-panel p-3 shadow-xl">`. Panel header row: `h2` "Dice log", then two buttons on the right: "Clear" (`cn-btn`, 44 px on touch, `disabled` when empty) and "Close" (`cn-hdr-btn` with `✕`). The list: `<ol role="log" aria-live="polite">`, newest first, rows `flex justify-between gap-3 border-b border-line/60 py-2 text-sm`, the newest row `font-semibold`. Empty state: "Tap or click any dice expression to roll." Dismiss: the 🎲 button, Close, `Escape`, outside tap, route change. The 🎲 button gets `aria-expanded` and `aria-controls="dice-log"`.
-2. **Dice result toast** shows only when the log is closed: `@if (toastVisible() && !diceLogOpen() && dice.latest(); as roll)`. When the log is open, the roll appears as the log's first row (announced by `role="log"`), so there is exactly one live announcement per roll. Position:
-   - phone: `fixed inset-x-3 top-[calc(var(--cn-header-h)+0.5rem)] z-45 mx-auto flex max-w-xs justify-center pointer-events-none` (the inner card keeps `rounded-lg border border-line bg-panel px-4 py-3 shadow-xl`);
-   - `sm` and up: `sm:inset-x-auto sm:top-auto sm:right-[max(1rem,env(safe-area-inset-right))] sm:bottom-[max(1rem,env(safe-area-inset-bottom))] sm:mx-0 sm:max-w-40`.
-   Duration stays 4 s. `role="status" aria-live="polite"` stays.
-3. **Undo/notice toast** (`campaign/undo-toast.ts`): host class `fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-50 sm:right-auto sm:max-w-md sm:left-[max(1rem,env(safe-area-inset-left))]`. It is the only element allowed in the bottom lane on phones. Its buttons are already `min-h-11`; switch them to `min-h-[44px]` for text zoom. At `sm` the Undo toast (max 448 px, starting at 16 px) and the dice toast (max 160 px from the right) never meet (16 + 448 + 160 + 16 = 640).
-4. **Rule for future overlays:** nothing else is `position: fixed` at the bottom edge on a phone. New bottom-edge UI must either join the Undo toast component or use a different edge.
+1. **Dice log** becomes a popover anchored to the header: `<section id="dice-log" aria-label="Dice log" class="absolute right-2 top-full z-30 mt-1 max-h-[min(60dvh,calc(100dvh-var(--cn-header-h)-1rem))] w-[min(20rem,calc(100vw-1rem))] overflow-y-auto rounded-lg border border-line bg-panel p-3 shadow-xl">`. It is a `<section>`, not an `<aside>` any more. (`e2e/homebrew.spec.ts` uses `aside` selectors only for the entity preview; the dice log was an `aside` with `aria-label="Dice log"` and no spec selects it, so nothing breaks. QA: grep the specs for `aside` once more when implementing.) The panel title is a `<p class="font-semibold">`, not a heading (the app header must hold no headings, 3.2). Buttons on the right: "Clear" (`cn-btn`, `disabled` when empty) and "Close" (`cn-hdr-btn` with `✕`, `aria-label="Close dice log"`). The list: `<ol role="log" aria-live="polite">`, newest first, rows `flex justify-between gap-3 border-b border-line/60 py-2 text-sm`, the newest row `font-semibold`. Empty state: "Tap or click any dice expression to roll." Dismiss: the dice button, Close, `Escape`, outside tap, route change, focusout rule of 3.4.
+2. **Dice result toast** shows only when the log is closed: `@if (toastVisible() && !diceLogOpen() && dice.latest(); as roll)`. When the log is open the roll is the log's first row (announced by `role="log"`), so there is one live announcement per roll. Position:
+   - below `lg`: top lane under the header: `fixed inset-x-3 top-[calc(var(--cn-header-h)+0.5rem)] z-45 flex justify-center pointer-events-none sm:inset-x-auto sm:right-[max(0.75rem,env(safe-area-inset-right))] sm:justify-end`;
+   - `lg` and up: `lg:top-auto lg:right-[max(1rem,env(safe-area-inset-right))] lg:bottom-[max(1rem,env(safe-area-inset-bottom))]` (today's place, desktop header height is variable so the top offset is not used there);
+   - the card is `max-w-xs` (below `lg`) / `lg:max-w-40`. `role="status" aria-live="polite"` and the 4 s timer stay.
+3. **Undo/notice toast** (`campaign/undo-toast.ts`): host class `fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-50 sm:right-auto sm:left-[max(1rem,env(safe-area-inset-left))] sm:max-w-md lg:max-w-[min(28rem,calc(100vw-14rem))]`. It is the only element in the bottom lane on a phone (< `sm`). Its buttons switch from `min-h-11` to `min-h-[44px]`.
+4. **Why no overlap, by construction:** below `lg` the two toasts are on different edges. At `lg` and up the Undo toast is capped at `calc(100vw - 14rem)` and the dice toast is at most 10rem plus margins, so even at 200 % text (rem doubles: 28rem cap becomes limited by the `calc`) 16 + 576 + 320 + 16 = 928 < 1024. (The earlier sketch, both toasts at the bottom from `sm`, had a zero gap at exactly 640 px and is dropped.)
+5. **Rule for future overlays:** on a phone (< `sm`) nothing else is `position: fixed` at the bottom edge. New bottom-edge UI joins the Undo toast component or uses another edge.
 
 ### 5.2 Row cleanup in the same change
 
@@ -309,7 +367,7 @@ dice log: popover hanging from the 🎲 button in the header at every width.
 File: `campaign/page-editor.html`.
 
 - **Read-only pages** (`!canEdit()`): replace the title `<input readonly>` with `<h1 class="min-w-0 flex-1 font-display text-3xl font-bold [overflow-wrap:anywhere]">{{ p.title }}</h1>`. A player reads "Odessa Quillfeather, Lantern Keeper" in full on two lines. Use `text-2xl sm:text-3xl` below `sm` so one word of 14 characters still fits at 320 (`Quillfeather,` at 24 px is about 140 px).
-- **Editable titles**: `<textarea rows="1" class="... resize-none overflow-hidden">` with `(keydown.enter)="$event.preventDefault()"` (single-line semantics) and an `autosize(el)` that sets `el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'` on `input`, after first render and when the value is replaced from the server. (`field-sizing: content` is not used because Safari support was not verified.) Same classes as the h1 (`text-2xl sm:text-3xl`, `[overflow-wrap:anywhere]`). Keep `aria-label="Page title"`.
+- **Editable titles**: `<textarea rows="1" class="... resize-none overflow-hidden">` with `(keydown.enter)="$event.preventDefault()"` (single-line semantics) and an `autosize(el)` that sets `el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'`. Run it on `input`, after first render, when the value is replaced from the server, and again whenever the box width or the font changes: a `ResizeObserver` on the textarea (disconnected in `ngOnDestroy`), `document.fonts.ready.then(...)` once, and the `orientationchange`/`resize` that the observer already covers. **Newlines:** strip them on `input` and on `paste` (`el.value = el.value.replace(/[\r\n]+/g, ' ')`; the server title stays single-line), not just on Enter. (`field-sizing: content` is not used because Safari support was not verified.) Same classes as the h1 (`text-2xl sm:text-3xl`, `[overflow-wrap:anywhere]`). Keep `aria-label="Page title"`.
 - **Header row** (icon, title, status): `<header class="flex flex-wrap items-start gap-x-2 gap-y-1">`; icon `w-12 shrink-0`; title `min-w-0 flex-1 basis-40`; the "Saving... / Saved" status becomes `order-last w-full text-xs sm:order-none sm:mt-3 sm:w-auto sm:shrink-0` so it drops below the title on a phone instead of eating 50 px of it.
 - **Body text** (`cn-block-view`, `.cn-prose`): `overflow-wrap: anywhere` from section 2.3 fixes the unbroken-word case (#13). Line height at least `1.6` for body text on touch (check `.cn-prose p`); no horizontal scroll inside paragraphs. Tables and `pre` scroll inside their box (section 2.3). Statblock blocks (`cn-statblock`): wrapper `max-w-full overflow-x-auto` is acceptable (a table-like object is one of the two allowed exceptions), but the block must not widen `main`.
 - **Breadcrumb**: `flex-wrap` already; links `py-2` on touch (`touch:py-2`) to reach about 32 px; breadcrumbs are secondary navigation (24 px minimum plus spacing satisfied by `gap-x-2`).
@@ -320,18 +378,22 @@ File: `campaign/page-editor.html`.
 fieldset:disabled :is(input:not([type='checkbox'], [type='radio']), select, textarea) {
   border-color: transparent;
   background: transparent;
-  color: var(--color-ink);
-  -webkit-text-fill-color: var(--color-ink); /* iOS greys disabled text otherwise */
+  color: var(--ink);
+  -webkit-text-fill-color: var(--ink); /* iOS greys disabled text otherwise */
   opacity: 1;
   appearance: none;          /* hides the select arrow and the number spinner chrome */
   padding-left: 0;
   resize: none;
 }
 fieldset:disabled input[type='checkbox'], fieldset:disabled input[type='radio'] { opacity: 0.6; }
-fieldset:disabled button { display: none; } /* + add class, remove, etc. */
+/* Edit-only controls disappear for readers. Mark them explicitly: "+ add class", class remove, "+ Add property",
+   delete-property. Do NOT hide every button: multi-select chips (<button aria-pressed>) and cn-page-picker must
+   stay visible as read-only values (native disabled look, text colour kept above). */
+fieldset:disabled .cn-edit-only { display: none; }
+fieldset:disabled button[aria-pressed] { opacity: 0.75; }
 ```
 
-  Effect: a player on a shared NPC page sees plain text values (label above, value below, no box), not editable-looking boxes; contrast stays at the ink colour in both themes. Checkboxes and the radio-like pickers stay visible but dimmed. If `facet-form`/`properties-panel` use `aria-disabled` or custom components, give those the same treatment via the `fieldset:disabled` ancestor. Empty values show an en dash via `:placeholder-shown`-free approach: render `-` text in the template when a read-only value is empty (`!canEdit() && !value`), not CSS.
+  Effect: a player on a shared NPC page sees plain text values (label above, value below, no box), not editable-looking boxes; contrast stays at the ink colour in both themes. Checkboxes, radio-like pickers and the multi-select chips stay visible but dimmed. If `facet-form`/`properties-panel` use `aria-disabled` or custom components, give those the same treatment via the `fieldset:disabled` ancestor. Empty values show an en dash via `:placeholder-shown`-free approach: render `-` text in the template when a read-only value is empty (`!canEdit() && !value`), not CSS.
 
 ### 6.2 Own character page: stacking of the sheet and properties (audit #8, E2 landscape, keyboard)
 
@@ -341,15 +403,15 @@ Target: with sheet and properties **collapsed**, the editor starts within the fi
 
 Phone order (top to bottom): breadcrumb, title row, status, GM toolbar (GM only), **Sheet** `<details>`, **Properties** `<details>`, body (editor or reader), subpages.
 
-1. **Sheet** (`facet-form`, currently an always-open fieldset): wrap in `<details class="mt-3 rounded-xl border border-line bg-panel" [open]="sheetOpen()" (toggle)="sheetOpen.set($any($event.target).open)">`. `sheetOpen` starts as `matchMedia('(min-width: 640px)').matches` (open on `sm` and up, closed on phone), user choice kept for the page in the signal. `<summary class="flex min-h-[44px] cursor-pointer items-center justify-between gap-3 px-3 text-sm">`: left "Character sheet" (for other types: "Details"), right a one-line read-only digest for PC pages, `HP 24/31 · AC 16 · Speed 30 ft` built from the facet value (`text-muted`, `truncate`; hidden when a key is missing). The disabled `<fieldset>` stays inside the `<details>`.
+1. **Sheet** (`facet-form`, currently an always-open fieldset): wrap in `<details class="mt-3 rounded-xl border border-line bg-panel" [open]="sheetOpen()" (toggle)="sheetOpen.set($any($event.target).open)">`. The `<details>` is `[open]="isSm() || sheetOpen()"`, where `isSm` is a `matchMedia('(min-width: 640px)')` signal and `sheetOpen` is the user's choice on a phone (starts false, kept in the signal for the page). **At `sm` and up the summary is hidden (`sm:hidden`) and the sheet is always open: the desktop view is unchanged except for the two-column grid below.** `<summary class="flex min-h-[44px] cursor-pointer items-center justify-between gap-3 px-3 text-sm sm:hidden">`: left "Character sheet" (for other types: "Details"), right a one-line read-only digest for PC pages, `HP 24/31 · AC 16 · Speed 30 ft` built from the facet value (`text-muted`, `truncate` on the digest only; hidden when a key is missing). The disabled `<fieldset>` stays inside the `<details>`.
 2. **Inside the sheet**, layout rules for `facet-form` (replace `grid gap-x-4 gap-y-2 sm:grid-cols-2`):
    - container `grid grid-cols-2 gap-x-3 gap-y-3 sm:grid-cols-3`;
    - `text`, `select`, `longtext` fields (player, species, background...): `col-span-2 sm:col-span-1` for short text, `col-span-full` for `longtext`;
    - `number`, `date`, `boolean` fields (HP, temp HP, AC, speed, passive perception, inspiration): one cell, so two per row on a phone; the inspiration checkbox is a 44 px label row;
    - all inputs `.cn-input` (44 px, 16 px text);
    - ability scores: keep `grid-cols-3 sm:grid-cols-6`; each cell `text-center`, input `.cn-input text-center`, label `block text-xs font-semibold uppercase`; `inputmode="numeric"`;
-   - classes: row `grid grid-cols-[minmax(0,1fr)_4.5rem_44px] items-center gap-2`, class name and level and the remove button on line one, subclass on line two (`col-span-3`); "+ add class" is `cn-btn w-full sm:w-auto`.
-3. **Properties** (`<details>` already there, closed by default; keep). Row layout in `properties-panel.ts` (`grid gap-2 sm:grid-cols-[10rem_1fr]`): the label stacks above the value on phone (already single column below `sm`), label `text-sm` (not `text-xs`), delete (`✕`) at 44 px with `touch:opacity-100` (the `opacity-40` hover reveal does not exist on touch). Multi-select chips `rounded-full border px-3 py-2 text-sm` (44 px high on touch, via `touch:min-h-[44px]`). "Open" links `min-h-[44px] inline-flex items-center`.
+   - classes: row `grid grid-cols-[minmax(0,1fr)_minmax(56px,72px)_44px] items-center gap-2` (px/minmax, so the level box stays usable at any text size), class name and level and the remove button on line one, subclass on line two (`col-span-3`); "+ add class" is `cn-btn w-full sm:w-auto`.
+3. **Properties** (`<details>` already there, closed by default; keep; `<summary class="flex min-h-[44px] cursor-pointer items-center text-sm text-muted">`). **Property labels** in `properties-panel.ts` lose `truncate` and `[title]` (a clipped label hides what the field is): `[overflow-wrap:anywhere]` and wrap. "+ add class", the class remove `✕`, "+ Add property" and the delete-property `✕` get the `cn-edit-only` class (6.1). Row layout in `properties-panel.ts` (`grid gap-2 sm:grid-cols-[10rem_1fr]`): the label stacks above the value on phone (already single column below `sm`), label `text-sm` (not `text-xs`), delete (`✕`) at 44 px with `touch:opacity-100` (the `opacity-40` hover reveal does not exist on touch). Multi-select chips `rounded-full border px-3 py-2 text-sm` (44 px high on touch, via `touch:min-h-[44px]`). "Open" links `min-h-[44px] inline-flex items-center`.
 4. **Editor with the keyboard open:** with `interactive-widget=resizes-content` (2.5) the 56 px header plus the sheet and properties summaries leave about 480 - 56 = 424 px for the editor at the audit's keyboard-sized viewport. The slash menu `.cn-suggest` becomes `width: min(20rem, calc(100vw - 1rem)); max-height: min(20rem, 50dvh);` with items `min-height: 44px` on touch, and stays at z 60 (it may cover the header; accepted by the audit).
 
 ### 6.3 Inventory as cards (audit #9, E1 part)
@@ -367,14 +429,14 @@ File: `play/inventory-page.ts`. One data-driven list for all widths, no duplicat
       <a|span class="font-semibold [overflow-wrap:anywhere]">{{ it.name }}</a> <!-- never truncated -->
       <!-- (unidentified) badge, "from <session>" link: text-xs text-muted, wrap -->
     </div>
-    @if (canEditItem) { <button class="cn-btn shrink-0 !px-0" aria-label="Remove {{ it.name }}">✕</button> }
+    @if (canEditItem) { <button class="cn-btn shrink-0 px-0! w-[44px]" [attr.aria-label]="'Remove ' + it.name">✕</button> }
   </div>
   @if (canEditItem) {
     <div class="mt-2 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-      <label class="flex items-center gap-2 text-sm">Qty <input type="number" inputmode="numeric" class="cn-input w-full sm:w-20"></label>
-      <label class="flex min-h-[44px] items-center gap-3 text-sm"><input type="checkbox"> Attuned</label>
-      <!-- GM only --> <label class="flex min-h-[44px] items-center gap-3 text-sm"><input type="checkbox"> Identified</label>
-      <label class="col-span-2 flex flex-col gap-1 text-sm sm:flex-row sm:items-center">Give to <select class="cn-input sm:w-auto">...</select></label>
+      <label class="flex items-center gap-2 text-sm">Qty <input type="number" inputmode="numeric" class="cn-input w-full sm:w-20" [attr.aria-label]="'Quantity of ' + it.name"></label>
+      <label class="flex min-h-[44px] items-center gap-3 text-sm"><input type="checkbox" [attr.aria-label]="it.name + ' attuned'"> Attuned</label>
+      <!-- GM only --> <label class="flex min-h-[44px] items-center gap-3 text-sm"><input type="checkbox" [attr.aria-label]="it.name + ' identified'"> Identified</label>
+      <label class="col-span-2 flex flex-col gap-1 text-sm sm:flex-row sm:items-center">Give to <select class="cn-input sm:w-auto" [attr.aria-label]="'Give ' + it.name + ' to'">...</select></label>
     </div>
   } @else {
     <p class="mt-1 text-sm text-muted">×{{ it.quantity }}{{ it.attuned ? ' · attuned' : '' }}</p>
@@ -382,7 +444,7 @@ File: `play/inventory-page.ts`. One data-driven list for all widths, no duplicat
 </li>
 ```
 
-  The remove button (about 44 x 44) keeps its `aria-label`. Empty state `<li class="py-2 text-muted">Nothing yet.</li>`. At `sm` and up the same markup renders as a compact wrapping row, so the DM does not lose density; if the DM wants the old table back at `lg` it is a follow-up, not in scope.
+  All item controls keep item-specific accessible names (`Quantity of {name}`, `{name} attuned`, `{name} identified`, `Give {name} to`, `Remove {name}`); the visible words (Qty, Attuned, Identified, Give to) are contained in them. The remove button is an explicit 44 x 44 `cn-btn` (`px-0! w-[44px]`). Empty state `<li class="py-2 text-muted">Nothing yet.</li>`. At `sm` and up the same markup renders as a compact wrapping row, so the DM does not lose density; if the DM wants the old table back at `lg` it is a follow-up, not in scope.
 - **Add item:** `+ Item` is `cn-btn w-full sm:w-auto`. The picker/custom row `grid gap-2 sm:grid-cols-[1fr_auto]`; custom item form `flex gap-2` with input `min-w-0 flex-1` and a `cn-btn` "Add".
 - The card never exceeds the section's border (`min-w-0` on every flex child; the 388-vs-360 style overflow came from non-shrinking cells).
 - Landscape: sections are full width, items wrap into 2 columns automatically; no extra rule.
@@ -410,23 +472,20 @@ Files: `auth/*.ts`, `invites/invite-page.ts`, `account/account-page.ts`. Rule on
 
 Files: `styles.css` (`.cn-roll`, line 298), `reference/render/roll.ts`, `reference/render/entry.html`.
 
-Inline dice sit in running text; a 44 px high inline box would blow up line height. Use an invisible enlarged hit area instead:
+Inline dice sit in running text; a 44 px high inline box would blow up line height. Use a modest invisible hit area, and be honest about the limit: a pseudo-element with `position: absolute` is a positioned box, so it **paints above non-positioned neighbours** (links, other text on the adjacent lines) and steals their taps in the overlap. "Later element wins" is not true here.
 
 ```css
-.cn-roll { position: relative; }
+.cn-roll { position: relative; }            /* required: the ::after is positioned against the roll */
 @media (pointer: coarse), (max-width: 639.98px) {
-  .cn-roll::after {
-    content: ''; position: absolute;
-    inset: -10px -6px;            /* at 16 px text and line-height 1.6 this reaches 44 px tall */
-  }
-  .cn-prose { line-height: 1.7; } /* gives neighbouring hit areas room; overlaps resolve to the later element */
+  .cn-roll::after { content: ''; position: absolute; inset: -6px -4px; } /* 16 px text, line-height 1.7: about 39 px tall */
+  .cn-prose { line-height: 1.7; }
 }
 ```
 
-- The visible look stays (dotted underline). The role/tabindex/keyboard handlers in `roll.ts` stay.
-- Two rolls on adjacent lines overlap by a few px; that is acceptable (the lower line wins). Two rolls on the **same line** keep at least `0.5em` between them (the surrounding text provides it); do not remove spacing in `{@damage}` strings.
-- Roll **buttons** that stand alone (the "🎲 roll d6" on roll tables in `entry.html`, the statblock's attack/damage rolls if rendered as separate chips) are real buttons: add `.cn-btn` (44 px on touch).
-- The result: the audit's 59 x 18 px target is now 71 x 44 for the hit area. QA cannot see a pseudo-element in `getBoundingClientRect()`: use the `elementFromPoint` check of section 7 or `page.touchscreen.tap` at the offsets.
+- Inline dice in prose are *inline targets*: they reach about 39 x 28 to 71 px with the pseudo-element, which satisfies WCAG 2.5.8 (24 px, inline exception) and is more than the audit's 59 x 18 px, but not the 44 px of a primary action. The audit's tap criterion is therefore amended here: **standalone roll controls are 44 px, inline dice in prose are at least 24 px high with the 6 px expansion**. Do not push the expansion above 6 px: it would cover `.cn-link` neighbours on the lines above and below.
+- The visible look stays (dotted underline). Role, tabindex and keyboard handlers in `roll.ts` stay (the host is `display: contents`; the `.cn-roll` span carries the class).
+- Roll **buttons** that stand alone (the "🎲 roll d6" on roll tables in `entry.html`, attack/damage chips if rendered separately) are real buttons: add `.cn-btn` (44 px on touch).
+- QA cannot see a pseudo-element in `getBoundingClientRect()`: use `elementFromPoint` 10 px above and below the centre of the roll's text (section 9.6), and check that a link on the neighbouring line is still the element at its own centre.
 
 ### 6.7 Combat player screen: the way back (audit #14)
 
@@ -444,11 +503,11 @@ All 16 audit issues plus the extra findings of the second run. "Owner" is the ta
 | # | Issue (severity) | Pattern | Owner | What changes (exact) |
 |---|---|---|---|---|
 | 1 | Header overflows 8 px at 360 (High) | A | M6.3 | One-row compact header, worst case 304 px of content at 320 (section 3.3); nav moves into the menu. No flex-wrap, `min-w-0` text slot. |
-| 2 | Header 159-199 px tall; templates link for players (High) | A | M6.3 | 56 px portrait, 48 px short landscape (px, section 3.5). Templates shown to players: Q2. |
+| 2 | Header 159-199 px tall; templates link for players (High) | A | M6.3 | 56 px portrait, 48 px short landscape (px, section 3.5). Templates stays shown to players (default Q2, section 10). |
 | 3 | Header/nav/drawer targets 28-32 px (Med) | A, B, 2.2 | M6.3 | `cn-hdr-btn` 44 x 44; menu rows `min-h-[44px]`; drawer rows `min-h-[44px]`; "All campaigns" and campaign name row; "Legacy" checkbox becomes a 44 px label row in the menu. |
 | 4 | Drawer has no close control (Low) | B | M6.3 | Close button in the drawer top, `Escape`, backdrop tap, focus return. |
 | 5 | Campaigns list buttons run past 360 (Med) | D 6.4 | M6.4 | `flex-wrap` title row, buttons `max-sm:flex-1`. Not fixed by M6.3 (the 388 px comes from `main`). |
-| 6 | Dice toast covers dice log (Med) | C | M6.3 | Log is a popover under the header; toast hidden while the log is open; lanes top/bottom on phone, bottom left/right from `sm`. |
+| 6 | Dice toast covers dice log (Med) | C | M6.3 | Log is a popover under the header; toast hidden while the log is open; dice toast in the top lane and Undo toast in the bottom lane below `lg`, bottom right/left from `lg`. |
 | 7 | Dice targets 59 x 18, "clear" 27 x 16 (Med) | D 6.6, C | M6.4 (inline, standalone roll buttons), M6.3 (log "Clear"/"Close" in the popover) | `.cn-roll::after` hit area; `.cn-btn` for roll buttons; 44 px log controls. |
 | 8 | Own character page stacks 11+ fields, editor far down, keyboard (Med) | D 6.2 | M6.4 | Collapsible Sheet and Properties on phone, digest line, two-column number fields, `interactive-widget`, 16 px inputs. |
 | 9 | Inventory controls small and cramped (Med) | D 6.3 | M6.4 | Cards instead of table, 44 px buttons and checkbox labels, coin grid, `min-w-0` everywhere. |
@@ -465,19 +524,21 @@ All 16 audit issues plus the extra findings of the second run. "Owner" is the ta
 | E4 | axe: `list`/`listitem` on shared page (serious) | none (not layout) | G1.2 as the audit says; M6.3 may fix it if the offender is the drawer's page tree | Not part of the phone patterns. |
 | E5 | axe: `aria-input-field-name` on own character page (serious) | none | G1.2; M6.4 if it is the editor/title control touched in 6.1 | Keep `aria-label="Page title"` on the textarea; name every new input (inventory `aria-label`s stay). |
 | E6 | Admin header overflows 35 px at 390 (Users link) | A | M6.3 | `Users` and `Backups` live in the menu's Administration group; `cn-admin-nav` in the page body is unchanged. |
-| E7 | Dice toast and Undo toast may overlap for ~4 s (not reproduced) | C | M6.3 | Different lanes by construction (section 5.1). |
+| E7 | Dice toast and Undo toast may overlap for ~4 s (not reproduced) | C | M6.3 | Different edges below `lg`, capped widths at `lg`+ (section 5.1). |
 | E8 | Safe areas not handled | 2.5 | M6.3 | `env()` padding on header/drawer/toasts; no `viewport-fit=cover`. |
 
 ## 8. Conflicts with existing screens and tests
 
 | Where | Conflict | Handling |
 |---|---|---|
-| Admin pages (`admin/users-page.ts`, `backups-page.ts`) | The `Users` link was the 35 px overflow. `AdminNav` (Users/Backups tabs in the page body) duplicates the menu group. Dialogs are `z-50` (step-up, delete, reset-link). | Keep `AdminNav`. Menu group "Administration" adds Users and Backups. Move the admin dialogs to `z-60`. The deferred "pin the dialog footer at 390 px" follow-up is out of scope here. Admin tables and dialogs are not re-audited; M6.3 QA still runs the overflow check on `/admin/users` and `/admin/backups` (section 9). |
+| Admin pages (`admin/users-page.ts`, `backups-page.ts`) | The `Users` link was the 35 px overflow. `AdminNav` (Users/Backups tabs in the page body) duplicates the menu group. Verified in the code: the only admin overlay with its own `fixed ... z-50` is `step-up-dialog.ts`; `delete-dialog.ts` and `reset-link-dialog.ts` render inside it (slots), so one change covers all three. | Keep `AdminNav`. Menu group "Administration" adds Users and Backups. Move `step-up-dialog` to `z-60`. The deferred "pin the dialog footer at 390 px" follow-up is out of scope here. Admin tables and dialogs are not re-audited; M6.3 QA still runs the overflow check on `/admin/users` and `/admin/backups` (section 9). |
 | DM views (encounters, tracker page, encounter builder, reference browser, templates, trash, settings) | They are desktop-first; the header change does not touch their `main` content. Sticky bars inside `main` (`tracker-page` `z-10`, `reference-list` `z-20`) scroll under the header only inside the scroller, header is outside it. | No change required. Their requirement is "no sideways page scroll at 360 and 320 once the header no longer causes it"; they are not re-laid-out. |
 | `e2e/*.spec.ts` | Run at 1440 x 1000 (`lg` tier). `admin.spec.ts` expects the `Users` link absent for non-admins; `campaign.spec.ts:77` clicks `Sign out`; `combat.spec.ts:63` expects no `header` containing "Sign out" on the table screen. | At 1440 the desktop tier is unchanged, so these pass. The app menu panel is rendered only when open, never as a hidden duplicate, so `getByRole` counts stay right. The combat back link must not be in a `<header>`. M6.5's phone project must open the menu before clicking "Sign out". |
+| `e2e/homebrew.spec.ts`, `e2e/campaign.spec.ts` | `homebrew.spec` selects `header button` "Create"/"Delete" and `header .cn-badge` (lines 41, 123, 129: that is the page-level `<header>` of the homebrew editor). `campaign.spec.ts:64` looks for headings. The dice log was an `aside`; `homebrew.spec` uses `aside` only for the entity preview (lines 39, 40, 70), so turning the log into a `<section>` breaks nothing. | The **app** `<header>` must never gain a button named Create/Delete, a `.cn-badge` or any `h1`/`h2` (menu group labels are `role="group"` + `<p>`, 3.4). Re-grep the specs for `aside` and `header` when implementing. |
 | Command palette (`Ctrl K`) | Search button changes from text to icon below `lg`. | Same handler (`paletteOpen.set(true)`), same accessible name `Search (Ctrl K)`. |
 | `bare()` routes (combat player view) | No header. | Unchanged; its own back link (6.7). |
 | Campaign shell `pb-32` under a toast | Header change does not alter it. | Keep; add the safe-area term. |
+| Unit tests (jsdom) | CSS is ignored, so `max-lg:hidden`/`lg:hidden` groups are all present. `app.spec.ts:16` queries `a[href="/admin/users"]`. | Menu panel only in the DOM when open (3.2): one match as today. |
 | `.cn-block-menu` (z 50), `.cn-suggest` (z 60) | Header becomes z 30, so both stay above it. | None. |
 | Tailwind utilities vs `.cn-input` | Unlayered CSS beats utilities. | Put `.cn-input`/`.cn-btn` in `@layer components`; the `fieldset:disabled` rule stays unlayered on purpose. |
 
@@ -527,22 +588,23 @@ Pass: on the header (closed and with the menu open), the drawer (open), the dice
 
 ### 9.5 Overlays and stacking (M6.3)
 
-1. Roll a die while the log is closed: toast `bottom` lane at `>= sm`, top lane under the header at < `sm`; toast rect does not intersect the header rect or the Undo toast rect; toast disappears after about 4 s.
+1. Roll a die while the log is closed: toast in the top lane under the header below `lg` (right aligned from `sm`), bottom right at `lg` and up; toast rect does not intersect the header rect or the Undo toast rect; toast disappears after about 4 s.
 2. Open the log, roll: no toast element; the log's first row shows the result; the live region (`role="log"`) contains it.
-3. Delete a page (GM) and roll within the 4 s: Undo toast bottom, dice toast top (phone) or right (`sm`+): rects disjoint.
-4. With drawer open: `document.elementFromPoint` at the header's ☰ button centre returns the backdrop; the drawer's close button is tappable; `Escape` returns focus to the ☰ button.
+3. Delete a page (GM) and roll within the 4 s, at 320, 390, 844 x 390, 1024 and 1280 (also with 200 % text at 1024): Undo toast and dice toast rects are disjoint.
+4. With drawer open: `document.elementFromPoint` at the header's ☰ button centre returns the backdrop; the header and `main` are `inert` (`el.inert === true`); pressing Tab 15 times never focuses an element outside the drawer; the close button is tappable; `Escape` closes it and `document.activeElement` is the ☰ button.
 5. With menu or log open: the item at each row's centre is the row itself (`elementFromPoint`), the dice toast is below them; opening the log closes the menu and vice versa.
 6. `getComputedStyle().zIndex` of: header 30, drawer backdrop 35, drawer 40, dice toast 45, Undo toast 50, palette/dialogs 60.
-7. Nothing `position: fixed` with `bottom` set exists on a phone except the Undo toast (query all `fixed` elements, assert).
+7. On a phone (< 640 px) nothing `position: fixed` with `bottom` set exists except the Undo toast (query all `fixed` elements, assert).
+8. Menu: with the menu open, open the ruleset select (non-campaign page) and change it: the menu stays open; tapping outside, `Escape`, a route change and tabbing out of the header each close it.
 
 ### 9.6 Content (M6.4)
 
-- Shared NPC page at 320/360/390: the `h1` shows the full title (text not clipped: `scrollWidth <= clientWidth` of the title element), the long unbroken word wraps (no element right edge `> innerWidth`).
+- Shared NPC page at 320/360/390: the `h1` shows the full title (text not clipped: `scrollWidth <= clientWidth` of the title element; the editable title has no newline in its value after pasting `a\nb`), the long unbroken word wraps (no element right edge `> innerWidth`).
 - Own character page at 390: with sheet and properties closed, the top of the editor is `<= 600` px from the document top and the first screen shows the sheet summary row with the digest. Opening the sheet shows number fields two per row; all inputs 44 px and 16 px.
 - Inventory at 320/360/390: no table, items are `<li>` cards, no horizontal overflow, buttons Add/Spend/Remove and the Qty input all `>= 44` px, the attuned label `>= 44` px, the "Wren personal dagger" name fully visible (wrapped, not truncated).
 - Campaigns list at 320 and 360: `main.scrollWidth === main.clientWidth`, both buttons fully inside the viewport.
 - Read-only page (player on a shared NPC): in the details panel no input has a visible border or filled background (`border-top-color` is transparent); text colour contrast against `bg-panel` passes in both themes (axe `color-contrast`, 0 violations).
-- Inline dice: for each `.cn-roll`, `elementFromPoint` at (centre x, centre y - 18) and (centre x, centre y + 18) both return the roll (or its descendant) on the first line of a paragraph; `page.touchscreen.tap` on that point rolls and adds one entry to the log. Standalone roll buttons: bounding box `>= 44` px.
+- Inline dice: for each `.cn-roll`, `elementFromPoint` at (centre x, centre y - 10) and (centre x, centre y + 10) returns the roll (or its descendant) when text above/below is not another roll; a `.cn-link` on the neighbouring line is still the element at its own centre; `page.touchscreen.tap` at the offset rolls and adds one log entry. Standalone roll buttons: bounding box `>= 44` px.
 - Combat player screen at 320/360/390/430 and landscape: no overflow, the "← Campaign" link is first in tab order, `>= 44` px, and navigates to `/c/:id`; no element named `header` containing "Sign out" (existing e2e check).
 - axe-core (wcag2a, wcag2aa, wcag21aa) on the pages above at 390, light and dark: 0 new violations; the two known non-phone findings (E4, E5) are tracked by G1.2 and are not blockers here unless the new markup causes them.
 
@@ -550,17 +612,19 @@ Pass: on the header (closed and with the menu open), the drawer (open), the dice
 
 `pnpm -s typecheck && pnpm -s lint && pnpm -s test` and `pnpm e2e` pass at the desktop viewport (the e2e suite uses 1440 x 1000, section 8). The visibility sentinel tests are unaffected (no data change). Screenshots from QA stay out of the repository (rules text).
 
-## 10. Open questions for the owner
+## 10. Decisions taken by default, and what is still open
 
-| # | Question | Default taken here |
+Defaults below were decided with the owner's delegate on 2026-10-19; the owner may overrule any of them.
+
+| # | Question | Decided default |
 |---|---|---|
-| Q1 | Add `interactive-widget=resizes-content` to the viewport meta (Android keyboard)? It cannot be tested in desktop emulation. | Yes, listed in 2.5; revert if a real device shows a regression. |
-| Q2 | Should "Templates" be hidden from users who are not game master of any campaign (audit #2)? The header does not currently know that without a request. | Keep the link in the menu for everyone until the data is at hand; hiding it needs the campaign roles list. |
-| Q3 | Does `lg` (1024) remain the desktop header breakpoint, so a 1024-1279 window gets the inline header that still wraps to two rows? | Yes (D2); desktop header is out of scope. |
-| Q4 | Landscape phones get the compact header and the drawer, not the desktop layout. Accept that a DM on a landscape phone sees "desktop-first" pages inside a compact shell? | Yes. |
-| Q5 | The editable title becomes an autosizing `textarea` (Enter is blocked). OK, or keep a single-line input and accept truncation for editors only? | Textarea; players reading shared pages get an `h1`. |
-| Q6 | Inventory on `sm` and up also loses the table (cards that wrap into rows). Keep the table at `lg` for the DM? | Cards everywhere; revisit only if the DM objects. |
-| Q7 | Real-device checks are still missing (iOS Safari input zoom, notch, keyboard). Which device(s) does the owner have for the M6.5 manual pass? | Not assumed. |
+| Q1 | Add `interactive-widget=resizes-content` to the viewport meta (Android keyboard)? | **Yes** (section 2.5). One attribute, easy to revert; not testable in desktop emulation. |
+| Q2 | Hide "Templates" from users who are not a GM of any campaign (audit #2)? | **Keep it in the menu for everyone.** Follow-up task (outside M6): role-based hiding once the header has the roles list. |
+| Q3 | Is `lg` (1024) the desktop header breakpoint? | **Yes.** Windows of 1024 to 1279 px keep the inline header, which may still wrap to two rows (out of scope). |
+| Q4 | Do landscape phones get the compact shell? | **Yes** (they are below `lg`). |
+| Q5 | Editable page title as an autosizing `textarea`, readers get an `h1`? | **Yes** (6.1). |
+| Q6 | Inventory cards at all widths for M6.4? | **Yes** (6.3); the DM's table is not kept. |
+| Q7 | Real devices for iOS input zoom, notch and keyboard? | **Unresolved; owner to say.** Until then everything is emulation only: iOS zoom on focus, notch/safe areas and a real on-screen keyboard stay **untested** and are listed as such in the M6.4 and M6.5 results. |
 
 ## 11. Implementation order
 
