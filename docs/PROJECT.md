@@ -374,8 +374,9 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 
 ### 5.5 Epic M5: Release process
 
-### [ ] Task M5.1: Repository and branching
+### [x] Task M5.1: Repository and branching
 **Owner**: Git Workflow Master · **QA**: **Owner (human)**
+**Done:** 2026-10-19, QA owner: approved. History kept (20 commits plus M5), audited clean (no rules content, secrets or co-author lines; every commit signed off); default branch renamed `master` to `main` and pushed by the owner. Branch model in CONTRIBUTING.md.
 **Description**: The first commit (nothing is committed yet), the remote (decision in §8), `main` plus short-lived branches, conventional commits, tags `vX.Y.Z`. Check `.gitignore` keeps `5etools-data/`, `var/`, test output and `e2e/.auth/` out.
 **Acceptance Criteria**: history starts clean; no rules content, no secrets, no co-author lines in any commit
 **Depends on**: M1.3 (license in the first public commit)
@@ -660,7 +661,7 @@ The Senior Project Manager breaks these into tasks at the start of their release
 | ID | Decision | Blocks | Prepared by | Status |
 |---|---|---|---|---|
 | D1 | The project license | M1.3, M5.1 | Product Manager, Legal Compliance Checker | Decided 2026-10-16: Apache-2.0; DCO sign-off, no CLA; copyright `Copyright (c) 2026 Merilairon` |
-| D2 | Where the repository lives (e.g. GitHub, public or private) and its name | M5.1–M5.5 | Git Workflow Master | Open |
+| D2 | Where the repository lives (e.g. GitHub, public or private) and its name | M5.1–M5.5 | Git Workflow Master | Decided 2026-10-19: GitHub `Merilairon/critical-notes`, default branch `main` (pushed); history kept |
 | D3 | Approval of the first commit and of each release | M5.1, G1.4, G2.1 | Reality Checker | Open |
 | D4 | A self-hosted CI runner with a 5etools clone for browser tests | M5.3 | DevOps Automator | Open |
 | D5 | What happens to a deleted user's campaigns (transfer or archive) | M2.4 | Identity & Access Engineer | Decided 2026-10-16: option C (admin chooses per owned campaign, transfer pre-selected; archive only with a co-DM; solo campaign can't be orphaned). Also decided: reset link is `/reset#<token>` (deviation from `/reset/:token`, log in PLAN.md at M2.9); `TRUST_PROXY` stays off in the shipped compose; on user delete, shared homebrew sources go to the acting admin, private ones and user templates stay ownerless |
@@ -668,7 +669,7 @@ The Senior Project Manager breaks these into tasks at the start of their release
 | B2 | Should the shipped `docker-compose.yml` turn scheduled backups on by default (`BACKUP_EVERY_HOURS` default 24)? Recommended yes: the audience are not database people, disk use is bounded by keep 7, and the scheduler is what protects older backups from being rotated out. Bare installs stay off either way | M3.7 | Database Reliability Engineer | Decided 2026-10-18: yes, 24 (the owner said "do M3.7" after the recommendation; reversible by changing one default in `docker-compose.yml`) |
 
 | D6 | Templates in the trash (PRD §8 M4: "templates get the same" as homebrew). M4.2 built the API only (`GET /api/templates/trash`, `POST /api/templates/:id/restore`). Options: (a) accept the API for 1.0 and note it in the README/STATUS; (b) add a small restore list to the template manager UI (one Frontend Developer task, QA Evidence Collector); and separately, purge trashed templates after 30 days like pages or keep them for good. Recommended: (b) for the UI, keep templates unpurged | M4.6, G1.4 | Product Manager | Decided 2026-10-18: add a small restore UI (task M4.6) and purge templates like pages: 30 days, plus Delete permanently (task M4.7) |
-| D7 | M6 (phone-width player and table flows) is PRD P0 "before 1.0". Does it land before the 1.0 tag, or move to 1.0.x or 1.1? If it moves, the PRD release scope changes and the changelog keeps its "not part of this release" paragraph; if it lands, the paragraph is removed before the tag | M6.1-M6.5, M5.6, G1.4 | Product Manager | Open |
+| D7 | M6 (phone-width player and table flows) is PRD P0 "before 1.0". Does it land before the 1.0 tag, or move to 1.0.x or 1.1? If it moves, the PRD release scope changes and the changelog keeps its "not part of this release" paragraph; if it lands, the paragraph is removed before the tag | M6.1-M6.5, M5.6, G1.4 | Product Manager | Decided 2026-10-19: M6 lands before the 1.0 tag (must have). The changelog's "not part of this release" paragraph is removed when M6 is done |
 
 ### Risks
 | Risk | Impact | Mitigation | Owner |
