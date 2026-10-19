@@ -99,6 +99,32 @@ describe('campaign drawer', () => {
   });
 });
 
+describe('drawer focus trap', () => {
+  it('wraps Tab from the last control to the first and Shift+Tab the other way', async () => {
+    const { el, fixture, layout } = await setup();
+    document.body.append(el);
+    layout.compact.set(true);
+    layout.drawerOpen.set(true);
+    fixture.detectChanges();
+    const drawer = el.querySelector<HTMLElement>('#campaign-drawer')!;
+    // jsdom has no layout: give every control a client rect so the trap sees them
+    for (const e of Array.from(drawer.querySelectorAll<HTMLElement>('a[href], button'))) e.getClientRects = () => [{}] as unknown as DOMRectList;
+    const items = Array.from(drawer.querySelectorAll<HTMLElement>('a[href], button:not([disabled])'));
+    const first = items[0]!;
+    const last = items[items.length - 1]!;
+    last.focus();
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    last.dispatchEvent(tab);
+    expect(tab.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(first);
+    const back = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
+    first.dispatchEvent(back);
+    expect(back.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(last);
+    el.remove();
+  });
+});
+
 describe('layout service', () => {
   it('resets the drawer when the window grows past lg', () => {
     let listener: ((e: { matches: boolean }) => void) | undefined;

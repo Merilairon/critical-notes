@@ -132,7 +132,7 @@
     </button>
   </div>
 
-  @if (menuOpen() || diceLogOpen()) {
+  @if (menuOpen()) {
   <div class="fixed inset-0 -z-10" (click)="closePopovers(false)"></div>
   } @if (menuOpen()) {
   <div
@@ -146,6 +146,7 @@
         [routerLink]="l.path"
         routerLinkActive="bg-panel-2 font-semibold text-ink"
         ariaCurrentWhenActive="page"
+        (click)="closePopovers(false)"
         class="flex min-h-[44px] w-full items-center gap-3 rounded-md px-3 text-left text-base hover:bg-panel-2"
         >{{ l.label }}</a
       >
@@ -193,6 +194,7 @@
         [routerLink]="l.path"
         routerLinkActive="bg-panel-2 font-semibold text-ink"
         ariaCurrentWhenActive="page"
+        (click)="closePopovers(false)"
         class="flex min-h-[44px] w-full items-center gap-3 rounded-md px-3 text-left text-base hover:bg-panel-2"
         >{{ l.label }}</a
       >
@@ -216,6 +218,7 @@
         routerLink="/account"
         routerLinkActive="bg-panel-2 font-semibold text-ink"
         ariaCurrentWhenActive="page"
+        (click)="closePopovers(false)"
         class="flex min-h-[44px] w-full items-center gap-3 rounded-md px-3 text-left text-base [overflow-wrap:anywhere] hover:bg-panel-2"
         >{{ auth.user()?.displayName }}</a
       >
@@ -270,8 +273,8 @@
 @if (paletteOpen()) {
 <cn-command-palette (closed)="paletteOpen.set(false)" />
 } @if (sourcesOpen()) {
-<cn-sources-panel (closed)="sourcesOpen.set(false)" />
-} @if (toastVisible() && !diceLogOpen() && dice.latest(); as roll) {
+<cn-sources-panel (closed)="closeSources()" />
+} @if (toastVisible() && !diceLogOpen() && !menuOpen() && dice.latest(); as roll) {
 <div
   class="pointer-events-none fixed inset-x-3 top-[calc(var(--cn-header-h)+0.5rem)] z-45 flex justify-center sm:inset-x-auto sm:right-[max(0.75rem,env(safe-area-inset-right))] sm:justify-end lg:top-auto lg:right-[max(1rem,env(safe-area-inset-right))] lg:bottom-[max(1rem,env(safe-area-inset-bottom))]"
 >

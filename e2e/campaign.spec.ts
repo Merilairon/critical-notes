@@ -44,7 +44,7 @@ test('session log', async () => {
   await page.getByRole('button', { name: '+ Next session' }).click();
   await page.waitForURL(/\/p\//);
   await page.locator('nav[aria-label=Campaign] a', { hasText: 'Sessions' }).click();
-  await expect(page.locator('a', { hasText: 'Session 1' })).toBeVisible();
+  await expect(page.locator('[data-campaign-main] a', { hasText: 'Session 1' })).toBeVisible();
 });
 
 test("the campaign's reference uses its rules", async () => {

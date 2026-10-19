@@ -44,6 +44,8 @@ import { UndoToast } from './undo-toast';
         [attr.role]="layout.compact() ? 'dialog' : null"
         [attr.aria-modal]="layout.compact() ? 'true' : null"
         aria-label="Campaign navigation"
+        (keydown.tab)="trapTab($event, false)"
+        (keydown.shift.tab)="trapTab($event, true)"
       >
         <div class="border-b border-line p-3">
           <div class="flex items-center justify-between gap-2">
@@ -247,6 +249,26 @@ export class CampaignShell implements OnDestroy {
     await Promise.all([this.store.reloadPages(), this.store.reloadProperties()]);
     this.layout.drawerOpen.set(false);
     await this.router.navigate(['/c', this.campaignId(), 'p', page.id]);
+  }
+
+  /** Strict focus trap: Tab from the last control wraps to the first (and Shift+Tab the other way). */
+  protected trapTab(event: Event, back: boolean) {
+    const drawer = document.getElementById('campaign-drawer');
+    if (!this.layout.compact() || !drawer) return;
+    const items = Array.from(drawer.querySelectorAll<HTMLElement>('a[href], button:not([disabled])')).filter(
+      (e) => e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden',
+    );
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (!first || !last) return;
+    const active = document.activeElement;
+    if (back && active === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!back && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   @HostListener('document:keydown.escape', ['$event'])

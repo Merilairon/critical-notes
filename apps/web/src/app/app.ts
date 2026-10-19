@@ -154,12 +154,41 @@ export class App {
    */
   protected onHeaderFocusOut(event: FocusEvent) {
     const next = event.relatedTarget;
-    if (next instanceof Node && !this.header()?.nativeElement.contains(next)) this.closePopovers(false);
+    if (!(next instanceof Node) || this.header()?.nativeElement.contains(next)) return;
+    this.menuOpen.set(false);
+    // The dice log stays open when focus goes to a roll target, and from lg it is non-modal
+    const roll = next instanceof Element && !!next.closest('.cn-roll');
+    if (this.layout.compact() && !roll) this.diceLogOpen.set(false);
   }
+
+  private sourcesFromMenu = false;
 
   protected openSources() {
     this.closePopovers(false);
+    this.sourcesFromMenu = true;
     this.sourcesOpen.set(true);
+  }
+
+  /** Closing the Sources panel opened from the menu returns focus to the Menu button (not BODY). */
+  protected closeSources() {
+    this.sourcesOpen.set(false);
+    if (this.sourcesFromMenu) {
+      this.sourcesFromMenu = false;
+      afterNextRender(() => this.menuBtn()?.nativeElement.focus(), { injector: this.injector });
+    }
+  }
+
+  /**
+   * Below lg a tap outside the header closes the dice log. A dice roll target passes through (it must roll and keep the
+   * log open); from lg the log is non-modal and stays until closed.
+   */
+  @HostListener('document:pointerdown', ['$event'])
+  protected onPointerDown(event: PointerEvent) {
+    if (!this.diceLogOpen() || !this.layout.compact()) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (this.header()?.nativeElement.contains(target) || target.closest('.cn-roll')) return;
+    this.diceLogOpen.set(false);
   }
 
   protected async logout() {

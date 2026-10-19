@@ -14,7 +14,7 @@ import { LayoutService } from './core/layout.service';
 function mount(user: UserDto | null): ComponentFixture<App> {
   TestBed.configureTestingModule({
     providers: [
-      provideRouter([]),
+      provideRouter([{ path: '**', children: [] }]),
       provideHttpClient(),
       provideHttpClientTesting(),
       { provide: AuthService, useValue: { user: signal(user), logout: async () => undefined } },
@@ -218,5 +218,60 @@ describe('header', () => {
     await fixture.whenStable();
     expect(document.activeElement).toBe(button(el, 'Campaign navigation'));
     el.remove();
+  });
+
+  it('keeps the dice log open for a tap on a roll target, closes it for other taps below lg, never closes it on a wide window', () => {
+    const fixture = mount(player);
+    const el = fixture.nativeElement as HTMLElement;
+    document.body.append(el);
+    const roll = document.createElement('span');
+    roll.className = 'cn-roll';
+    const other = document.createElement('div');
+    document.body.append(roll, other);
+    const down = (t: Element) => t.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    const open = () => {
+      if (!el.querySelector('#dice-log')) button(el, 'Dice log')!.click();
+      fixture.detectChanges();
+    };
+    TestBed.inject(LayoutService).compact.set(true);
+    open();
+    down(roll);
+    fixture.detectChanges();
+    expect(el.querySelector('#dice-log')).not.toBeNull();
+    // focus moving to a roll target does not close it either
+    el.querySelector('header')!.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: roll }));
+    fixture.detectChanges();
+    expect(el.querySelector('#dice-log')).not.toBeNull();
+    down(other);
+    fixture.detectChanges();
+    expect(el.querySelector('#dice-log')).toBeNull();
+
+    TestBed.inject(LayoutService).compact.set(false);
+    fixture.detectChanges();
+    open();
+    down(other);
+    el.querySelector('header')!.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: other }));
+    fixture.detectChanges();
+    expect(el.querySelector('#dice-log')).not.toBeNull();
+    el.remove();
+    roll.remove();
+    other.remove();
+  });
+
+  it('hides the dice toast while the menu is open and closes the menu on a tap of a link', async () => {
+    const fixture = mount(player);
+    const el = fixture.nativeElement as HTMLElement;
+    TestBed.inject(DiceService).roll('1d20', 'Test');
+    fixture.detectChanges();
+    expect(el.querySelector('[role="status"]')).not.toBeNull();
+    button(el, 'Menu')!.click();
+    fixture.detectChanges();
+    expect(el.querySelector('[role="status"]')).toBeNull();
+    const link = menu(el)!.querySelector<HTMLAnchorElement>('a')!;
+    link.addEventListener('click', (e) => e.preventDefault());
+    link.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(menu(el)).toBeNull();
   });
 });
