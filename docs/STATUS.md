@@ -506,7 +506,7 @@ Everything in PLAN.md is built. Candidates for what comes next, roughly by value
 
 ## CI for the gate (Task M5.2)
 
-- `.github/workflows/ci.yml`: one job on push to `main` and on every pull request. Node 24.15.0, pnpm from `packageManager` (11.0.9) with the pnpm store cached, then `pnpm install --frozen-lockfile`, `pnpm -s typecheck`, `pnpm -s lint`, `pnpm -s test`, `pnpm build`. `permissions: contents: read`, no credentials persisted, no artifacts, `timeout-minutes: 10`, and a new push cancels the running check of the same pull request (never on `main`).
-- No 5etools clone is needed. Without it only `packages/fivetools/test/real-data.test.ts` skips itself (`skipIf(!hasData)`); the restore drill against `dist/` skips until a build exists (the job tests before it builds).
-- Local run in a fresh checkout without `5etools-data/`: typecheck 14 s, lint 4 s, test 49 s (784 passed, 2 skipped; web 206), build 10 s.
+- `.github/workflows/ci.yml`: one job on push to `main`, on every pull request and by hand (`workflow_dispatch`); pushes to other branches do not run it, a deliberate deviation from "every push" that avoids duplicate runs (logged in PLAN.md). Actions are pinned by full commit SHA with a version comment and kept current by `.github/dependabot.yml` (weekly). Node 24.15.0, pnpm from `packageManager` (11.0.9) with the pnpm store cached, then `pnpm install --frozen-lockfile`, `pnpm -s typecheck`, `pnpm -s lint`, `pnpm -s test`, `pnpm build`, then the restore drill (`pnpm --filter @cn/server drill`). `permissions: contents: read`, no credentials persisted, no artifacts, `timeout-minutes: 10`, and a new push cancels the running check of the same pull request (never on `main`).
+- No 5etools clone is needed. Without it only `packages/fivetools/test/real-data.test.ts` skips itself (`skipIf(!hasData)`).
+- Local run in a fresh checkout without `5etools-data/`: typecheck 14 s, lint 4 s, test 42 s (784 passed, 2 skipped; web 206), build 9 s, restore drill 12 s (PASSED).
 - Not yet run on GitHub: it needs the owner to push. The e2e job is Task M5.3.
