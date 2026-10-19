@@ -133,9 +133,10 @@
       @if (facetType(); as ft) {
         <!-- Phone: a collapsible section with a one-line digest. Otherwise the sheet is always open and the summary is hidden. -->
         <details class="mt-4 rounded-xl border border-line bg-panel" [open]="!collapsible() || sheetOpen()" (toggle)="onSheetToggle($any($event.target).open)">
-          <summary class="min-h-[44px] cursor-pointer items-center justify-between gap-3 px-3 text-sm" [class.flex]="collapsible()" [class.hidden]="!collapsible()">
+          <summary class="min-h-[44px] cursor-pointer items-center gap-2 px-3 text-sm" [class.flex]="collapsible()" [class.hidden]="!collapsible()">
+            <span class="cn-chevron" aria-hidden="true">▸</span>
             <span class="shrink-0 font-semibold">{{ ft === 'pc' ? 'Character sheet' : 'Details' }}</span>
-            @if (digest(); as d) {<span class="min-w-0 truncate text-muted">{{ d }}</span>}
+            @if (digest(); as d) {<span class="ml-auto min-w-0 truncate text-muted">{{ d }}</span>}
           </summary>
           <!-- A disabled fieldset makes every control read-only for players who may not edit -->
           <fieldset class="min-w-0 p-3 sm:p-4" aria-label="Details" [disabled]="!canEdit()">
@@ -146,7 +147,7 @@
 
       @if (store.isGm() || hasProps()) {
         <details class="mt-3 rounded-xl border border-line bg-panel px-3 sm:px-4" [open]="showProps()" (toggle)="showProps.set($any($event.target).open)">
-          <summary class="flex min-h-[44px] cursor-pointer items-center text-sm text-muted">Properties</summary>
+          <summary class="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm text-muted"><span class="cn-chevron" aria-hidden="true">▸</span>Properties</summary>
           <fieldset class="min-w-0 pb-3" [disabled]="!canEdit()">
             <cn-properties-panel [pageId]="p.id" [pageType]="p.type" [values]="p.props" [manage]="store.isGm()" [readOnly]="!canEdit()" (changed)="onProps($event)" />
           </fieldset>

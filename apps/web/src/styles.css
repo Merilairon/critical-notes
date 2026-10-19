@@ -1040,7 +1040,6 @@ h4,
 .cn-wrap {
   overflow-wrap: anywhere;
 }
-.cn-prose table,
 .cn-prose pre {
   display: block;
   max-width: 100%;
@@ -1095,4 +1094,21 @@ h4,
 }
 .cn-roll-btn:hover {
   border-color: var(--roll);
+}
+
+/* Disclosure chevron of the phone summary rows */
+.cn-chevron {
+  display: inline-block;
+  width: 1rem;
+  flex-shrink: 0;
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+details[open] > summary > .cn-chevron {
+  transform: rotate(90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cn-chevron {
+    transition: none;
+  }
 }
