@@ -425,8 +425,9 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 **Acceptance Criteria**: `docs/qa/phone-audit.md` with each flow PASS/FAIL and evidence
 **Reference**: PRD §8 M6
 
-### [ ] Task M6.2: Phone layout guidance
+### [x] Task M6.2: Phone layout guidance
 **Owner**: UX Architect · **QA**: UI Designer
+**Done:** 2026-10-19, QA UI Designer: FAIL then fixed (1 round: invalid `touch:` variant syntax, a rule that hid read-only values, a header height that was not fixed, drawer focus order, plus twelve gaps; the CSS claims were compiled with the installed Tailwind 4.3.3). `docs/design/phone-layout.md`: minimum width 320, one compact header (56 px portrait, 48 px landscape) below `lg`, menu order, 44 px targets and 16 px form text on touch, one z-index scale and toast lanes, safe areas, content patterns for M6.4, acceptance checks. Defaults applied for the open questions (owner may overrule): `interactive-widget=resizes-content`; Templates link stays in the menu for everyone (follow-up: hide for non-GMs); `lg` = 1024; landscape phones get the compact shell; autosizing title textarea for editors; inventory cards at all widths. Open for the owner: which real devices exist for the manual pass (iOS zoom, notch, keyboard stay untested until then).
 **Description**: Patterns for the failures found: header and campaign navigation on narrow screens, editor toolbar wrapping, wide tables (inventory) as cards.
 **Depends on**: M6.1
 
