@@ -380,8 +380,9 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 **Acceptance Criteria**: history starts clean; no rules content, no secrets, no co-author lines in any commit
 **Depends on**: M1.3 (license in the first public commit)
 
-### [ ] Task M5.2: CI for the gate
+### [x] Task M5.2: CI for the gate
 **Owner**: DevOps Automator · **QA**: Code Reviewer
+**Done:** 2026-10-19, QA Code Reviewer: PASS (1 round: SHA-pinned actions at current majors, Dependabot for actions, restore drill step, `workflow_dispatch`). Local gate+build+drill about 1.5 min; NOT yet run on GitHub (nothing pushed). Deliberate deviation: push trigger is `main` only, pull requests cover branches (PLAN.md). First push must be `main`.
 **Description**: GitHub Actions: pnpm install (cached), typecheck, lint, unit/API tests (synthetic fixture), build. Runs on every push and pull request.
 **Acceptance Criteria**: green on `main`; under 10 minutes
 **Files**: `.github/workflows/ci.yml`
@@ -393,8 +394,9 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 **Acceptance Criteria**: runs on pull requests from the main repository only; no data leaves the runner
 **Depends on**: M5.2, decision D4 (§8)
 
-### [ ] Task M5.4: Version in the app
+### [x] Task M5.4: Version in the app
 **Owner**: Backend Architect · **QA**: API Tester
+**Done:** 2026-10-19, Code Reviewer PASS, QA API Tester: PASS (built bundle on an isolated instance: public `/api/health` `{ok,version}`, CLI and API backup manifests, a `0.0.0` backup still passes `restore --check`). Version `1.0.0-dev` in the root `package.json` (workspace packages carry the same value, unread); M5.5 replaces it per tag. Follow-up (low): document that `/api/health` is public (a proxy can restrict it).
 **Description**: One version source (root `package.json`), returned by `/api/health` and shown in the app footer or Account page; written into backups' manifests.
 **Depends on**: M5.1
 
