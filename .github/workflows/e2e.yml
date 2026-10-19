@@ -8,8 +8,11 @@
 #  - The 5etools clone is read in place from the runner (FIVETOOLS_SRC_PATH); it is never copied into the
 #    checkout, committed or uploaded.
 #  - Nothing is uploaded: no upload-artifact, no cache. Traces, screenshots, the HTML report and error
-#    context contain rules text, so tracing and the HTML report are off here (E2E_NO_ARTIFACTS) and the
-#    report folders are deleted at the end of every run, also when it fails.
+#    context contain rules text, so tracing and the HTML report are off here (E2E_NO_ARTIFACTS), the test
+#    reporter prints only titles, statuses and durations (no error text), the server log is dropped, and the
+#    report folders and temp data folders are deleted at the end of every run, also when it fails.
+#  - A same-repository PR runs ITS OWN copy of this file, the config and the specs on the runner: see the
+#    trust warning in docs/STATUS.md.
 name: E2E
 
 on:
@@ -66,4 +69,4 @@ jobs:
       # A self-hosted workspace outlives the run: remove everything that can hold rules text
       - name: Remove reports and test output
         if: always()
-        run: rm -rf playwright-report test-results e2e/.auth blob-report
+        run: rm -rf playwright-report test-results e2e/.auth blob-report "${TMPDIR:-/tmp}"/cn-e2e-*

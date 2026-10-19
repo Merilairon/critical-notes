@@ -3,7 +3,7 @@
  * drive the system Chrome. They need the real 5etools data (Goblin|MM, Fire Bolt|PHB, Fireball|PHB).
  *   E2E_BASE=http://localhost:3000   test a server that is already running (a fresh instance: the first test sets it up)
  *   CHROME_PATH=/path/to/chrome      another Chrome or Chromium than /opt/google/chrome/chrome
- *   E2E_NO_ARTIFACTS=1               no traces and no HTML report (CI sets it: they would hold rules text)
+ *   E2E_NO_ARTIFACTS=1               no traces, HTML report, server log or error details (CI sets it: they would hold rules text)
  */
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -24,7 +24,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   timeout: 60_000,
   expect: { timeout: 15_000 },
-  reporter: noArtifacts ? [['list']] : [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
+  reporter: noArtifacts ? [['./e2e/ci-reporter.ts']] : [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
   outputDir: 'test-results',
   use: {
     baseURL: BASE_URL,
@@ -46,6 +46,8 @@ export default defineConfig({
         env: { NODE_ENV: 'production', PORT: new URL(BASE_URL).port, DATA_DIR: process.env.E2E_DATA_DIR, PUBLIC_URL: BASE_URL },
         reuseExistingServer: false,
         timeout: 120_000,
-        stdout: 'pipe',
+        // The server log holds names and titles of campaign content: not in a CI log
+        stdout: noArtifacts ? 'ignore' : 'pipe',
+        stderr: noArtifacts ? 'ignore' : 'pipe',
       },
 });
