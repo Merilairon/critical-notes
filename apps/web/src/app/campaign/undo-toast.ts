@@ -14,7 +14,7 @@ const NOTICE_MS = 4000;
   selector: 'cn-undo-toast',
   imports: [RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'fixed inset-x-4 bottom-4 z-50 sm:right-auto sm:max-w-md', '(keydown.escape)': 'onEscape()' },
+  host: { class: 'fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-50 sm:right-auto sm:left-[max(1rem,env(safe-area-inset-left))] sm:max-w-md lg:max-w-[min(28rem,calc(100vw-14rem))]', '(keydown.escape)': 'onEscape()' },
   template: `<div role="status" aria-live="polite" aria-atomic="true">
       @if (store.undo(); as u) {
         @if (!store.undoFailed()) {
@@ -22,8 +22,8 @@ const NOTICE_MS = 4000;
             <span class="min-w-0 break-words">Deleted "{{ u.title }}"{{ u.subpages ? ' and ' + u.subpages + (u.subpages === 1 ? ' subpage' : ' subpages') : '' }}</span>
             <span class="sr-only">Undo is available for {{ seconds }} seconds.</span>
             <span class="ml-auto flex items-center gap-1 max-sm:w-full">
-              <button type="button" class="min-h-11 rounded-md bg-accent px-3 py-1.5 font-semibold text-accent-ink sm:min-h-0 max-sm:flex-1" [attr.aria-label]="'Undo delete of &quot;' + u.title + '&quot;'" [attr.aria-disabled]="busy() || null" [attr.aria-busy]="busy() || null" (click)="undo()">{{ busy() ? 'Undoing…' : 'Undo' }}</button>
-              <button type="button" class="min-h-11 min-w-11 rounded px-2 py-1 text-muted hover:text-ink sm:min-h-0 sm:min-w-0" aria-label="Dismiss" (click)="dismiss()">✕</button>
+              <button type="button" class="min-h-[44px] rounded-md bg-accent px-3 py-1.5 font-semibold text-accent-ink max-sm:flex-1" [attr.aria-label]="'Undo delete of &quot;' + u.title + '&quot;'" [attr.aria-disabled]="busy() || null" [attr.aria-busy]="busy() || null" (click)="undo()">{{ busy() ? 'Undoing…' : 'Undo' }}</button>
+              <button type="button" class="min-h-[44px] min-w-[44px] rounded px-2 py-1 text-muted hover:text-ink" aria-label="Dismiss" (click)="dismiss()">✕</button>
             </span>
           </div>
         }
@@ -36,7 +36,7 @@ const NOTICE_MS = 4000;
         <div class="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-panel px-4 py-3 text-sm shadow-xl">
           <span>Could not undo. Open the trash to restore it.</span>
           <a #trashLink class="cn-link" routerLink="trash" (click)="dismiss()">Trash</a>
-          <button type="button" class="ml-auto min-h-11 min-w-11 rounded px-2 py-1 text-muted hover:text-ink sm:min-h-0" aria-label="Dismiss" (click)="dismiss()">✕</button>
+          <button type="button" class="ml-auto min-h-[44px] min-w-[44px] rounded px-2 py-1 text-muted hover:text-ink" aria-label="Dismiss" (click)="dismiss()">✕</button>
         </div>
       }
     </div>`,

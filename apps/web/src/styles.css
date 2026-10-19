@@ -3,6 +3,9 @@
 @import '@angular/cdk/overlay-prebuilt.css';
 
 @custom-variant dark (&:where(.dark, .dark *));
+/* Phone layout (docs/design/phone-layout.md section 1): touch devices or narrow windows, and short landscape phones */
+@custom-variant touch (@media (pointer: coarse) or (max-width: 639.98px));
+@custom-variant short (@media (orientation: landscape) and (max-height: 500px));
 
 /* Design tokens — light (parchment) and dark */
 :root {
@@ -77,7 +80,13 @@ body {
 body {
   background: var(--bg);
   color: var(--ink);
-  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -374,7 +383,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.25em;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -423,7 +432,10 @@ body {
   position: absolute;
   top: 0.15em;
   right: 0.3em;
-  font: 700 0.6rem ui-sans-serif, system-ui, sans-serif;
+  font:
+    700 0.6rem ui-sans-serif,
+    system-ui,
+    sans-serif;
   color: #c2410c;
   letter-spacing: 0.05em;
 }
@@ -573,7 +585,10 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font: 600 0.75rem ui-sans-serif, system-ui, sans-serif;
+  font:
+    600 0.75rem ui-sans-serif,
+    system-ui,
+    sans-serif;
   color: #c2410c;
   margin-bottom: 0.2rem;
 }
@@ -621,7 +636,10 @@ body {
   padding-left: 0.6rem;
 }
 .cn-linked-template-head {
-  font: 600 0.7rem ui-sans-serif, system-ui, sans-serif;
+  font:
+    600 0.7rem ui-sans-serif,
+    system-ui,
+    sans-serif;
   color: var(--badge-homebrew);
 }
 
@@ -877,4 +895,115 @@ body {
   background: var(--color-panel);
   padding: 0.6rem;
   font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ---------- Phone layout foundations (docs/design/phone-layout.md section 2) ---------- */
+:root {
+  --cn-tap: 44px; /* minimum primary target */
+  --cn-header-h: 56px; /* compact header height, offsets the top toast lane */
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  :root {
+    --cn-header-h: 48px;
+  }
+}
+
+/* Header icon buttons: 44 px boxes in px (not rem) so text zoom cannot widen the header.
+   In a layer: unlayered CSS would beat utilities such as lg:hidden. */
+@layer components {
+  .cn-hdr-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 0.375rem;
+    color: var(--muted);
+    font-size: 20px;
+    line-height: 1;
+  }
+  .cn-hdr-btn:hover,
+  .cn-hdr-btn[aria-expanded='true'] {
+    background: var(--panel-2);
+    color: var(--ink);
+  }
+  @media (min-width: 1024px) {
+    .cn-hdr-btn {
+      min-width: 0;
+      min-height: 0;
+      padding: 0.25rem 0.5rem;
+      font-size: 1rem;
+    }
+  }
+}
+
+/* Shared form and button classes. In a layer so utilities such as w-24 or sm:w-20 still win. */
+@layer components {
+  .cn-input {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 0.375rem;
+    background: var(--bg);
+    color: var(--ink);
+    padding: 0.375rem 0.625rem;
+    font-size: 0.875rem;
+    line-height: 1.4;
+  }
+  .cn-btn,
+  .cn-btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.375rem;
+    padding: 0.5rem 0.875rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+  .cn-btn {
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--ink);
+  }
+  .cn-btn:hover {
+    border-color: var(--accent);
+  }
+  .cn-btn-primary {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border: 1px solid transparent;
+  }
+  .cn-btn:disabled,
+  .cn-btn-primary:disabled {
+    opacity: 0.6;
+  }
+}
+
+@media (pointer: coarse), (max-width: 639.98px) {
+  .cn-input,
+  .cn-prop-input {
+    min-height: 44px;
+    font-size: 1rem;
+  }
+  textarea.cn-input {
+    min-height: 5.5rem;
+  }
+  .cn-btn,
+  .cn-btn-primary {
+    min-height: 44px;
+    min-width: 44px;
+    font-size: 1rem;
+  }
+  input[type='checkbox'],
+  input[type='radio'] {
+    width: 1.5rem;
+    height: 1.5rem;
+    accent-color: var(--accent);
+  }
+}
+
+/* Edit-only controls disappear for readers inside a disabled fieldset (used by the player content views) */
+fieldset:disabled .cn-edit-only {
+  display: none;
 }

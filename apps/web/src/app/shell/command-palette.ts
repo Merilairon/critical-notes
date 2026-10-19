@@ -20,7 +20,7 @@ interface PaletteItem {
 @Component({
   selector: 'cn-command-palette',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<div class="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-3 pt-[12vh]" (click)="closed.emit()">
+  template: `<div class="fixed inset-0 z-60 flex items-start justify-center bg-black/40 p-3 pt-[12vh]" (click)="closed.emit()">
     <div
       class="w-full max-w-xl overflow-hidden rounded-xl border border-line bg-panel shadow-2xl"
       role="dialog"

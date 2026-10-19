@@ -29,7 +29,7 @@ function inertOutside(el: HTMLElement): () => void {
   imports: [A11yModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(document:keydown.escape)': 'onEscape($event)' },
-  template: `<div class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-3 sm:pt-[8vh]">
+  template: `<div class="fixed inset-0 z-60 flex items-start justify-center overflow-y-auto bg-black/40 p-3 sm:pt-[8vh]">
     <div
       cdkTrapFocus
       cdkTrapFocusAutoCapture

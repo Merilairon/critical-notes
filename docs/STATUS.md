@@ -176,7 +176,7 @@ pnpm dev                 # server on :3000 (tsx watch); web on :4200 (proxies /a
 - **Help panel**: restore is CLI only (Docker and non-Docker commands), retention is automatic (newest N kept; web-page backups protected 7 days). No delete and no restore button.
 - **QA round 1 fixes**: the restore command blocks wrap (no scroll area), a load error is announced (`role="alert"`) and pauses "Back up now" with a visible reason, a failed backup is announced once. axe-core 4.10.2 on `/admin/backups` at 390 px, light and dark, dialog closed and open: 0 violations.
 - **Follow-up (server)**: a refused create (409) counts against the 3-per-10-minutes limiter budget.
-- **Seen in Chrome** (throwaway server, empty data dir): back up from the page, listed, download with the password: the saved file's sha256 equals the server's file; wrong password shows the inline error; light, dark and 390 px (page content does not overflow; the header still overflows at 390 px, M6.3); Esc returns focus to the Download button.
+- **Seen in Chrome** (throwaway server, empty data dir): back up from the page, listed, download with the password: the saved file's sha256 equals the server's file; wrong password shows the inline error; light, dark and 390 px (page content does not overflow; the header overflowed at 390 px; fixed in M6.3); Esc returns focus to the Download button.
 
 ### For the M3.6 guide
 
@@ -429,6 +429,18 @@ AI assistants (Claude Code, Claude Desktop through `mcp-remote`, any MCP client)
   - The server's `build` script pointed at a file that never existed. It is gone; `start` runs `tsx src/main.ts`.
 
 </details>
+
+## Phone header and navigation (Task M6.3)
+
+Design: [design/phone-layout.md](design/phone-layout.md) sections 1 to 5; audit: [qa/phone-audit.md](qa/phone-audit.md). Built on the real bundle and measured in Chrome (phone emulation, touch) at 320, 360, 390, 430, 844 x 390, 667 x 375 and 150/200 % root font.
+
+- **Compact header below `lg`** (`app.html`, `app.ts`): one row, 56 px (48 px in short landscape), fixed in px so text zoom cannot grow it. Signed in on a campaign page: drawer button, campaign name (truncates), search, dice, menu. Other pages: brand, search, dice, menu. Signed out: brand and theme. From `lg` the old inline header is untouched (it is the same markup, switched by `max-lg:hidden`/`lg:hidden`; `.cn-hdr-btn` is in `@layer components` so `lg:hidden` wins).
+- **App menu** (disclosure, only in the DOM while open): Navigate, Rules, Administration (Users, Backups), Preferences (theme), Account (name, Sign out). One `navLinks` list feeds the inline nav and the menu. Closes on Escape (focus back to its button), outside tap, route change, opening the dice log or the drawer, and focus moving to an element outside the header (a null target never closes it, so native pickers work). **Deviation from the design text:** on campaign pages the Rules group shows only the read-only "name · rules" line, as the desktop header does; the Sources button and the cross-edition box stay on non-campaign pages (on a campaign they edit the global preview context, not the campaign, so showing them would mislead).
+- **Drawer** (`campaign-shell.ts`, `core/layout.service.ts`): state lives in `LayoutService.drawerOpen` (reset when the window passes `lg`). The old "Campaign" button is gone; the header's drawer button opens it, focus goes to its close button, Escape/backdrop/close button/any navigation close it and focus returns to the header button. While open the header and the content are `inert`. `role="dialog"` only below `lg`. Rows are 44 px, two columns in short landscape, campaign name wraps. Page-tree rows and the "+ New" button are 44 px on touch.
+- **Overlays:** dice log is a popover under the header with 44 px Clear and Close; the dice toast sits in a top lane below `lg` (bottom right from `lg`) and is not shown while the log is open; the Undo toast keeps the bottom lane. z-index scale: header 30, drawer backdrop 35, drawer 40, dice toast 45, Undo toast 50, dialogs, palette and step-up dialog 60. Viewport meta has `interactive-widget=resizes-content`; `env(safe-area-inset-*)` is in the header, drawer and toasts.
+- **Shared CSS for M6.4** in `styles.css`: `touch:` and `short:` variants, `.cn-input`, `.cn-btn`, `.cn-btn-primary` (layer `components`), touch sizes for `.cn-input`/`.cn-prop-input`/checkboxes, `.cn-edit-only`, `.cn-badge` at 12 px, `--cn-header-h`.
+- **Measured:** header 56 px (48 landscape), one row, no sideways scroll caused by the header on any page at any tested width, no header or menu or drawer-row target under 44 px, Sign out reachable, no focus escape from the open drawer, Undo and dice toasts never intersect (320, 390, 844 x 390, 1024, 1280, 1024 at 200 %). Still overflowing, and not the header: the campaigns list (M6.4, button row) at 320/360, and the campaigns list, account and reference pages at 150/200 % text.
+- **Not verified:** real devices, iOS Safari, a real on-screen keyboard and `interactive-widget`, notch/safe-area insets (they resolve to 0 here), screen readers, axe at phone widths. The GM-only "+" (add subpage) in the page tree is hover-revealed and not reachable by touch (pre-existing, not in M6.3).
 
 ## After the plan
 

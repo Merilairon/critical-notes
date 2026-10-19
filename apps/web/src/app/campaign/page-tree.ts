@@ -25,7 +25,7 @@ const expanded = signal<Record<string, boolean>>(readStored('cn.tree.expanded', 
         <div class="flex items-center gap-0.5 rounded pr-1 hover:bg-panel-2">
           <button
             type="button"
-            class="flex h-6 w-5 shrink-0 items-center justify-center text-xs text-muted"
+            class="flex h-6 w-5 shrink-0 items-center justify-center text-xs text-muted touch:h-[44px] touch:w-[44px]"
             [class.invisible]="!hasChildren(page.id)"
             (click)="toggle(page.id)"
             [attr.aria-label]="isOpen(page.id) ? 'Collapse' : 'Expand'"
@@ -36,7 +36,7 @@ const expanded = signal<Record<string, boolean>>(readStored('cn.tree.expanded', 
           <a
             [routerLink]="['/c', store.id(), 'p', page.id]"
             routerLinkActive="!text-accent font-semibold"
-            class="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-sm"
+            class="flex min-w-0 flex-1 items-center gap-1.5 py-0.5 text-sm touch:min-h-[44px]"
             cdkDragHandle
           >
             <span aria-hidden="true">{{ page.icon || icons[page.type] }}</span>

@@ -1,96 +1,290 @@
 @if (!bare()) {
-<header class="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-panel px-3 py-2 sm:gap-3">
-  <a routerLink="/" class="font-display text-lg font-bold tracking-tight text-accent">Critical Notes</a>
+<header
+  #appHeader
+  class="relative z-30 flex h-[calc(56px+env(safe-area-inset-top))] shrink-0 items-center gap-1 overflow-visible border-b border-line bg-panel pt-[env(safe-area-inset-top)] pr-[max(0.5rem,env(safe-area-inset-right))] pl-[max(0.5rem,env(safe-area-inset-left))] short:h-[calc(48px+env(safe-area-inset-top))] lg:h-auto lg:flex-wrap lg:gap-3 lg:px-3 lg:py-2"
+  [attr.inert]="layout.drawerOpen() ? '' : null"
+  (focusout)="onHeaderFocusOut($event)"
+  (keydown.escape)="closePopovers(true)"
+>
+  @if (auth.user()) { @if (context.campaign(); as c) {
+  <button
+    type="button"
+    class="cn-hdr-btn lg:hidden"
+    #drawerBtn
+    aria-label="Campaign navigation"
+    aria-controls="campaign-drawer"
+    [attr.aria-expanded]="layout.drawerOpen()"
+    (click)="layout.drawerOpen.set(true)"
+  >
+    <span aria-hidden="true">☰</span>
+  </button>
+  <a
+    [routerLink]="['/c', c.id]"
+    class="min-w-0 flex-1 truncate font-display text-base leading-[44px] font-bold text-accent lg:hidden"
+    >{{ c.name }}</a
+  >
+  } }
+  <a
+    routerLink="/"
+    class="min-w-0 flex-1 truncate font-display text-lg leading-[44px] font-bold tracking-tight text-accent lg:flex-none lg:leading-7"
+    [class.max-lg:hidden]="!!context.campaign() && !!auth.user()"
+    >Critical Notes</a
+  >
   @if (auth.user()) {
-  <nav class="flex items-center gap-1 text-sm">
-    <a routerLink="/campaigns" routerLinkActive="bg-panel-2 text-ink" class="rounded px-2 py-1 text-muted hover:text-ink">Campaigns</a>
-    <a routerLink="/reference" routerLinkActive="bg-panel-2 text-ink" class="rounded px-2 py-1 text-muted hover:text-ink">Reference</a>
-    <a routerLink="/homebrew" routerLinkActive="bg-panel-2 text-ink" class="rounded px-2 py-1 text-muted hover:text-ink">Homebrew</a>
-    <a routerLink="/templates" routerLinkActive="bg-panel-2 text-ink" class="rounded px-2 py-1 text-muted hover:text-ink">Templates</a>
-    @if (auth.user()?.isAdmin) {
-    <a routerLink="/admin/users" routerLinkActive="bg-panel-2 text-ink" class="rounded px-2 py-1 text-muted hover:text-ink">Users</a>
+  <nav class="items-center gap-1 text-sm max-lg:hidden lg:flex" aria-label="Main">
+    @for (l of navLinks(); track l.path) {
+    <a [routerLink]="l.path" routerLinkActive="bg-panel-2 text-ink" class="rounded px-2 py-1 text-muted hover:text-ink"
+      >{{ l.label }}</a
+    >
     }
   </nav>
 
-  <div class="ml-auto flex flex-wrap items-center gap-2">
+  <div class="ml-auto flex items-center gap-1 lg:flex-wrap lg:gap-2">
     <button
       type="button"
-      class="flex items-center gap-2 rounded-md border border-line px-2.5 py-1 text-sm text-muted hover:border-accent"
+      class="cn-hdr-btn lg:gap-2 lg:rounded-md lg:border lg:border-line lg:px-2.5 lg:py-1 lg:text-sm lg:hover:border-accent"
       (click)="paletteOpen.set(true)"
       aria-label="Search (Ctrl K)"
     >
-      <span>Search</span><kbd class="hidden rounded border border-line px-1 text-xs sm:inline">Ctrl K</kbd>
+      <span aria-hidden="true" class="lg:hidden">🔍</span><span class="max-lg:hidden">Search</span>
+      <kbd class="hidden rounded border border-line px-1 text-xs lg:inline">Ctrl K</kbd>
     </button>
 
-    @if (context.campaign(); as c) {
-      <span class="text-sm text-muted" title="Reference lookups use this campaign's rules and sources">{{ c.name }} · {{ context.ruleset().shortLabel }} rules</span>
-    } @else {
-    <label class="flex items-center gap-1 text-sm" title="Rules edition used for reference lookups">
-      <span class="sr-only">Rules edition</span>
-      <select class="rounded-md border border-line bg-panel px-2 py-1 text-sm" (change)="setRuleset($any($event.target).value)">
-        @for (id of rulesets; track id) {
+    <div class="contents max-lg:hidden">
+      @if (context.campaign(); as c) {
+      <span class="text-sm text-muted" title="Reference lookups use this campaign's rules and sources"
+        >{{ c.name }} · {{ context.ruleset().shortLabel }} rules</span
+      >
+      } @else {
+      <label class="flex items-center gap-1 text-sm" title="Rules edition used for reference lookups">
+        <span class="sr-only">Rules edition</span>
+        <select
+          class="rounded-md border border-line bg-panel px-2 py-1 text-sm"
+          (change)="setRuleset($any($event.target).value)"
+        >
+          @for (id of rulesets; track id) {
           <option [value]="id" [selected]="id === context.rulesetId()">{{ id }} rules</option>
-        }
-      </select>
-    </label>
-    <label class="flex items-center gap-1.5 text-sm text-muted">
-      <input type="checkbox" [checked]="context.crossEdition()" (change)="context.crossEdition.set($any($event.target).checked)" />
-      <span class="hidden md:inline">{{ context.ruleset().terminology.crossEditionToggle }}</span>
-      <span class="md:hidden">{{ context.ruleset().terminology.otherEditionBadge }}</span>
-    </label>
-    <button type="button" class="rounded-md border border-line px-2.5 py-1 text-sm text-muted hover:border-accent" (click)="sourcesOpen.set(true)">
-      Sources
+          }
+        </select>
+      </label>
+      <label class="flex items-center gap-1.5 text-sm text-muted">
+        <input
+          type="checkbox"
+          [checked]="context.crossEdition()"
+          (change)="context.crossEdition.set($any($event.target).checked)"
+        />
+        <span class="hidden md:inline">{{ context.ruleset().terminology.crossEditionToggle }}</span>
+        <span class="md:hidden">{{ context.ruleset().terminology.otherEditionBadge }}</span>
+      </label>
+      <button
+        type="button"
+        class="rounded-md border border-line px-2.5 py-1 text-sm text-muted hover:border-accent"
+        (click)="sourcesOpen.set(true)"
+      >
+        Sources
+      </button>
+      }
+    </div>
+
+    <button
+      type="button"
+      class="cn-hdr-btn"
+      #diceBtn
+      aria-label="Dice log"
+      aria-controls="dice-log"
+      [attr.aria-expanded]="diceLogOpen()"
+      (click)="toggleDiceLog()"
+    >
+      <span aria-hidden="true">🎲</span>
     </button>
-    }
-    <button type="button" class="rounded-md px-2 py-1 text-muted hover:bg-panel-2" (click)="diceLogOpen.set(!diceLogOpen())" aria-label="Dice log">🎲</button>
-    <button type="button" class="rounded-md px-2 py-1 text-muted hover:bg-panel-2" (click)="theme.cycle()" [attr.aria-label]="'Theme: ' + theme.mode()">
-      {{ themeIcon() }}
+
+    <div class="contents max-lg:hidden">
+      <button
+        type="button"
+        class="rounded-md px-2 py-1 text-muted hover:bg-panel-2"
+        (click)="theme.cycle()"
+        [attr.aria-label]="'Theme: ' + theme.mode()"
+      >
+        {{ themeIcon() }}
+      </button>
+      <a
+        routerLink="/account"
+        class="rounded-md px-2 py-1 text-sm text-muted hover:bg-panel-2"
+        title="Account and AI assistants"
+        >{{ auth.user()?.displayName }}</a
+      >
+      <button type="button" class="rounded-md px-2 py-1 text-sm text-muted hover:bg-panel-2" (click)="logout()">
+        Sign out
+      </button>
+    </div>
+
+    <button
+      type="button"
+      class="cn-hdr-btn lg:hidden"
+      #menuBtn
+      aria-label="Menu"
+      aria-controls="app-menu"
+      aria-haspopup="true"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggleMenu()"
+    >
+      <span aria-hidden="true">⋯</span>
     </button>
-    <a routerLink="/account" class="rounded-md px-2 py-1 text-sm text-muted hover:bg-panel-2" title="Account and AI assistants">{{ auth.user()?.displayName }}</a>
-    <button type="button" class="rounded-md px-2 py-1 text-sm text-muted hover:bg-panel-2" (click)="logout()">Sign out</button>
   </div>
-  } @else {
-    <button type="button" class="ml-auto rounded-md px-2 py-1 text-muted hover:bg-panel-2" (click)="theme.cycle()" [attr.aria-label]="'Theme: ' + theme.mode()">{{ themeIcon() }}</button>
+
+  @if (menuOpen() || diceLogOpen()) {
+  <div class="fixed inset-0 -z-10" (click)="closePopovers(false)"></div>
+  } @if (menuOpen()) {
+  <div
+    id="app-menu"
+    class="absolute inset-x-2 top-full z-30 mt-1 max-h-[calc(100dvh-var(--cn-header-h)-0.5rem)] overflow-y-auto rounded-lg border border-line bg-panel p-1 shadow-xl sm:inset-x-auto sm:right-2 sm:w-80 lg:hidden"
+  >
+    <div role="group" aria-labelledby="menu-nav">
+      <p id="menu-nav" class="px-3 pt-2 pb-1 text-xs font-semibold tracking-wide text-muted uppercase">Navigate</p>
+      @for (l of menuLinks(); track l.path) {
+      <a
+        [routerLink]="l.path"
+        routerLinkActive="bg-panel-2 font-semibold text-ink"
+        ariaCurrentWhenActive="page"
+        class="flex min-h-[44px] w-full items-center gap-3 rounded-md px-3 text-left text-base hover:bg-panel-2"
+        >{{ l.label }}</a
+      >
+      }
+    </div>
+    <div role="group" aria-labelledby="menu-rules">
+      <p id="menu-rules" class="px-3 pt-2 pb-1 text-xs font-semibold tracking-wide text-muted uppercase">Rules</p>
+      @if (context.campaign(); as c) {
+      <p class="px-3 py-2 text-base text-muted [overflow-wrap:anywhere]">
+        {{ c.name }} · {{ context.ruleset().shortLabel }} rules
+      </p>
+      } @else {
+      <label class="flex min-h-[44px] items-center gap-3 px-3 text-base">
+        <span class="shrink-0">Rules edition</span>
+        <select class="cn-input min-w-0 flex-1" (change)="setRuleset($any($event.target).value)">
+          @for (id of rulesets; track id) {
+          <option [value]="id" [selected]="id === context.rulesetId()">{{ id }} rules</option>
+          }
+        </select>
+      </label>
+      <label class="flex min-h-[44px] items-center gap-3 px-3 text-base">
+        <input
+          type="checkbox"
+          [checked]="context.crossEdition()"
+          (change)="context.crossEdition.set($any($event.target).checked)"
+        />
+        <span>{{ context.ruleset().terminology.crossEditionToggle }}</span>
+      </label>
+      <button
+        type="button"
+        class="flex min-h-[44px] w-full items-center gap-3 rounded-md px-3 text-left text-base hover:bg-panel-2"
+        (click)="openSources()"
+      >
+        Sources…
+      </button>
+      }
+    </div>
+    @if (adminLinks().length) {
+    <div role="group" aria-labelledby="menu-admin">
+      <p id="menu-admin" class="px-3 pt-2 pb-1 text-xs font-semibold tracking-wide text-muted uppercase">
+        Administration
+      </p>
+      @for (l of adminLinks(); track l.path) {
+      <a
+        [routerLink]="l.path"
+        routerLinkActive="bg-panel-2 font-semibold text-ink"
+        ariaCurrentWhenActive="page"
+        class="flex min-h-[44px] w-full items-center gap-3 rounded-md px-3 text-left text-base hover:bg-panel-2"
+        >{{ l.label }}</a
+      >
+      }
+    </div>
+    }
+    <div role="group" aria-labelledby="menu-prefs">
+      <p id="menu-prefs" class="px-3 pt-2 pb-1 text-xs font-semibold tracking-wide text-muted uppercase">Preferences</p>
+      <button
+        type="button"
+        class="flex min-h-[44px] w-full items-center gap-3 rounded-md px-3 text-left text-base hover:bg-panel-2"
+        (click)="theme.cycle()"
+      >
+        <span aria-hidden="true">{{ themeIcon() }}</span><span>Theme: {{ theme.mode() }}</span>
+      </button>
+    </div>
+    <hr class="my-1 border-line" />
+    <div role="group" aria-labelledby="menu-account">
+      <p id="menu-account" class="px-3 pt-2 pb-1 text-xs font-semibold tracking-wide text-muted uppercase">Account</p>
+      <a
+        routerLink="/account"
+        routerLinkActive="bg-panel-2 font-semibold text-ink"
+        ariaCurrentWhenActive="page"
+        class="flex min-h-[44px] w-full items-center gap-3 rounded-md px-3 text-left text-base [overflow-wrap:anywhere] hover:bg-panel-2"
+        >{{ auth.user()?.displayName }}</a
+      >
+      <button
+        type="button"
+        class="flex min-h-[44px] w-full items-center gap-3 rounded-md px-3 text-left text-base hover:bg-panel-2"
+        (click)="logout()"
+      >
+        Sign out
+      </button>
+    </div>
+  </div>
+  } @if (diceLogOpen()) {
+  <section
+    id="dice-log"
+    aria-label="Dice log"
+    class="absolute top-full right-2 z-30 mt-1 max-h-[min(60dvh,calc(100dvh-var(--cn-header-h)-1rem))] w-[min(20rem,calc(100vw-1rem))] overflow-y-auto rounded-lg border border-line bg-panel p-3 shadow-xl"
+  >
+    <div class="mb-2 flex items-center justify-between gap-2">
+      <p class="font-semibold">Dice log</p>
+      <span class="flex items-center gap-1">
+        <button type="button" class="cn-btn" [disabled]="!dice.log().length" (click)="dice.clear()">Clear</button>
+        <button type="button" class="cn-hdr-btn" aria-label="Close dice log" (click)="closePopovers(true)">
+          <span aria-hidden="true">✕</span>
+        </button>
+      </span>
+    </div>
+    <ol role="log" aria-live="polite" class="m-0 list-none p-0">
+      @for (entry of dice.log(); track entry.id; let first = $first) {
+      <li class="flex justify-between gap-3 border-b border-line/60 py-2 text-sm" [class.font-semibold]="first">
+        <span class="min-w-0 truncate text-muted">{{ entry.label }}</span
+        ><span class="font-semibold">{{ entry.roll.total }}</span>
+      </li>
+      } @empty {
+      <li class="text-sm text-muted">Tap or click any dice expression to roll.</li>
+      }
+    </ol>
+  </section>
+  } } @else {
+  <span class="flex-1"></span>
+  <button type="button" class="cn-hdr-btn" (click)="theme.cycle()" [attr.aria-label]="'Theme: ' + theme.mode()">
+    {{ themeIcon() }}
+  </button>
   }
 </header>
 }
 
-<main class="flex min-h-0 flex-1 flex-col overflow-y-auto">
+<main class="flex min-h-0 flex-1 flex-col overflow-y-auto scroll-pb-24">
   <router-outlet />
 </main>
 
 @if (paletteOpen()) {
-  <cn-command-palette (closed)="paletteOpen.set(false)" />
-}
-@if (sourcesOpen()) {
-  <cn-sources-panel (closed)="sourcesOpen.set(false)" />
-}
-
-@if (toastVisible() && dice.latest(); as roll) {
-  <div class="pointer-events-none fixed right-4 bottom-4 z-50 rounded-lg border border-line bg-panel px-4 py-3 shadow-xl" role="status" aria-live="polite">
+<cn-command-palette (closed)="paletteOpen.set(false)" />
+} @if (sourcesOpen()) {
+<cn-sources-panel (closed)="sourcesOpen.set(false)" />
+} @if (toastVisible() && !diceLogOpen() && dice.latest(); as roll) {
+<div
+  class="pointer-events-none fixed inset-x-3 top-[calc(var(--cn-header-h)+0.5rem)] z-45 flex justify-center sm:inset-x-auto sm:right-[max(0.75rem,env(safe-area-inset-right))] sm:justify-end lg:top-auto lg:right-[max(1rem,env(safe-area-inset-right))] lg:bottom-[max(1rem,env(safe-area-inset-bottom))]"
+>
+  <div
+    class="max-w-xs rounded-lg border border-line bg-panel px-4 py-3 shadow-xl lg:max-w-40"
+    role="status"
+    aria-live="polite"
+  >
     <div class="text-xs text-muted">{{ roll.label }}</div>
     <div class="font-display text-2xl font-bold text-accent">{{ roll.roll.total }}</div>
-    <div class="text-xs text-muted">
-      {{ roll.roll.expression }}:
-      @for (r of roll.roll.rolls; track $index) {
-        [{{ r.values.join(', ') }}]
-      }
+    <div class="text-xs text-muted [overflow-wrap:anywhere]">
+      {{ roll.roll.expression }}: @for (r of roll.roll.rolls; track $index) { [{{ r.values.join(', ') }}] }
     </div>
   </div>
-}
-
-@if (diceLogOpen()) {
-  <aside class="fixed right-3 bottom-3 z-40 max-h-[60vh] w-72 overflow-y-auto rounded-lg border border-line bg-panel p-3 shadow-xl" aria-label="Dice log">
-    <div class="mb-2 flex items-center justify-between">
-      <h2 class="font-semibold">Dice log</h2>
-      <button type="button" class="text-xs text-muted underline" (click)="dice.clear()">clear</button>
-    </div>
-    @for (entry of dice.log(); track entry.id) {
-      <div class="flex justify-between border-b border-line/60 py-1 text-sm">
-        <span class="truncate text-muted">{{ entry.label }}</span><span class="font-semibold">{{ entry.roll.total }}</span>
-      </div>
-    } @empty {
-      <p class="text-sm text-muted">Click any dice expression to roll.</p>
-    }
-  </aside>
+</div>
 }
