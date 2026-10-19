@@ -431,8 +431,9 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 **Description**: Patterns for the failures found: header and campaign navigation on narrow screens, editor toolbar wrapping, wide tables (inventory) as cards.
 **Depends on**: M6.1
 
-### [ ] Task M6.3: Fix header and navigation
+### [x] Task M6.3: Fix header and navigation
 **Owner**: Frontend Developer · **QA**: Evidence Collector
+**Done:** 2026-10-19, Code Reviewer PASS (1 fix round), QA Evidence Collector: FAIL then PASS (2 rounds; independent measurement of 396 layouts, real touch taps, desktop pixel comparison against main). Compact one-row header below `lg` (56 px, 48 px landscape), menu, drawer with inert/focus handling, dice log as a popover that no longer swallows taps on rolls, toast lanes and one z-index scale, 44 px targets in the shell, `touch:`/`short:` variants and shared `.cn-input`/`.cn-btn` foundations for M6.4. Desktop (>=lg) header unchanged. `pnpm e2e` 70/70 (new `e2e/phone-header.spec.ts`; the `campaign.spec.ts` session-log selector fix also un-suppressed 3 tests). Deviations: campaign pages show the rules edition read-only in the menu (as the desktop header does); text slots use `leading-[44px]`. **Still open for M6.4:** campaigns list overflow at 320/360 and at 150-200% text, page-tree "+" buttons unreachable by touch, auth form fields 38-40 px, the other audit items. Low, not built: admin tab links overflow `main` at 320 and 200% text; Sources panel has no Escape handler. Not verified: real devices, iOS Safari, real keyboard, notch.
 **Files**: `apps/web/src/app/app.html`, `campaign/campaign-shell.ts`
 **Depends on**: M6.2
 
