@@ -60,7 +60,7 @@ in the campaign's settings (there is no open sign-up).
 
 **Image and versions.** Compose uses the published image `ghcr.io/merilairon/critical-notes` (linux/amd64 and
 linux/arm64). `docker compose pull && docker compose up -d` moves to the newest release; database migrations run when the
-server starts, so [make a backup first](#backups). Pin a version with `CN_VERSION=1.2.0` in `.env` (the default is `latest`).
+server starts, so [back up first](#updating) (the Updating section has the steps). Pin a version with `CN_VERSION=1.2.0` in `.env` (the default is `latest`).
 To build from a checkout instead (before the first release, if the pull is denied, or while developing):
 `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
 
@@ -100,6 +100,75 @@ resolved from the repository root.
 | `SECURE_COOKIES` | from `PUBLIC_URL` | `1` or `0` to override (for example behind a TLS-terminating proxy that forwards plain http) |
 | `TRUST_PROXY` | off | `1` behind a reverse proxy that overwrites `X-Forwarded-For`, so rate limits tell clients apart. Leave off when the port is reachable directly (the header could be spoofed); the app logs one warning if it sees the header while this is off |
 | `WEB_DIST_DIR` | `./apps/web/dist/web/browser` | The built web app, served in production |
+
+## Updating
+
+After this section you can move your instance to a new release without losing data. The short version: read the
+changelog, back up, update, check.
+
+1. **Read the [changelog](CHANGELOG.md)** for every version between yours and the new one. Entries under
+   **Upgrade notes** tell you about settings you must change. The same text is on each
+   [GitHub release](https://github.com/Merilairon/critical-notes/releases). Your running version is on the Account page and
+   in `curl http://localhost:3000/api/health`.
+2. **Make a backup and copy it off the machine.** Do this with the version that is still running, before you pull
+   anything. Updates change the database, and a migration cannot be undone. Scheduled backups are on by default with
+   Docker (one every 24 hours), but the last one may be hours old, so make a fresh one. The full guide is in
+   [Backups](#backups).
+
+   ```sh
+   docker compose exec app node admin.mjs backup                    # prints the path of the new zip
+   docker compose cp app:/data/app/backups/backup-<time>.zip .      # a copy outside the container
+   ```
+
+3. **Pin the version you want** (recommended) or follow `latest`. In the `.env` file next to `docker-compose.yml`:
+
+   ```sh
+   CN_VERSION=1.0.0
+   ```
+
+   Without `CN_VERSION`, Compose follows `latest`, the newest stable release. A pre-release such as `1.0.0-rc.1` is
+   never `latest`; you ask for it by name.
+4. **Pull and restart:**
+
+   ```sh
+   docker compose pull && docker compose up -d
+   ```
+
+   The container is recreated and **database migrations run when the server starts**. The first start after some
+   updates also rebuilds the search index and takes longer than usual. Your data stays in the `app-data` volume.
+5. **Check it:** `curl http://localhost:3000/api/health` shows the new version (`{"ok":true,"version":"..."}`), and
+   `docker compose logs app` shows no errors. Open a campaign you know.
+
+To update the 5etools data instead, see [Updating the 5etools data](#running-it-with-docker). That does not change the
+app.
+
+**There is no downgrade.** Do not start an older image on a database that a newer one has used: migrations only go
+forward, and the older code does not know the new tables. If an update goes wrong, go back to the state before it:
+
+1. `docker compose stop app`
+2. Set `CN_VERSION` in `.env` back to the version you had, then `docker compose pull`.
+3. Restore the backup you made in step 2, following [Restoring](#with-docker) (`docker compose run --rm app node admin.mjs restore <file> --yes`, then `docker compose up -d`). Your newer data is moved aside to `pre-restore-<time>/`, not deleted.
+
+The reverse also holds: a backup made by a **newer** version is refused by an older one (exit code 66, "update first"),
+so update the app before you restore such a backup. An older backup restores into a newer version and is migrated on
+the way.
+
+**Without Docker.** In the repository folder:
+
+```sh
+node apps/server/dist/admin.mjs backup      # 1. with the current build, before changing anything
+# 2. stop the server (Ctrl+C, systemctl stop, ...)
+git fetch --tags
+git checkout v1.0.0                         # or `git pull` on main for the development version
+pnpm install
+pnpm build
+# 3. start the server again; migrations run on start
+NODE_ENV=production pnpm --filter @cn/server start:dist
+```
+
+`admin.mjs` also applies pending migrations when it opens the database, so run it from the same build as the server.
+To go back, check out the old tag, run `pnpm install && pnpm build`, and restore your backup as described in
+[Restoring without Docker](#without-docker).
 
 ## Locked out? Recover an account
 
