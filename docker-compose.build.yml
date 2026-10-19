@@ -1,6 +1,7 @@
 # Override that builds the image from this checkout instead of pulling the published one:
 #   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
-# Put COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml in .env to make that the default for this folder.
+# Put COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml in .env to make that the default for this folder
+# (on Windows the separator is `;`: COMPOSE_FILE=docker-compose.yml;docker-compose.build.yml).
 services:
   app:
     build: .

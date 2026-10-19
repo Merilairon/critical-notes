@@ -4,7 +4,9 @@
 ARG NODE_VERSION=24.15.0
 
 # 1. Build the server bundle and the web app
-FROM node:${NODE_VERSION}-bookworm-slim AS build
+# Runs on the builder's own platform: its output (JS, HTML, CSS) does not depend on the target CPU, so a multi-arch build
+# does not run the Angular/esbuild step under QEMU
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-bookworm-slim AS build
 RUN npm install -g pnpm@11.0.9
 WORKDIR /src
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json ./
@@ -21,7 +23,8 @@ COPY apps apps
 COPY packages packages
 RUN pnpm --filter @cn/server build && pnpm --filter @cn/web build
 
-# 2. Only the server's external runtime packages (native modules and 5etools-utils)
+# 2. Only the server's external runtime packages (native modules and 5etools-utils). This stage and the runtime stage use the
+# TARGET platform, so better-sqlite3, sharp and argon2 are installed for the target CPU, never copied from the build stage
 FROM node:${NODE_VERSION}-bookworm-slim AS deps
 WORKDIR /app
 COPY --from=build /src/apps/server/dist/package.json ./

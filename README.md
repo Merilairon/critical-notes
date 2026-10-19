@@ -44,6 +44,9 @@ git clone --depth 1 https://github.com/5etools-mirror-3/5etools-img.git 5etools-
 docker compose up -d       # pulls the published image the first time; then open http://localhost:3000
 ```
 
+No published release yet, or the pull is denied (the package is private)? Build the image from this checkout instead:
+`docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
+
 The first visit asks you to create the admin account. Players join through invite links that a DM creates
 in the campaign's settings (there is no open sign-up).
 
@@ -58,7 +61,7 @@ in the campaign's settings (there is no open sign-up).
 **Image and versions.** Compose uses the published image `ghcr.io/merilairon/critical-notes` (linux/amd64 and
 linux/arm64). `docker compose pull && docker compose up -d` moves to the newest release; database migrations run when the
 server starts, so [make a backup first](#backups). Pin a version with `CN_VERSION=1.2.0` in `.env` (the default is `latest`).
-To build from a checkout instead, for example while developing:
+To build from a checkout instead (before the first release, if the pull is denied, or while developing):
 `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
 
 **Updating the 5etools data:**

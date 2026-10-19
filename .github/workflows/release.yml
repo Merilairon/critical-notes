@@ -1,3 +1,4 @@
+# Note: re-tagging an OLDER stable version moves `latest` and X.Y to it (no highest-version guard yet, see docs/STATUS.md).
 # Release: on a pushed tag vX.Y.Z (or vX.Y.Z-rc.1) run the gate, publish the multi-arch image to GHCR and create the
 # GitHub Release with the notes from CHANGELOG.md. How to cut a release: docs/RELEASE.md.
 #
@@ -57,7 +58,9 @@ jobs:
           fi
 
       - name: CHANGELOG.md must have a section for this version
-        run: node scripts/changelog-section.mjs "${{ steps.v.outputs.version }}" > /dev/null
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: node scripts/changelog-section.mjs "$VERSION" > /dev/null
 
   gate:
     name: Typecheck, lint, test, build
