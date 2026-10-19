@@ -73,6 +73,14 @@ A change that breaks one of these is not merged.
   `docs/PLAN.md` (deviations) and raised with the maintainers.
 - **Scope.** Do what the issue or task says. Ideas go in a separate issue, not into the diff.
 
+## Branches and releases
+
+- **`main`** is the default branch. It is always releasable and passes the gate.
+- Work on short-lived branches cut from the latest `main`, named by type: `feat/user-auth`, `fix/login-redirect`,
+  `docs/data-clone`, `chore/deps-update`. Rebase on `main` before you open the pull request, keep the branch small,
+  and delete it after it merges. Never force-push `main`; on your own branch use `git push --force-with-lease`.
+- Releases are tags on `main` named `vX.Y.Z` (semantic versioning), for example `v1.0.0`.
+
 ## Commits and sign-off
 
 - **Conventional Commits.** Write messages as `type(scope): summary`, for example

@@ -30,10 +30,10 @@ The plan, its milestone table and the list of deviations live in [PLAN.md](PLAN.
 | `pnpm e2e` (Playwright, fresh server from the bundle) | ✅ 64/64 (about 41 s), no browser errors |
 | Docker image (`docker compose up`, fresh volume) | ✅ rebuilt with the MCP server; Playwright 55/55 against it |
 
-### Nothing is committed yet
-- The repository is on `master` with **zero commits**: every file is untracked.
+### Repository
+- The default branch is `main` (renamed from `master`, locally; nothing has been pushed to `origin` yet, so the remote still has only `master` until the owner pushes). The history is 20 commits; the audit found no `5etools-data/`, `var/`, rules text, art, traces, `.auth`, secrets or `Co-Authored-By` lines in any commit.
 - `5etools-data/` (the 5etools clones) and `var/` (databases and uploads) are gitignored and must stay out of git.
-- Commit messages must never carry `Co-Authored-By` lines.
+- Commit messages must never carry `Co-Authored-By` lines; every commit carries a DCO `Signed-off-by` line.
 
 ## How to resume
 
