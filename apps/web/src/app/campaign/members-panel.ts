@@ -66,7 +66,7 @@ const ROLE_LABELS = { dm: 'DM (owner)', codm: 'Co-DM', player: 'Player' } as con
       </ul>
     }
     @if (!store.isOwner()) {
-      <button type="button" class="cn-btn mt-4 w-full text-muted hover:border-accent hover:text-accent sm:w-auto" (click)="leave()">Leave this campaign</button>
+      <button type="button" class="cn-btn mt-4 w-full px-3 py-1.5 text-sm font-normal text-muted hover:border-accent hover:text-accent sm:w-auto" (click)="leave()">Leave this campaign</button>
     }
     @if (error()) {<p class="mt-2 text-sm text-accent" role="alert">{{ error() }}</p>}`,
 })

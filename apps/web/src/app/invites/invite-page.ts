@@ -19,14 +19,14 @@ import { errorMessage } from '../core/http.interceptor';
         <p class="mt-4 rounded-md border border-accent/50 bg-accent/5 px-3 py-2 text-sm" role="alert">{{ i.reason }}. Ask your DM for a new link.</p>
       } @else if (auth.user(); as user) {
         <p class="mt-4 text-sm text-muted">Signed in as {{ user.displayName }}.</p>
-        <button type="button" class="cn-btn-primary mt-2 w-full" [disabled]="busy()" (click)="join()">{{ i.alreadyMember ? 'Open the campaign' : 'Join the campaign' }}</button>
+        <button type="button" class="cn-btn-primary mt-2 w-full px-4 py-2 text-base font-semibold" [disabled]="busy()" (click)="join()">{{ i.alreadyMember ? 'Open the campaign' : 'Join the campaign' }}</button>
       } @else {
         <form class="mt-4 flex flex-col gap-3" (submit)="$event.preventDefault(); register(u.value, d.value, p.value)">
           <h2 class="font-semibold">Create your account</h2>
-          <label class="flex flex-col gap-1 text-sm"><span class="text-muted">Your name (shown to the group)</span><input #d name="displayName" class="cn-input" required maxlength="80" autocomplete="nickname" /></label>
-          <label class="flex flex-col gap-1 text-sm"><span class="text-muted">Username</span><input #u name="username" class="cn-input" required autocomplete="username" /></label>
-          <label class="flex flex-col gap-1 text-sm"><span class="text-muted">Password (8 characters or more)</span><input #p name="password" type="password" class="cn-input" required minlength="8" autocomplete="new-password" /></label>
-          <button type="submit" class="cn-btn-primary w-full" [disabled]="busy()">Create account and join</button>
+          <label class="flex flex-col gap-1 text-sm"><span class="text-muted">Your name (shown to the group)</span><input #d name="displayName" class="cn-input px-2 py-1" required maxlength="80" autocomplete="nickname" /></label>
+          <label class="flex flex-col gap-1 text-sm"><span class="text-muted">Username</span><input #u name="username" class="cn-input px-2 py-1" required autocomplete="username" /></label>
+          <label class="flex flex-col gap-1 text-sm"><span class="text-muted">Password (8 characters or more)</span><input #p name="password" type="password" class="cn-input px-2 py-1" required minlength="8" autocomplete="new-password" /></label>
+          <button type="submit" class="cn-btn-primary px-4 py-2 text-base font-semibold" [disabled]="busy()">Create account and join</button>
         </form>
         <p class="mt-4 text-sm">Already have an account? <a class="cn-link" [routerLink]="['/login']" [queryParams]="{ next: '/invite/' + token() }">Sign in</a> first.</p>
       }

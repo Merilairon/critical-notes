@@ -15,20 +15,20 @@ import { errorMessage } from '../core/http.interceptor';
       <p class="mb-4 text-sm text-muted">Create the administrator account for this Critical Notes instance.</p>
       <label class="mb-3 block text-sm">
         <span class="mb-1 block font-medium">Display name</span>
-        <input class="cn-input" name="displayName" [(ngModel)]="displayName" required />
+        <input class="cn-input px-3 py-2" name="displayName" [(ngModel)]="displayName" required />
       </label>
       <label class="mb-3 block text-sm">
         <span class="mb-1 block font-medium">Username</span>
-        <input class="cn-input" name="username" autocomplete="username" [(ngModel)]="username" required />
+        <input class="cn-input px-3 py-2" name="username" autocomplete="username" [(ngModel)]="username" required />
       </label>
       <label class="mb-4 block text-sm">
         <span class="mb-1 block font-medium">Password (8+ characters)</span>
-        <input class="cn-input" type="password" name="password" autocomplete="new-password" [(ngModel)]="password" required minlength="8" />
+        <input class="cn-input px-3 py-2" type="password" name="password" autocomplete="new-password" [(ngModel)]="password" required minlength="8" />
       </label>
       @if (error()) {
         <p class="mb-3 text-sm text-accent" role="alert">{{ error() }}</p>
       }
-      <button class="cn-btn-primary w-full" [disabled]="busy()">Create account</button>
+      <button class="cn-btn-primary w-full px-3 py-2 text-base" [disabled]="busy()">Create account</button>
     </form>
   </div>`,
 })

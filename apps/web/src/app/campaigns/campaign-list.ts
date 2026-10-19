@@ -14,11 +14,11 @@ import { errorMessage } from '../core/http.interceptor';
     <div class="flex flex-wrap items-center justify-between gap-3">
       <h1 class="min-w-0 font-display text-3xl font-bold">Campaigns</h1>
       <span class="flex w-full gap-2 sm:w-auto">
-        <label class="cn-btn cursor-pointer focus-within:ring-2 focus-within:ring-[var(--color-focus)] max-sm:flex-1" [class.opacity-60]="importing()">
+        <label class="cn-btn cursor-pointer px-3 py-2 text-sm font-normal focus-within:ring-2 focus-within:ring-[var(--color-focus)] max-sm:flex-1" [class.opacity-60]="importing()">
           {{ importing() ? 'Importing…' : 'Import campaign' }}
           <input type="file" class="sr-only" accept=".zip,application/zip" [disabled]="importing()" (change)="importFile($any($event.target))" />
         </label>
-        <button type="button" class="cn-btn-primary max-sm:flex-1" (click)="creating.set(!creating())">
+        <button type="button" class="cn-btn-primary px-3 py-2 text-sm max-sm:flex-1" (click)="creating.set(!creating())">
           {{ creating() ? 'Cancel' : 'New campaign' }}
         </button>
       </span>
@@ -39,16 +39,16 @@ import { errorMessage } from '../core/http.interceptor';
       <form class="mt-4 rounded-xl border border-line bg-panel p-4" (submit)="$event.preventDefault(); create()">
         <label class="mb-3 block text-sm">
           <span class="mb-1 block font-medium">Name</span>
-          <input class="cn-input" name="name" [value]="name()" (input)="name.set($any($event.target).value)" required maxlength="120" />
+          <input class="cn-input px-3 py-2" name="name" [value]="name()" (input)="name.set($any($event.target).value)" required maxlength="120" />
         </label>
         <label class="mb-3 block text-sm">
           <span class="mb-1 block font-medium">Description</span>
-          <textarea class="cn-input" name="description" rows="2" [value]="description()" (input)="description.set($any($event.target).value)"></textarea>
+          <textarea class="cn-input px-3 py-2" name="description" rows="2" [value]="description()" (input)="description.set($any($event.target).value)"></textarea>
         </label>
         <fieldset class="mb-3">
           <legend class="mb-1 text-sm font-medium">Rules edition</legend>
           <p class="mb-2 text-xs text-muted">Each campaign uses one edition. You can migrate later, but it is a deliberate, guided step.</p>
-          <div class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,16rem),1fr))] gap-2">
+          <div class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,16rem),1fr))] gap-2 sm:grid-cols-2">
             @for (id of rulesets; track id) {
               <label class="flex min-h-[44px] cursor-pointer gap-3 rounded-lg border p-3 text-sm" [class]="ruleset() === id ? 'border-accent bg-accent/5' : 'border-line'">
                 <input type="radio" name="ruleset" [value]="id" [checked]="ruleset() === id" (change)="ruleset.set(id)" />
@@ -67,14 +67,14 @@ import { errorMessage } from '../core/http.interceptor';
         @if (error()) {
           <p class="mb-3 text-sm text-accent" role="alert">{{ error() }}</p>
         }
-        <button class="cn-btn-primary w-full sm:w-auto" [disabled]="busy() || !name().trim()">
+        <button class="cn-btn-primary w-full px-3 py-2 text-sm sm:w-auto" [disabled]="busy() || !name().trim()">
           Create campaign
         </button>
       </form>
     }
 
     @if (list.hasValue()) {
-      <div class="mt-5 grid grid-cols-[repeat(auto-fill,minmax(min(100%,18rem),1fr))] gap-3">
+      <div class="mt-5 grid grid-cols-[repeat(auto-fill,minmax(min(100%,18rem),1fr))] gap-3 sm:grid-cols-2">
         @for (c of list.value().campaigns; track c.id) {
           <a [routerLink]="['/c', c.id]" class="block rounded-xl border border-line bg-panel p-4 transition hover:border-accent hover:shadow-sm">
             <div class="flex items-start justify-between gap-2">

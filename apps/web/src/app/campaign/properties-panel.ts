@@ -26,7 +26,7 @@ const TYPE_LABELS: Record<PropertyType, string> = {
   selector: 'cn-properties-panel',
   imports: [PagePicker, RefPicker, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<div class="grid gap-x-3 gap-y-1 sm:grid-cols-[10rem_1fr] sm:items-center sm:gap-y-2">
+  template: `<div class="grid gap-x-3 gap-y-1 sm:grid-cols-[10rem_1fr] sm:items-center sm:gap-2">
       @for (def of defs(); track def.id) {
         <div class="mt-2 flex items-center gap-1 text-sm text-muted sm:mt-0">
           <span class="min-w-0 [overflow-wrap:anywhere]">{{ def.label }}</span>
@@ -58,7 +58,7 @@ const TYPE_LABELS: Record<PropertyType, string> = {
             @case ('multiselect') {
               <div class="flex flex-wrap gap-1" role="group" [attr.aria-label]="def.label">
                 @for (o of def.options ?? []; track o) {
-                  <button type="button" class="rounded-full border px-2 py-0.5 text-xs touch:min-h-[44px] touch:px-3 touch:py-1 touch:text-sm" [class.border-accent]="has(def, o)" [class.text-accent]="has(def, o)" [class.border-line]="!has(def, o)" [attr.aria-pressed]="has(def, o)" (click)="toggle(def, o)">{{ o }}</button>
+                  <button type="button" class="cn-chip rounded-full border px-2 py-0.5 text-xs touch:min-h-[44px] touch:px-3 touch:py-1 touch:text-sm" [class.border-accent]="has(def, o)" [class.text-accent]="has(def, o)" [class.border-line]="!has(def, o)" [attr.aria-pressed]="has(def, o)" (click)="toggle(def, o)">{{ o }}</button>
                 }
               </div>
             }
@@ -108,14 +108,14 @@ const TYPE_LABELS: Record<PropertyType, string> = {
           <label class="flex items-center gap-1 touch:min-h-[44px] touch:gap-3"><input #dmOnly type="checkbox" /> DM only</label>
           <label class="flex items-center gap-1 touch:min-h-[44px] touch:gap-3"><input #onlyType type="checkbox" checked /> Only for {{ pageType() }} pages</label>
           <span class="ml-auto flex gap-2">
-            <button type="button" class="cn-btn text-muted" (click)="adding.set(false)">Cancel</button>
-            <button type="submit" class="cn-btn-primary">Add</button>
+            <button type="button" class="cn-btn px-2 py-1 text-sm font-normal text-muted" (click)="adding.set(false)">Cancel</button>
+            <button type="submit" class="cn-btn-primary px-3 py-1 text-sm font-normal">Add</button>
           </span>
         </div>
         @if (error()) {<p class="text-accent sm:col-span-2" role="alert">{{ error() }}</p>}
       </form>
     } @else if (manage()) {
-      <button type="button" class="cn-edit-only cn-btn mt-2 w-full text-muted hover:text-accent sm:w-auto" (click)="adding.set(true)">+ Add property</button>
+      <button type="button" class="cn-edit-only mt-2 text-sm text-muted hover:text-accent touch:min-h-[44px]" (click)="adding.set(true)">+ Add property</button>
     }`,
 })
 export class PropertiesPanel {

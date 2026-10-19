@@ -132,9 +132,9 @@ test('the inventory as a player', async () => {
   await player.goto(`/c/${campaignId}/inventory`);
   const party = player.locator('section[aria-label=Party]');
   await expect(party.getByText('Unidentified item')).toBeVisible();
-  await expect(party.locator('input[aria-label^="Quantity of"]')).toHaveCount(0);
+  await expect(party.locator('input[aria-label^="Qty of"]')).toHaveCount(0);
   const wren = player.locator('section[aria-label=Wren]');
-  await wren.locator('input[aria-label="Coins for Wren"]').fill('5');
+  await wren.locator('input[aria-label="Amount for Wren"]').fill('5');
   await wren.getByRole('button', { name: 'Add' }).click();
   await expect(wren.locator('[aria-label=Coins]')).toContainText(/5\s*gp/);
   await expect(player.locator('label', { hasText: /^\s*identified/i })).toHaveCount(0);

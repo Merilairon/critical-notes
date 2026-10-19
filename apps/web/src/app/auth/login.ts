@@ -14,16 +14,16 @@ import { errorMessage } from '../core/http.interceptor';
       <p class="mb-4 text-sm text-muted">Sign in to your campaigns.</p>
       <label class="mb-3 block text-sm">
         <span class="mb-1 block font-medium">Username</span>
-        <input class="cn-input" name="username" autocomplete="username" [(ngModel)]="username" required />
+        <input class="cn-input px-3 py-2" name="username" autocomplete="username" [(ngModel)]="username" required />
       </label>
       <label class="mb-4 block text-sm">
         <span class="mb-1 block font-medium">Password</span>
-        <input class="cn-input" type="password" name="password" autocomplete="current-password" [(ngModel)]="password" required />
+        <input class="cn-input px-3 py-2" type="password" name="password" autocomplete="current-password" [(ngModel)]="password" required />
       </label>
       @if (error()) {
         <p class="mb-3 text-sm text-accent" role="alert">{{ error() }}</p>
       }
-      <button class="cn-btn-primary w-full" [disabled]="busy()">Sign in</button>
+      <button class="cn-btn-primary w-full px-3 py-2 text-base aria-disabled:opacity-60" [attr.aria-disabled]="busy() ? 'true' : null">Sign in</button>
     </form>
   </div>`,
 })
@@ -49,6 +49,7 @@ export class Login {
   }
 
   protected async submit() {
+    if (this.busy()) return;
     this.busy.set(true);
     this.error.set('');
     try {

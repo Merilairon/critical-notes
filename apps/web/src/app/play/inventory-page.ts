@@ -27,9 +27,9 @@ import { PlayApi } from './play-api';
               @for (c of coins; track c) {<span class="min-w-0"><span class="font-mono font-semibold">{{ coinsOf(o.pageId)[c] }}</span> <span class="block text-muted sm:inline">{{ c }}</span></span>}
             </div>
             @if (canManage(o.pageId)) {
-            <form class="mt-2 grid grid-cols-[minmax(5rem,1fr)_minmax(44px,6rem)] gap-2 sm:flex sm:items-center" (submit)="$event.preventDefault()">
-              <input #amount type="number" inputmode="numeric" min="1" class="cn-input sm:w-28" placeholder="Amount" [attr.aria-label]="'Coins for ' + o.name" />
-              <select #coin class="cn-input sm:w-auto" [attr.aria-label]="'Coin type for ' + o.name">@for (c of coins; track c) {<option [value]="c" [selected]="c === 'gp'">{{ c }}</option>}</select>
+            <form class="mt-2 grid grid-cols-[minmax(5rem,1fr)_minmax(44px,6rem)] gap-2 sm:flex sm:items-end" (submit)="$event.preventDefault()">
+              <label class="flex min-w-0 flex-col gap-1 text-xs text-muted">Amount<input #amount type="number" inputmode="numeric" min="1" class="cn-input text-sm sm:w-28" [attr.aria-label]="'Amount for ' + o.name" /></label>
+              <label class="flex min-w-0 flex-col gap-1 text-xs text-muted">Coin<select #coin class="cn-input text-sm sm:w-auto" [attr.aria-label]="'Coin type for ' + o.name">@for (c of coins; track c) {<option [value]="c" [selected]="c === 'gp'">{{ c }}</option>}</select></label>
               <div class="col-span-2 grid grid-cols-2 gap-2 sm:contents">
                 <button type="button" class="cn-btn" (click)="changeCoins(o.pageId, amount, coin.value, 1)">Add</button>
                 <button type="button" class="cn-btn" (click)="changeCoins(o.pageId, amount, coin.value, -1)">Spend</button>
@@ -52,7 +52,7 @@ import { PlayApi } from './play-api';
                 </div>
                 @if (canManage(o.pageId)) {
                   <div class="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 sm:flex sm:flex-wrap sm:items-center sm:gap-x-4">
-                    <label class="col-span-2 flex items-center gap-2 text-sm sm:col-span-1">Qty <input type="number" inputmode="numeric" min="0" class="cn-input min-w-16 flex-1 sm:w-20 sm:flex-none" [value]="it.quantity" [attr.aria-label]="'Quantity of ' + it.name" (change)="update(it, { quantity: +$any($event.target).value })" /></label>
+                    <label class="col-span-2 flex items-center gap-2 text-sm sm:col-span-1">Qty <input type="number" inputmode="numeric" min="0" class="cn-input min-w-16 flex-1 sm:w-20 sm:flex-none" [value]="it.quantity" [attr.aria-label]="'Qty of ' + it.name" (change)="update(it, { quantity: +$any($event.target).value })" /></label>
                     @if (o.pageId) {
                       <label class="flex min-h-[44px] items-center gap-3 text-sm"><input type="checkbox" [checked]="it.attuned" [attr.aria-label]="it.name + ' attuned'" (change)="update(it, { attuned: $any($event.target).checked })" /> Attuned</label>
                     }
@@ -60,7 +60,7 @@ import { PlayApi } from './play-api';
                       <label class="flex min-h-[44px] items-center gap-3 text-sm"><input type="checkbox" [checked]="it.identified" [attr.aria-label]="it.name + ' identified'" (change)="update(it, { identified: $any($event.target).checked })" /> Identified</label>
                     }
                     <label class="col-span-2 flex flex-col gap-1 text-sm sm:flex-row sm:items-center sm:gap-2">Give to
-                      <select class="cn-input sm:w-auto" [attr.aria-label]="'Give ' + it.name + ' to'" (change)="update(it, { ownerPageId: $any($event.target).value || null })">
+                      <select class="cn-input sm:w-auto" [attr.aria-label]="'Give to ' + it.name" (change)="update(it, { ownerPageId: $any($event.target).value || null })">
                         @for (to of inv.owners; track to.pageId) {<option [value]="to.pageId ?? ''" [selected]="to.pageId === it.ownerPageId">{{ to.name }}</option>}
                       </select>
                     </label>

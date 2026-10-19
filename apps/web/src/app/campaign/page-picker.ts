@@ -6,7 +6,7 @@ import { CampaignStore } from './campaign.store';
 @Component({
   selector: 'cn-page-picker',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<select class="cn-input" (change)="selected.emit($any($event.target).value || null)">
+  template: `<select class="cn-input px-2" (change)="selected.emit($any($event.target).value || null)">
     <option value="" [selected]="!value()">— none —</option>
     @for (p of options(); track p.id) {
       <option [value]="p.id" [selected]="p.id === value()">{{ p.title }}</option>

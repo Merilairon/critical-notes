@@ -47,6 +47,26 @@ describe('PropertiesPanel', () => {
     expect(labels).not.toContain('treasure');
   });
 
+  it('multi-select chips carry the chip class (the check mark comes from CSS) and read-only empty values show a dash', () => {
+    const { el } = setup({ traits: ['brave'] });
+    expect([...el.querySelectorAll('[aria-label=traits] button')].every((b) => b.classList.contains('cn-chip'))).toBe(true);
+    TestBed.resetTestingModule();
+    const fixtureEl = (() => {
+      TestBed.configureTestingModule({
+        imports: [PropertiesPanel],
+        providers: [provideRouter([]), provideHttpClient(), { provide: CampaignStore, useValue: { propertyDefs: signal([def('mood', 'select', { options: ['calm'] })]), id: signal('c1'), pages: signal([]) } }],
+      });
+      const f = TestBed.createComponent(PropertiesPanel);
+      f.componentRef.setInput('pageId', 'p1');
+      f.componentRef.setInput('pageType', 'npc');
+      f.componentRef.setInput('readOnly', true);
+      f.detectChanges();
+      return f.nativeElement as HTMLElement;
+    })();
+    expect(fixtureEl.textContent).toContain('–');
+    expect(fixtureEl.querySelector('select')).toBeNull();
+  });
+
   it('emits typed values: toggling multi-select options and clearing a select', () => {
     const { el, emitted } = setup({ mood: 'calm', traits: ['brave'] });
     const option = (name: string) => [...el.querySelectorAll<HTMLButtonElement>('[aria-label=traits] button')].find((b) => b.textContent!.trim() === name)!;

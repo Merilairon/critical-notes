@@ -16,7 +16,7 @@ describe('TrackerPlayerView', () => {
         close() {}
       },
     );
-    const view = { round: 1, activeId: 'a', combatants: [{ id: 'a', name: 'Wren', initiative: 12, conditions: [], hp: null, health: 'unhurt' }] } as unknown as PlayerTrackerView;
+    const view = { round: 1, activeId: 'a', combatants: [{ id: 'a', name: 'Wren', initiative: 12, conditions: [], hp: null, health: 'unhurt' }, { id: 'b', name: 'Goblin', initiative: 5, conditions: [], hp: { current: 0, max: 7, temp: 0 }, health: null }] } as unknown as PlayerTrackerView;
     TestBed.configureTestingModule({
       providers: [provideRouter([]), provideHttpClient(), { provide: PlayApi, useValue: { playerView: async () => view, eventsUrl: () => '/events' } }],
     });
@@ -33,5 +33,11 @@ describe('TrackerPlayerView', () => {
     expect(back.closest('header')).toBeNull();
     expect(el.querySelector('header')).toBeNull();
     expect(el.textContent).toContain('Wren');
+    expect(el.querySelector('h1')!.textContent).toBe('Initiative');
+    const rows = el.querySelectorAll('li');
+    expect(rows[1]!.classList.contains('opacity-50')).toBe(false);
+    expect(rows[1]!.querySelector('.line-through')!.textContent).toContain('Goblin');
+    expect(rows[1]!.textContent).toContain('Down');
+    expect(rows[0]!.querySelector('.line-through')).toBeNull();
   });
 });

@@ -225,7 +225,7 @@ describe('InventoryPage permissions', () => {
     await settle();
     fixture.detectChanges();
     const section = (name: string) => el.querySelector<HTMLElement>(`section[aria-label="${name}"]`)!;
-    const editable = (name: string) => !!section(name).querySelector('input[aria-label^="Quantity of"]');
+    const editable = (name: string) => !!section(name).querySelector('input[aria-label^="Qty of"]');
     return { el, section, editable };
   }
 
@@ -250,7 +250,7 @@ describe('InventoryPage permissions', () => {
     const card = section('Mine').querySelector('li')!;
     expect(card.textContent).toContain('Dagger');
     const names = [...card.querySelectorAll('[aria-label]')].map((e) => e.getAttribute('aria-label'));
-    expect(names).toEqual(expect.arrayContaining(['Remove Dagger', 'Quantity of Dagger', 'Dagger attuned', 'Dagger identified', 'Give Dagger to']));
+    expect(names).toEqual(expect.arrayContaining(['Remove Dagger', 'Qty of Dagger', 'Dagger attuned', 'Dagger identified', 'Give to Dagger']));
     expect(card.querySelector<HTMLElement>('button[aria-label="Remove Dagger"]')!.className).toContain('w-[44px]');
     expect(card.querySelector('input[aria-label="Dagger attuned"]')!.closest('label')!.className).toContain('min-h-[44px]');
   });

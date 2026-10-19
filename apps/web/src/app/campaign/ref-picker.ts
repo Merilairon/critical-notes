@@ -25,7 +25,7 @@ import { EntityLink } from '../reference/render/entity-link';
     } @else {
       <input
         type="search"
-        class="cn-input"
+        class="cn-input px-2"
         [placeholder]="placeholder()"
         [value]="query()"
         (input)="onInput($any($event.target).value)"

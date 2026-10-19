@@ -948,7 +948,7 @@ body {
     color: var(--ink);
     padding: 0.375rem 0.625rem;
     font-size: 0.875rem;
-    line-height: 1.4;
+    line-height: 1.25rem;
   }
   .cn-btn,
   .cn-btn-primary {
@@ -972,7 +972,7 @@ body {
   .cn-btn-primary {
     background: var(--accent);
     color: var(--accent-ink);
-    border: 1px solid transparent;
+    border: 0;
   }
   .cn-btn:disabled,
   .cn-btn-primary:disabled {
@@ -1026,8 +1026,29 @@ fieldset:disabled input[type='checkbox'],
 fieldset:disabled input[type='radio'] {
   opacity: 0.6;
 }
+/* Read-only chips: no opacity (contrast). Selected = full ink plus a check mark; unselected = muted. */
 fieldset:disabled button[aria-pressed] {
-  opacity: 0.75;
+  color: var(--muted);
+  -webkit-text-fill-color: var(--muted);
+}
+fieldset:disabled button[aria-pressed='true'] {
+  color: var(--ink);
+  -webkit-text-fill-color: var(--ink);
+}
+.cn-chip[aria-pressed='true']::before {
+  content: '✓ ';
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+/* Tables keep whole words and scroll inside their wrapper instead of breaking mid-word */
+.cn-prose table,
+.cn-block-view table {
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 /* Long words and URLs wrap inside their box; wide objects scroll inside their own wrapper */
@@ -1111,4 +1132,10 @@ details[open] > summary > .cn-chevron {
   .cn-chevron {
     transition: none;
   }
+}
+
+/* The editor wraps tables in .tableWrapper: it scrolls sideways instead of widening the page */
+.cn-editor .tableWrapper {
+  max-width: 100%;
+  overflow-x: auto;
 }
