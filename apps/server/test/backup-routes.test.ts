@@ -9,6 +9,7 @@ import { createApp, createServices } from '../src/app';
 import { internalAuth } from '../src/auth/session';
 import { users } from '../src/db/schema';
 import { hashPassword } from '../src/lib/password';
+import { appVersion } from '../src/lib/version';
 import { isAllowed } from '../src/mcp/api';
 import { BackupError, BackupService, BackupZipError, backupNameFor, failureCode, type BackupServiceOptions } from '../src/services/backups';
 import { MAX_CONCURRENT_DOWNLOADS, FAILURE_TEXT, downloadLimits } from '../src/routes/backups';
@@ -714,6 +715,7 @@ describe('hardening (review round 1)', () => {
   it('other routes keep Referrer-Policy: same-origin; only the download says no-referrer', async () => {
     const health = await app.request('http://localhost/api/health');
     expect(health.headers.get('referrer-policy')).toBe('same-origin');
+    expect(await health.clone().json()).toEqual({ ok: true, version: appVersion() });
     expect(health.headers.get('content-security-policy')).toBeTruthy();
     expect((await admin.get('/api/admin/backups')).res.headers.get('referrer-policy')).toBe('same-origin');
     const { ticket } = await ticketFor(admin);

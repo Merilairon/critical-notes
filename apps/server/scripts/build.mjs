@@ -11,15 +11,9 @@ import { writeLicenses } from './licenses.mjs';
 
 const EXTERNAL = ['better-sqlite3', '@node-rs/argon2', 'sharp', '5etools-utils'];
 
-// App version for the backup manifest: the root package.json version if present, else this package's (M5.4 owns the single source)
-const readVersion = (file) => {
-  try {
-    return JSON.parse(readFileSync(file, 'utf8')).version || null;
-  } catch {
-    return null;
-  }
-};
-const APP_VERSION = readVersion('../../package.json') ?? readVersion('package.json') ?? '0.0.0';
+// App version (health check, backup manifest): the root package.json version, the single source (M5.4). The build fails without it.
+const APP_VERSION = JSON.parse(readFileSync('../../package.json', 'utf8')).version;
+if (typeof APP_VERSION !== 'string' || !APP_VERSION) throw new Error('The root package.json has no "version"');
 
 rmSync('dist', { recursive: true, force: true });
 const result = await build({

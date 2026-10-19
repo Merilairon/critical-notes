@@ -1023,10 +1023,10 @@ describe('durable log and audit', () => {
 });
 
 describe('version', () => {
-  it('reads the root package.json version, else the server package.json', () => {
-    const server = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf8')) as { version: string };
+  it('reads the root package.json version (the single source) and it is a semver', () => {
     const root = JSON.parse(readFileSync(join(import.meta.dirname, '..', '..', '..', 'package.json'), 'utf8')) as { version?: string };
-    expect(appVersion()).toBe(root.version ?? server.version);
+    expect(root.version).toMatch(/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/);
+    expect(appVersion()).toBe(root.version);
     expect(timestampOfName(backupNameFor(T0))).toBe(T0);
     expect(timestampOfName('backup-x.zip')).toBeNull();
   });

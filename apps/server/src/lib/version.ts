@@ -15,10 +15,11 @@ function readVersion(file: string): string | null {
 }
 
 /**
- * The app version for the backup manifest (informational only, no compatibility decision uses it).
- * Root `package.json` version if present, otherwise `apps/server/package.json`. M5.4 owns the single source of truth.
+ * The app version: the root `package.json` `version`, the single source (M5.4). Used by `/api/health` and the backup manifest
+ * (informational only; no compatibility decision uses it). The bundle has it baked in by `scripts/build.mjs`, so it never reads a
+ * file from an unknown working directory; under tsx (dev, tests) it reads the root file through `REPO_ROOT`.
  */
 export function appVersion(): string {
   if (typeof __APP_VERSION__ === 'string') return __APP_VERSION__;
-  return readVersion(join(REPO_ROOT, 'package.json')) ?? readVersion(join(REPO_ROOT, 'apps', 'server', 'package.json')) ?? '0.0.0';
+  return readVersion(join(REPO_ROOT, 'package.json')) ?? 'unknown';
 }
