@@ -108,8 +108,10 @@ changelog, back up, update, check.
 
 1. **Read the [changelog](CHANGELOG.md)** for every version between yours and the new one. Entries under
    **Upgrade notes** tell you about settings you must change. The same text is on each
-   [GitHub release](https://github.com/Merilairon/critical-notes/releases). Your running version is on the Account page and
-   in `curl http://localhost:3000/api/health`.
+   [GitHub release](https://github.com/Merilairon/critical-notes/releases). **Write down the version you run now**
+   (the Account page shows it, or `curl http://localhost:3000/api/health`): you need it to go back. If the changelog
+   says `docker-compose.yml` changed, copy the new file from the release (the tag on GitHub) over yours first, and keep
+   your own edits in `.env` or a `docker-compose.override.yml`.
 2. **Make a backup and copy it off the machine.** Do this with the version that is still running, before you pull
    anything. Updates change the database, and a migration cannot be undone. Scheduled backups are on by default with
    Docker (one every 24 hours), but the last one may be hours old, so make a fresh one. The full guide is in
@@ -119,6 +121,12 @@ changelog, back up, update, check.
    docker compose exec app node admin.mjs backup                    # prints the path of the new zip
    docker compose cp app:/data/app/backups/backup-<time>.zip .      # a copy outside the container
    ```
+
+   Use the name the first command printed. If you set `BACKUP_DIR`, the path is different; use the printed one.
+   `docker compose cp` only copies the file to the same machine, and a backup is readable by its owner only (mode
+   0600, user id 1000 in the container), so the copy may need `sudo` or a `chown` to open. A copy on the same disk
+   does not protect you from the disk failing: [copy it off the machine](#copying-backups-off-the-machine), encrypted,
+   because a backup holds password hashes and DM secrets.
 
 3. **Pin the version you want** (recommended) or follow `latest`. In the `.env` file next to `docker-compose.yml`:
 
@@ -147,7 +155,11 @@ forward, and the older code does not know the new tables. If an update goes wron
 
 1. `docker compose stop app`
 2. Set `CN_VERSION` in `.env` back to the version you had, then `docker compose pull`.
-3. Restore the backup you made in step 2, following [Restoring](#with-docker) (`docker compose run --rm app node admin.mjs restore <file> --yes`, then `docker compose up -d`). Your newer data is moved aside to `pre-restore-<time>/`, not deleted.
+3. Restore the backup you made in step 2, following [Restoring](#with-docker):
+   `docker compose run --rm app node admin.mjs restore <file> --yes`, then `docker compose up -d`. `<file>` is the path
+   **inside the container**, like `/data/app/backups/backup-<time>.zip` (a copy from elsewhere needs the `-v` mount shown
+   there). Restoring **discards everything written after that backup** and signs everyone out; the newer data is moved
+   aside to `pre-restore-<time>/`, not deleted.
 
 The reverse also holds: a backup made by a **newer** version is refused by an older one (exit code 66, "update first"),
 so update the app before you restore such a backup. An older backup restores into a newer version and is migrated on
@@ -159,14 +171,16 @@ the way.
 node apps/server/dist/admin.mjs backup      # 1. with the current build, before changing anything
 # 2. stop the server (Ctrl+C, systemctl stop, ...)
 git fetch --tags
-git checkout v1.0.0                         # or `git pull` on main for the development version
+git checkout v1.0.0                         # the tag you want (see the releases page); `git pull` on main follows development
 pnpm install
 pnpm build
 # 3. start the server again; migrations run on start
 NODE_ENV=production pnpm --filter @cn/server start:dist
+node apps/server/dist/admin.mjs backup      # 4. check: this prints the path of a new backup if the database is healthy
+curl http://localhost:3000/api/health       # and the version here is the one you checked out
 ```
 
-`admin.mjs` also applies pending migrations when it opens the database, so run it from the same build as the server.
+Only commands that open the database to change it (the server, `reset-link`) apply pending migrations; `backup` never does.
 To go back, check out the old tag, run `pnpm install && pnpm build`, and restore your backup as described in
 [Restoring without Docker](#without-docker).
 
@@ -184,7 +198,7 @@ It prints the link (`<PUBLIC_URL>/reset#<token>`) on stdout and nothing else, so
 stderr. Open the link, choose a new password; the link works once, expires after 24 hours and replaces any
 earlier link for that user. Reading the settings works as for the server: environment variables, plus the
 repository `.env` outside Docker (so run it with the same `DATA_DIR` and `PUBLIC_URL` as the server; the
-Docker image has them set). It is safe to run while the app is running, but `admin.mjs` must be the same version as the running server (it applies pending migrations when it opens the database). Exit codes: 1 unknown user, 2 disabled
+Docker image has them set). It is safe to run while the app is running, but `admin.mjs` must be the same version as the running server (`reset-link` applies pending migrations when it opens the database; `backup` does not). Exit codes: 1 unknown user, 2 disabled
 user (enable it first; this command cannot), 3 no database found at `DATA_DIR`, 64 wrong usage.
 
 ## Backups

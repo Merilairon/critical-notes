@@ -1,6 +1,6 @@
 # Status and next steps
 
-Snapshot: **2026-10-13**. **Every milestone of the plan, (a) to (i), is done**, and since then an **MCP server for AI assistants** (see [What the MCP server added](#what-the-mcp-server-added)). What could come next is in [After the plan](#after-the-plan).
+Snapshot: **2026-10-13**. **Every milestone of the plan, (a) to (i), is done**, and since then an **MCP server for AI assistants** (see [What the MCP server added](#what-the-mcp-server-added)). What could come next is in [After the plan](#after-the-plan). Task M5.6 (changelog, release guide, README "Updating") is written, see [Changelog and upgrade notes](#changelog-and-upgrade-notes-m56); the release itself waits for the owner decisions (D7: phone width) and the release candidate.
 The plan, its milestone table and the list of deviations live in [PLAN.md](PLAN.md). This file is for picking the work back up: what state the code is in and what to do next, in order.
 
 ## Where things stand

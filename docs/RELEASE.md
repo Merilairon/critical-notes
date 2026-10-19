@@ -41,9 +41,23 @@ Do not tag until every line is true. Run the commands in a clean checkout of the
       instance is required).
 - [ ] An update works on real data: start the previous release's image on a volume with data, back up, switch to the
       new image (`docker compose up -d`) and check that the campaigns are there and `/api/health` shows the new version.
+- [ ] **Open owner decision D7** ([PROJECT.md](PROJECT.md) section 8): M6 (phone width) lands before 1.0, or moves to
+      1.0.x/1.1. Decide it before you tag. If M6 lands before the tag, remove the "not part of this release" paragraph
+      (and the 390 px example) from the `CHANGELOG.md` entry; if not, leave it in.
+- [ ] `SECURITY.md` is finished: the `[TODO: maintainer contact address ...]` line has a real contact (or you rely on
+      the host's private vulnerability reporting and remove the TODO), and "Critical Notes is pre-alpha" is reworded for a
+      stable release. Do not tag with either left as it is.
+- [ ] Stale README text is removed after the first publish: the "No published release yet, or the pull is denied..."
+      lines under "Running it with Docker" and in "Image and versions" (build-from-checkout can stay as an option).
+- [ ] The GHCR package is public (see the one-time setup) **before** you announce the release; test with
+      `docker logout ghcr.io && docker pull ghcr.io/merilairon/critical-notes:1.0.0` on a machine without credentials.
+- [ ] After `rc.1` and after G1.1 to G1.4, re-read every claim in the `CHANGELOG.md` entry against what you saw. In
+      particular, keep the `linux/arm64` claim only if rc.1 ran on an arm64 machine, and keep the list of what AI
+      assistants can do with the trash in step with the code.
 - [ ] The tasks in [PROJECT.md](PROJECT.md) section 5.7 for this release are done: penetration test (G1.1),
       accessibility pass (G1.2), documentation sweep (G1.3) and release certification (G1.4), with the owner's approval.
-- [ ] Every item of PRD section 8 for the release has evidence, and nothing in the changelog claims work that is not done.
+- [ ] Every item of PRD section 8 for the release has evidence, or is listed in the changelog as not included (M6 is
+      the known case, see D7). Nothing in the changelog claims work that is not done.
 - [ ] README, [STATUS.md](STATUS.md) and the changelog describe what ships (new settings in the README table, new
       behaviour in the changelog).
 - [ ] Any change that needs the reader to do something while updating (a new required setting, a manual step) is in the
@@ -63,11 +77,13 @@ to the configuration is a new major version, new features a minor version, fixes
    the root version into the server, and the workflow fails if the tag differs from it.
 
    ```sh
+   # GNU sed (Linux). Put the version you are replacing in the first part; after the first release that is the previous release.
    sed -i 's/"version": "1.0.0-dev"/"version": "1.0.0"/' package.json apps/*/package.json packages/*/package.json
-   git diff --stat      # 7 files, one line each
+   git diff --stat      # exactly 7 files (the root, apps/server, apps/web and the four packages), one changed line each
    ```
 
-   (Use the version you are replacing in the pattern; after the first release it is the previous release number.)
+   On macOS or BSD, use `sed -i ''`. Whichever way you do it, count the changed files: if one still shows the old version,
+   the build (which reads only the root file) is fine but the packages disagree.
 3. **Update `CHANGELOG.md`.**
    - Rename the heading `## [Unreleased]` to `## [1.0.0] - YYYY-MM-DD` (today's date). The heading must look exactly like
      that: `scripts/changelog-section.mjs` finds the section by the version in the brackets, and the workflow uses the
@@ -124,8 +140,9 @@ the arm64 half (Raspberry Pi and home servers) was only checked by reading the l
 Use `v1.0.0-rc.1` and do the steps above with these differences:
 
 - The tag must match `^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`. A hyphen followed by letters, digits, dots or
-  hyphens makes it a pre-release: `v1.0.0-rc.1`, `v1.0.0-rc.2`, `v1.1.0-beta.1`. Anything else (`v1.0`, `1.0.0`,
-  `v1.0.0_rc1`) fails the first job.
+  hyphens makes it a pre-release: `v1.0.0-rc.1`, `v1.0.0-rc.2`, `v1.1.0-beta.1`. A tag that starts with `v` but does not
+  fit (`v1.0`, `v1.0.0_rc1`) fails the first job. A tag without the `v` (`1.0.0`) does not start the workflow at all, so
+  nothing happens.
 - The root `package.json` version must be the same text without the `v`: `1.0.0-rc.1`. (The `sed` pattern in step 2
   needs the version you are replacing.)
 - `CHANGELOG.md` needs its own section, `## [1.0.0-rc.1] - YYYY-MM-DD`. A short one is enough (what to test, and
@@ -167,8 +184,16 @@ git tag -d v1.0.0
 **The run failed in `publish`.** Look at the step that failed.
 
 - Before "Build and push": nothing was pushed. Delete the tag as above and fix it.
-- After the push (only the GitHub Release step is missing, for example): the image exists. Use "Re-run failed jobs" on
-  the run. If the Release was created, you will see an "already exists" error and you are done.
+- The image push succeeded but only the GitHub Release step failed: do **not** re-run the job; "Re-run failed jobs"
+  re-runs the whole `publish` job, which rebuilds and pushes the tags again. Create the Release by hand, from a
+  checkout of the tagged commit (use `--prerelease` instead of `--latest` for a pre-release tag):
+
+  ```sh
+  node scripts/changelog-section.mjs 1.0.0 > notes.md
+  gh release create v1.0.0 --verify-tag --title "Critical Notes 1.0.0" --notes-file notes.md --latest
+  ```
+- The image push itself failed (a network error, a registry outage): re-run the failed jobs. The tags are only
+  written by a successful push, so repeating it is safe.
 
 **A published version is bad.** Fix forward. Do not move or reuse a tag, and do not change the content of a published
 version: people have pinned it, and the image's attestations refer to it.
