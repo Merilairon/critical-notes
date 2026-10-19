@@ -39,12 +39,12 @@ function setups(origin: string, token: string) {
       <h2 id="profile-heading" class="font-semibold">Display name</h2>
       <p class="mt-1 text-sm text-muted">The name other people see in campaigns. Your username ({{ auth.user()?.username }}) does not change.</p>
       <form novalidate class="mt-3 flex flex-wrap items-end gap-2 text-sm" (submit)="$event.preventDefault(); saveName(nameInput.value)">
-        <label class="flex min-w-48 flex-1 flex-col gap-1">
+        <label class="flex min-w-[min(12rem,100%)] flex-1 flex-col gap-1">
           <span class="text-xs text-muted">Display name</span>
           <input #nameInput class="cn-prop-input" name="displayName" autocomplete="nickname" required maxlength="80" (input)="nameDone.set('')" [value]="auth.user()?.displayName ?? ''"
             [attr.aria-invalid]="nameError() ? 'true' : null" [attr.aria-describedby]="nameError() ? 'name-error' : null" />
         </label>
-        <button type="submit" class="rounded-md bg-accent px-3 py-1.5 font-semibold text-accent-ink aria-disabled:opacity-60" [attr.aria-disabled]="nameBusy() ? 'true' : null">Save name</button>
+        <button type="submit" class="cn-btn-primary w-full aria-disabled:opacity-60 sm:w-auto" [attr.aria-disabled]="nameBusy() ? 'true' : null">Save name</button>
       </form>
       <div role="status" class="mt-2 text-sm">{{ nameDone() }}</div>
       <div role="alert" class="text-sm text-accent"><p id="name-error">{{ nameError() }}</p></div>
@@ -70,7 +70,7 @@ function setups(origin: string, token: string) {
           <input #again type="password" name="newPasswordAgain" class="cn-prop-input" autocomplete="new-password" required
             [attr.aria-invalid]="pwField() === 'again' ? 'true' : null" [attr.aria-describedby]="pwField() === 'again' ? 'pw-error' : null" />
         </label>
-        <button type="submit" class="self-start rounded-md bg-accent px-3 py-1.5 font-semibold text-accent-ink aria-disabled:opacity-60" [attr.aria-disabled]="pwBusy() ? 'true' : null">Change password</button>
+        <button type="submit" class="cn-btn-primary w-full aria-disabled:opacity-60 sm:w-auto sm:self-start" [attr.aria-disabled]="pwBusy() ? 'true' : null">Change password</button>
       </form>
       <div role="status" class="mt-2 text-sm">{{ pwDone() }}</div>
       <div role="alert" class="text-sm text-accent"><p id="pw-error">{{ pwError() }}</p></div>
@@ -85,26 +85,26 @@ function setups(origin: string, token: string) {
       </p>
 
       <form class="mt-3 flex flex-wrap items-end gap-2 text-sm" (submit)="$event.preventDefault(); create(name.value, scope.value, days.value)">
-        <label class="flex min-w-48 flex-1 flex-col gap-1"
+        <label class="flex min-w-[min(12rem,100%)] flex-1 flex-col gap-1"
           ><span class="text-xs text-muted">Name</span><input #name class="cn-prop-input" required maxlength="60" placeholder="Claude on my laptop" aria-label="Token name"
         /></label>
-        <label class="flex flex-col gap-1"
+        <label class="flex max-w-full min-w-0 flex-col gap-1"
           ><span class="text-xs text-muted">Access</span>
-          <select #scope class="cn-prop-input" aria-label="Access">
+          <select #scope class="cn-prop-input max-w-full" aria-label="Access">
             <option value="write" selected>Read and write</option>
             <option value="read">Read only</option>
           </select>
         </label>
-        <label class="flex flex-col gap-1"
+        <label class="flex max-w-full min-w-0 flex-col gap-1"
           ><span class="text-xs text-muted">Valid for</span>
-          <select #days class="cn-prop-input" aria-label="Valid for">
+          <select #days class="cn-prop-input max-w-full" aria-label="Valid for">
             <option value="30">30 days</option>
             <option value="90" selected>90 days</option>
             <option value="365">1 year</option>
             <option value="">No limit</option>
           </select>
         </label>
-        <button type="submit" class="rounded-md bg-accent px-3 py-1.5 font-semibold text-accent-ink" [disabled]="busy()">Create token</button>
+        <button type="submit" class="cn-btn-primary w-full sm:w-auto" [disabled]="busy()">Create token</button>
       </form>
 
       @if (created(); as c) {
@@ -112,13 +112,13 @@ function setups(origin: string, token: string) {
           <p class="font-medium">Token “{{ c.name }}” created. Copy it now: it is shown only once.</p>
           <div class="mt-2 flex gap-2">
             <input class="cn-prop-input min-w-0 flex-1 font-mono text-xs" [value]="c.token" readonly aria-label="New token" (focus)="$any($event.target).select()" />
-            <button type="button" class="rounded border border-line px-2 py-0.5" (click)="copy(c.token, 'token')">{{ copied() === 'token' ? 'Copied' : 'Copy' }}</button>
+            <button type="button" class="cn-btn" (click)="copy(c.token, 'token')">{{ copied() === 'token' ? 'Copied' : 'Copy' }}</button>
           </div>
           @for (s of setupFor(c.token); track s.label) {
             <div class="mt-3">
               <div class="flex items-center justify-between gap-2">
                 <span class="text-xs font-medium text-muted">{{ s.label }}</span>
-                <button type="button" class="rounded border border-line px-2 py-0.5 text-xs" (click)="copy(s.text, s.label)">{{ copied() === s.label ? 'Copied' : 'Copy' }}</button>
+                <button type="button" class="cn-btn" (click)="copy(s.text, s.label)">{{ copied() === s.label ? 'Copied' : 'Copy' }}</button>
               </div>
               <pre class="mt-1 overflow-x-auto rounded bg-panel-2 p-2 font-mono text-xs" [attr.aria-label]="s.label">{{ s.text }}</pre>
             </div>
@@ -141,7 +141,7 @@ function setups(origin: string, token: string) {
                 <td class="pr-2 text-muted">{{ t.createdAt | date: 'mediumDate' }}</td>
                 <td class="pr-2 text-muted">{{ t.lastUsedAt ? (t.lastUsedAt | date: 'short') : 'Never' }}</td>
                 <td class="pr-2" [class.text-accent]="expired(t)">{{ t.expiresAt ? (expired(t) ? 'Expired' : (t.expiresAt | date: 'mediumDate')) : 'Never' }}</td>
-                <td class="text-right"><button type="button" class="text-muted hover:text-accent" (click)="revoke(t)" [attr.aria-label]="'Revoke ' + t.name">Revoke</button></td>
+                <td class="text-right"><button type="button" class="cn-btn text-muted hover:text-accent" (click)="revoke(t)" [attr.aria-label]="'Revoke ' + t.name">Revoke</button></td>
               </tr>
             }
           </tbody>

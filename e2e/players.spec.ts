@@ -137,7 +137,7 @@ test('the inventory as a player', async () => {
   await wren.locator('input[aria-label="Coins for Wren"]').fill('5');
   await wren.getByRole('button', { name: 'Add' }).click();
   await expect(wren.locator('[aria-label=Coins]')).toContainText(/5\s*gp/);
-  await expect(player.locator('label', { hasText: /^\s*identified/ })).toHaveCount(0);
+  await expect(player.locator('label', { hasText: /^\s*identified/i })).toHaveCount(0);
 });
 
 test('members and house rules for the player', async () => {

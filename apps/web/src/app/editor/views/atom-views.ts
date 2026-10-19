@@ -40,7 +40,7 @@ export function imageSrcUrl(src: ImageSrc): string | null {
     } @else {
       <div class="cn-embed-empty">
         <div class="font-semibold">Image</div>
-        <label class="cn-btn">Upload…<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden (change)="upload($any($event.target).files?.[0])" /></label>
+        <label class="cn-block-btn">Upload…<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden (change)="upload($any($event.target).files?.[0])" /></label>
         <input placeholder="5etools image path, e.g. bestiary/MM/Goblin.webp" (change)="usePath($any($event.target).value)" />
         <input placeholder="or https:// URL" (change)="useUrl($any($event.target).value)" />
         @if (busy()) {<span class="text-muted">Uploading…</span>}
@@ -182,7 +182,7 @@ export class PageEmbedView extends AngularNodeViewComponent {
   template: `<div class="cn-embed" contenteditable="false" [class.ring-2]="selected()">
     <div class="flex flex-wrap items-center gap-2">
       <input class="cn-query-title" placeholder="Query title (e.g. NPCs here)" [value]="title()" (change)="updateAttributes()({ title: $any($event.target).value })" />
-      <button type="button" class="cn-btn" (click)="configuring.set(!configuring())">{{ configuring() ? 'Done' : 'Configure' }}</button>
+      <button type="button" class="cn-block-btn" (click)="configuring.set(!configuring())">{{ configuring() ? 'Done' : 'Configure' }}</button>
     </div>
     @if (configuring()) {
       <div class="cn-query-config">
@@ -334,7 +334,7 @@ export class UnknownView extends AngularNodeViewComponent {
       }
     </div>
     <div class="cn-embed-empty">
-      <label class="cn-btn">Upload…<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden (change)="upload($any($event.target).files?.[0])" /></label>
+      <label class="cn-block-btn">Upload…<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden (change)="upload($any($event.target).files?.[0])" /></label>
       <input placeholder="5etools image path or https:// URL" (change)="addRef($any($event.target))" />
       @if (error()) {<span class="text-accent">{{ error() }}</span>}
     </div>

@@ -26,25 +26,28 @@ const TYPE_LABELS: Record<PropertyType, string> = {
   selector: 'cn-properties-panel',
   imports: [PagePicker, RefPicker, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<div class="grid gap-2 sm:grid-cols-[10rem_1fr] sm:items-center">
+  template: `<div class="grid gap-x-3 gap-y-1 sm:grid-cols-[10rem_1fr] sm:items-center sm:gap-y-2">
       @for (def of defs(); track def.id) {
-        <div class="flex items-center gap-1 text-sm text-muted">
-          <span class="truncate" [title]="def.label">{{ def.label }}</span>
+        <div class="mt-2 flex items-center gap-1 text-sm text-muted sm:mt-0">
+          <span class="min-w-0 [overflow-wrap:anywhere]">{{ def.label }}</span>
           @if (def.dmOnly) {<span title="DM only" aria-label="DM only">🔒</span>}
           @if (manage()) {
-            <button type="button" class="ml-auto text-xs opacity-40 hover:text-accent hover:opacity-100 focus:opacity-100" (click)="removeDef(def)" [attr.aria-label]="'Delete property ' + def.label">✕</button>
+            <button type="button" class="cn-edit-only ml-auto inline-flex items-center justify-center text-xs opacity-40 hover:text-accent hover:opacity-100 focus:opacity-100 touch:min-h-[44px] touch:min-w-[44px] touch:opacity-100" (click)="removeDef(def)" [attr.aria-label]="'Delete property ' + def.label">✕</button>
           }
         </div>
         <div class="min-w-0">
+          @if (readOnly() && isEmpty(def)) {
+            <span class="block py-1 text-muted">–</span>
+          } @else {
           @switch (def.type) {
             @case ('number') {
-              <input type="number" class="cn-prop-input w-32" [value]="value(def) ?? ''" (change)="set(def, $any($event.target).value === '' ? null : +$any($event.target).value)" [attr.aria-label]="def.label" />
+              <input type="number" inputmode="numeric" class="cn-prop-input w-32" [value]="value(def) ?? ''" (change)="set(def, $any($event.target).value === '' ? null : +$any($event.target).value)" [attr.aria-label]="def.label" />
             }
             @case ('date') {
               <input type="date" class="cn-prop-input" [value]="value(def) ?? ''" (change)="set(def, $any($event.target).value || null)" [attr.aria-label]="def.label" />
             }
             @case ('checkbox') {
-              <input type="checkbox" [checked]="!!value(def)" (change)="set(def, $any($event.target).checked)" [attr.aria-label]="def.label" />
+              <label class="flex items-center touch:min-h-[44px]"><input type="checkbox" [checked]="!!value(def)" (change)="set(def, $any($event.target).checked)" [attr.aria-label]="def.label" /></label>
             }
             @case ('select') {
               <select class="cn-prop-input" (change)="set(def, $any($event.target).value || null)" [attr.aria-label]="def.label">
@@ -55,14 +58,14 @@ const TYPE_LABELS: Record<PropertyType, string> = {
             @case ('multiselect') {
               <div class="flex flex-wrap gap-1" role="group" [attr.aria-label]="def.label">
                 @for (o of def.options ?? []; track o) {
-                  <button type="button" class="rounded-full border px-2 py-0.5 text-xs" [class.border-accent]="has(def, o)" [class.text-accent]="has(def, o)" [class.border-line]="!has(def, o)" [attr.aria-pressed]="has(def, o)" (click)="toggle(def, o)">{{ o }}</button>
+                  <button type="button" class="rounded-full border px-2 py-0.5 text-xs touch:min-h-[44px] touch:px-3 touch:py-1 touch:text-sm" [class.border-accent]="has(def, o)" [class.text-accent]="has(def, o)" [class.border-line]="!has(def, o)" [attr.aria-pressed]="has(def, o)" (click)="toggle(def, o)">{{ o }}</button>
                 }
               </div>
             }
             @case ('pageLink') {
               <div class="flex items-center gap-2">
                 <div class="flex-1"><cn-page-picker [value]="$any(value(def))" [exclude]="pageId()" (selected)="set(def, $event)" /></div>
-                @if (value(def)) {<a class="text-xs text-accent" [routerLink]="['/c', store.id(), 'p', value(def)]">open</a>}
+                @if (value(def)) {<a class="inline-flex items-center text-xs text-accent touch:min-h-[44px] touch:text-sm" [routerLink]="['/c', store.id(), 'p', value(def)]">open</a>}
               </div>
             }
             @case ('refLink') {
@@ -71,12 +74,13 @@ const TYPE_LABELS: Record<PropertyType, string> = {
             @case ('url') {
               <div class="flex items-center gap-2">
                 <input type="url" class="cn-prop-input flex-1" [value]="value(def) ?? ''" placeholder="https://…" (change)="set(def, $any($event.target).value || null)" [attr.aria-label]="def.label" />
-                @if (safeUrl(def); as u) {<a class="text-xs text-accent" [href]="u" target="_blank" rel="noopener noreferrer nofollow">open ↗</a>}
+                @if (safeUrl(def); as u) {<a class="inline-flex items-center text-xs text-accent touch:min-h-[44px] touch:text-sm" [href]="u" target="_blank" rel="noopener noreferrer nofollow">open ↗</a>}
               </div>
             }
             @default {
               <input class="cn-prop-input w-full" [value]="value(def) ?? ''" (change)="set(def, $any($event.target).value || null)" [attr.aria-label]="def.label" />
             }
+          }
           }
         </div>
       }
@@ -101,17 +105,17 @@ const TYPE_LABELS: Record<PropertyType, string> = {
           </select>
         </label>
         <div class="flex flex-wrap items-center gap-3 sm:col-span-2">
-          <label class="flex items-center gap-1"><input #dmOnly type="checkbox" /> DM only</label>
-          <label class="flex items-center gap-1"><input #onlyType type="checkbox" checked /> Only for {{ pageType() }} pages</label>
+          <label class="flex items-center gap-1 touch:min-h-[44px] touch:gap-3"><input #dmOnly type="checkbox" /> DM only</label>
+          <label class="flex items-center gap-1 touch:min-h-[44px] touch:gap-3"><input #onlyType type="checkbox" checked /> Only for {{ pageType() }} pages</label>
           <span class="ml-auto flex gap-2">
-            <button type="button" class="rounded-md border border-line px-2 py-1 text-muted" (click)="adding.set(false)">Cancel</button>
-            <button type="submit" class="rounded-md bg-accent px-3 py-1 text-white">Add</button>
+            <button type="button" class="cn-btn text-muted" (click)="adding.set(false)">Cancel</button>
+            <button type="submit" class="cn-btn-primary">Add</button>
           </span>
         </div>
         @if (error()) {<p class="text-accent sm:col-span-2" role="alert">{{ error() }}</p>}
       </form>
     } @else if (manage()) {
-      <button type="button" class="mt-2 text-sm text-muted hover:text-accent" (click)="adding.set(true)">+ Add property</button>
+      <button type="button" class="cn-edit-only cn-btn mt-2 w-full text-muted hover:text-accent sm:w-auto" (click)="adding.set(true)">+ Add property</button>
     }`,
 })
 export class PropertiesPanel {
@@ -120,6 +124,8 @@ export class PropertiesPanel {
   readonly values = input<Record<string, unknown>>({});
   /** Adding and deleting definitions (game masters). */
   readonly manage = input(true);
+  /** The reader cannot edit: empty values show an en dash. */
+  readonly readOnly = input(false);
   readonly changed = output<Record<string, unknown>>();
   protected readonly store = inject(CampaignStore);
   private readonly context = inject(ContextService);
@@ -140,6 +146,11 @@ export class PropertiesPanel {
 
   protected value(def: PropertyDefDto): string | number | boolean | null {
     return (this.values()[def.key] as string | number | boolean | undefined) ?? null;
+  }
+  protected isEmpty(def: PropertyDefDto): boolean {
+    const v = this.values()[def.key];
+    if (def.type === 'checkbox') return false;
+    return v === null || v === undefined || v === '' || (Array.isArray(v) && v.length === 0);
   }
   protected has(def: PropertyDefDto, option: string) {
     const v = this.values()[def.key];

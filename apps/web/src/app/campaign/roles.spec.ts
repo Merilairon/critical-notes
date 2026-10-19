@@ -243,4 +243,15 @@ describe('InventoryPage permissions', () => {
     expect(el.textContent).toContain('(unidentified)');
     expect(el.querySelectorAll('input[type=checkbox]').length).toBeGreaterThanOrEqual(3);
   });
+
+  it('lists items as cards, not a table, with item-specific control names and 44 px targets', async () => {
+    const { el, section } = await render('dm');
+    expect(el.querySelector('table')).toBeNull();
+    const card = section('Mine').querySelector('li')!;
+    expect(card.textContent).toContain('Dagger');
+    const names = [...card.querySelectorAll('[aria-label]')].map((e) => e.getAttribute('aria-label'));
+    expect(names).toEqual(expect.arrayContaining(['Remove Dagger', 'Quantity of Dagger', 'Dagger attuned', 'Dagger identified', 'Give Dagger to']));
+    expect(card.querySelector<HTMLElement>('button[aria-label="Remove Dagger"]')!.className).toContain('w-[44px]');
+    expect(card.querySelector('input[aria-label="Dagger attuned"]')!.closest('label')!.className).toContain('min-h-[44px]');
+  });
 });

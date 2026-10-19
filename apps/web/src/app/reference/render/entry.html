@@ -74,7 +74,7 @@
           <caption>
             @if (obj()['caption']) {<cn-inline [text]="$any(obj()['caption'])" />}
             @if (tableDice(); as dice) {
-              &ngsp;<cn-roll [expr]="dice" [label]="$any(obj()['caption']) ?? 'Table roll'">🎲 roll {{ dice }}</cn-roll>
+              &ngsp;<cn-roll [standalone]="true" [expr]="dice" [label]="$any(obj()['caption']) ?? 'Table roll'">🎲 roll {{ dice }}</cn-roll>
             }
           </caption>
         }

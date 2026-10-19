@@ -31,7 +31,7 @@
       <div class="overflow-x-auto">
         <table>
           @if (tableRoll(n); as roll) {
-            <caption><cn-roll [expr]="roll" label="Table roll">🎲 roll {{ n.attrs?.['roll'] }}</cn-roll></caption>
+            <caption><cn-roll [standalone]="true" [expr]="roll" label="Table roll">🎲 roll {{ n.attrs?.['roll'] }}</cn-roll></caption>
           }
           <tbody>
             @for (row of n.content ?? []; track $index) {

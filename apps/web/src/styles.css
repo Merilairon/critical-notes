@@ -677,7 +677,7 @@ body {
   padding: 0.2rem 0.4rem;
   min-width: 10rem;
 }
-.cn-btn,
+.cn-block-btn,
 .cn-block-tools button {
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -990,6 +990,7 @@ body {
     min-height: 5.5rem;
   }
   .cn-btn,
+  .cn-block-btn,
   .cn-btn-primary {
     min-height: 44px;
     min-width: 44px;
@@ -1006,4 +1007,92 @@ body {
 /* Edit-only controls disappear for readers inside a disabled fieldset (used by the player content views) */
 fieldset:disabled .cn-edit-only {
   display: none;
+}
+
+/* ---------- Player content views (docs/design/phone-layout.md section 6, M6.4) ---------- */
+
+/* Disabled controls look read-only: plain text, no box. Unlayered so it beats utilities without !important. */
+fieldset:disabled :is(input:not([type='checkbox'], [type='radio']), select, textarea) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink);
+  -webkit-text-fill-color: var(--ink); /* iOS greys disabled text otherwise */
+  opacity: 1;
+  appearance: none; /* hides the select arrow and the number spinner chrome */
+  padding-left: 0;
+  resize: none;
+}
+fieldset:disabled input[type='checkbox'],
+fieldset:disabled input[type='radio'] {
+  opacity: 0.6;
+}
+fieldset:disabled button[aria-pressed] {
+  opacity: 0.75;
+}
+
+/* Long words and URLs wrap inside their box; wide objects scroll inside their own wrapper */
+.cn-prose,
+.cn-block-view,
+h1,
+h2,
+h3,
+h4,
+.cn-wrap {
+  overflow-wrap: anywhere;
+}
+.cn-prose table,
+.cn-prose pre {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.cn-prose img,
+.cn-prose video {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Inline dice: a modest invisible hit area (6 px). The ::after is positioned, so it paints above plain
+   neighbours: keep the expansion small. Standalone roll buttons are real 44 px controls instead. */
+.cn-roll {
+  position: relative;
+}
+@media (pointer: coarse), (max-width: 639.98px) {
+  .cn-roll::after {
+    content: '';
+    position: absolute;
+    inset: -6px -4px;
+  }
+  .cn-prose {
+    line-height: 1.7;
+  }
+  .cn-roll-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .cn-roll-btn::after {
+    display: none;
+  }
+  .cn-suggest {
+    width: min(20rem, calc(100vw - 1rem));
+    max-height: min(20rem, 50dvh);
+  }
+  .cn-suggest-item {
+    min-height: 44px;
+    align-items: center;
+  }
+}
+.cn-roll-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.875rem;
+}
+.cn-roll-btn:hover {
+  border-color: var(--roll);
 }

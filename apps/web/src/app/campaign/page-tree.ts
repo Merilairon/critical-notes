@@ -45,8 +45,9 @@ const expanded = signal<Record<string, boolean>>(readStored('cn.tree.expanded', 
           @if (store.isGm()) {
             <button
               type="button"
-              class="invisible rounded px-1 text-muted group-hover:visible hover:text-accent focus:visible"
+              class="invisible rounded px-1 text-muted group-hover:visible hover:text-accent focus:visible touch:visible touch:min-h-[44px] touch:min-w-[44px]"
               title="Add subpage"
+              [attr.aria-label]="'Add subpage to ' + page.title"
               (click)="addChild(page)"
             >
               +

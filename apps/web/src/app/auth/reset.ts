@@ -21,7 +21,7 @@ const TOKEN_SHAPE = /^[A-Za-z0-9_-]{43}$/;
   imports: [DatePipe, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `<div class="flex min-h-full items-center justify-center p-4">
-    <div class="w-full max-w-md rounded-xl border border-line bg-panel p-6 shadow-sm">
+    <div class="w-full max-w-md rounded-xl border border-line bg-panel p-4 shadow-sm sm:p-6">
       @switch (state()) {
         @case ('checking') {
           <p role="status" class="text-sm text-muted">Checking your link…</p>
@@ -29,23 +29,23 @@ const TOKEN_SHAPE = /^[A-Za-z0-9_-]{43}$/;
         @case ('invalid') {
           <h1 #heading tabindex="-1" class="font-display text-2xl font-bold text-accent">This reset link is not valid</h1>
           <p class="mt-3 text-sm">It may have been used already, or it may have expired or been replaced by a newer link. Ask the person who runs this server for a new one.</p>
-          <a routerLink="/login" rel="noreferrer" class="mt-4 inline-block rounded-md bg-accent px-3 py-2 font-medium text-accent-ink">Go to sign in</a>
+          <a routerLink="/login" rel="noreferrer" class="cn-btn-primary mt-4 w-full sm:w-auto">Go to sign in</a>
         }
         @case ('limited') {
           <h1 #heading tabindex="-1" class="font-display text-2xl font-bold text-accent">Please wait a moment</h1>
           <p class="mt-3 text-sm">{{ notice() }}</p>
-          <button type="button" class="mt-4 rounded-md bg-accent px-3 py-2 font-medium text-accent-ink" (click)="check()">Retry</button>
+          <button type="button" class="cn-btn-primary mt-4 w-full sm:w-auto" (click)="check()">Retry</button>
         }
         @case ('failed') {
           <h1 #heading tabindex="-1" class="font-display text-2xl font-bold text-accent">We could not check this link</h1>
           <p class="mt-3 text-sm">We could not check this link. Try again.</p>
           <p class="mt-1 text-sm text-muted">{{ notice() }}</p>
-          <button type="button" class="mt-4 rounded-md bg-accent px-3 py-2 font-medium text-accent-ink" (click)="check()">Retry</button>
+          <button type="button" class="cn-btn-primary mt-4 w-full sm:w-auto" (click)="check()">Retry</button>
         }
         @case ('signin-failed') {
           <h1 #heading tabindex="-1" class="font-display text-2xl font-bold text-accent">Password changed</h1>
           <p class="mt-3 text-sm">Your password was changed, but signing in failed. Sign in with your new password.</p>
-          <a routerLink="/login" rel="noreferrer" class="mt-4 inline-block rounded-md bg-accent px-3 py-2 font-medium text-accent-ink">Go to sign in</a>
+          <a routerLink="/login" rel="noreferrer" class="cn-btn-primary mt-4 w-full sm:w-auto">Go to sign in</a>
         }
         @default {
           @if (info(); as i) {
@@ -60,16 +60,16 @@ const TOKEN_SHAPE = /^[A-Za-z0-9_-]{43}$/;
               <input type="text" name="username" autocomplete="username" class="sr-only" aria-hidden="true" tabindex="-1" [value]="i.username" />
               <label class="flex flex-col gap-1">
                 <span class="font-medium">New password (at least 8 characters)</span>
-                <input #next type="password" name="newPassword" class="w-full rounded-md border border-line bg-bg px-3 py-2" autocomplete="new-password" required minlength="8"
+                <input #next type="password" name="newPassword" class="cn-input" autocomplete="new-password" required minlength="8"
                   [attr.aria-invalid]="field() === 'new' ? 'true' : null" [attr.aria-describedby]="field() === 'new' ? 'reset-error' : null" />
               </label>
               <label class="flex flex-col gap-1">
                 <span class="font-medium">New password again</span>
-                <input #again type="password" name="newPasswordAgain" class="w-full rounded-md border border-line bg-bg px-3 py-2" autocomplete="new-password" required
+                <input #again type="password" name="newPasswordAgain" class="cn-input" autocomplete="new-password" required
                   [attr.aria-invalid]="field() === 'again' ? 'true' : null" [attr.aria-describedby]="field() === 'again' ? 'reset-error' : null" />
               </label>
               <div role="alert" class="text-sm text-accent"><p id="reset-error">{{ error() }}</p></div>
-              <button type="submit" class="w-full rounded-md bg-accent px-3 py-2 font-medium text-accent-ink aria-disabled:opacity-60" [attr.aria-disabled]="busy() ? 'true' : null">
+              <button type="submit" class="cn-btn-primary w-full aria-disabled:opacity-60" [attr.aria-disabled]="busy() ? 'true' : null">
                 {{ busy() ? 'Setting password…' : 'Set password and sign in' }}
               </button>
             </form>

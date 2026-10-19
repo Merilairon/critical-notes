@@ -11,6 +11,7 @@ import { DiceService } from '../../core/dice.service';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `<span
     [class.cn-roll]="rollable()"
+    [class.cn-roll-btn]="rollable() && standalone()"
     [attr.role]="rollable() ? 'button' : null"
     [attr.tabindex]="rollable() ? 0 : null"
     [attr.title]="rollable() ? 'Roll ' + expr() : null"
@@ -24,6 +25,8 @@ import { DiceService } from '../../core/dice.service';
 export class Roll {
   readonly expr = input.required<string>();
   readonly label = input<string | undefined>();
+  /** A roll control that stands alone (a table's roll button): a 44 px button on touch, not an inline expression. */
+  readonly standalone = input(false);
   private readonly dice = inject(DiceService);
   protected readonly rollable = computed(() => !!parseDice(this.expr()));
 

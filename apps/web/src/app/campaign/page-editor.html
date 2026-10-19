@@ -2,29 +2,34 @@
   <div class="m-auto p-8 text-center text-muted">This page does not exist or was deleted.</div>
 } @else if (page(); as p) {
   <article class="mx-auto w-full max-w-4xl p-4 sm:p-6">
-    <nav class="mb-1 flex flex-wrap items-center gap-1 text-xs text-muted" aria-label="Breadcrumb">
+    <nav class="mb-1 flex flex-wrap items-center gap-x-2 gap-y-0 text-xs text-muted" aria-label="Breadcrumb">
       @for (crumb of breadcrumbs(); track crumb.id) {
-        <a class="hover:text-accent" [routerLink]="['/c', store.id(), 'p', crumb.id]">{{ crumb.title }}</a><span>/</span>
+        <a class="hover:text-accent touch:inline-block touch:py-2.5" [routerLink]="['/c', store.id(), 'p', crumb.id]">{{ crumb.title }}</a><span>/</span>
       }
     </nav>
 
-    <header class="flex items-start gap-2">
+    <header class="flex flex-wrap items-start gap-x-2 gap-y-1">
       <input
-        class="w-12 shrink-0 rounded-md bg-transparent text-center text-3xl hover:bg-panel-2 focus:bg-panel-2"
+        class="w-12 shrink-0 rounded-md bg-transparent text-center text-3xl hover:bg-panel-2 focus:bg-panel-2 touch:min-h-[44px]"
         [value]="p.icon ?? icons[p.type]"
         maxlength="8"
         aria-label="Page icon"
         [disabled]="!canEdit()"
         (change)="queue({ icon: $any($event.target).value || null }, true)"
       />
-      <input
-        class="min-w-0 flex-1 rounded-md bg-transparent font-display text-3xl font-bold outline-none hover:bg-panel-2/50 focus:bg-panel-2/50"
-        [value]="p.title"
-        aria-label="Page title"
-        [readonly]="!canEdit()"
-        (input)="queue({ title: $any($event.target).value || 'Untitled' })"
-      />
-      <span class="mt-3 shrink-0 text-xs text-muted" aria-live="polite">
+      @if (canEdit()) {
+        <textarea
+          rows="1"
+          class="min-w-0 flex-1 basis-40 resize-none overflow-hidden rounded-md bg-transparent font-display text-2xl font-bold [overflow-wrap:anywhere] outline-none hover:bg-panel-2/50 focus:bg-panel-2/50 sm:text-3xl touch:py-2"
+          [value]="p.title"
+          [cnAutosizeTitle]="p.title"
+          aria-label="Page title"
+          (input)="onTitle($any($event.target).value)"
+        ></textarea>
+      } @else {
+        <h1 tabindex="-1" class="min-w-0 flex-1 basis-40 py-0.5 font-display text-2xl font-bold [overflow-wrap:anywhere] outline-none sm:text-3xl">{{ p.title }}</h1>
+      }
+      <span class="order-last w-full text-xs text-muted sm:order-none sm:mt-3 sm:w-auto sm:shrink-0" aria-live="polite">
         @switch (status()) {
           @case ('saving') { Saving… }
           @case ('saved') { Saved }
@@ -36,7 +41,7 @@
     @if (status() === 'conflict') {
       <div class="mt-2 flex items-center gap-3 rounded-md border border-accent/50 bg-accent/5 px-3 py-2 text-sm" role="alert">
         Someone else changed this page. Your last change was not saved.
-        <button type="button" class="rounded border border-accent px-2 py-0.5 text-accent" (click)="reloadAfterConflict()">Reload page</button>
+        <button type="button" class="cn-btn border-accent text-accent" (click)="reloadAfterConflict()">Reload page</button>
       </div>
     }
     @if (status() === 'error') {
@@ -45,17 +50,17 @@
 
     @if (store.isGm()) {
     <div class="mt-3 flex flex-wrap items-center gap-2 text-sm">
-      <label class="flex items-center gap-1">
+      <label class="flex max-w-full min-w-0 items-center gap-1">
         <span class="text-muted">Type</span>
-        <select class="rounded-md border border-line bg-panel px-2 py-1" (change)="setType($any($event.target).value)">
+        <select class="cn-input w-auto min-w-0" (change)="setType($any($event.target).value)">
           @for (t of types; track t) {
             <option [value]="t" [selected]="t === p.type">{{ typeLabels[t] }}</option>
           }
         </select>
       </label>
-      <label class="flex items-center gap-1">
+      <label class="flex max-w-full min-w-0 items-center gap-1">
         <span class="text-muted">Visible to</span>
-        <select class="rounded-md border border-line bg-panel px-2 py-1" (change)="queue({ visibility: $any($event.target).value }, true)">
+        <select class="cn-input w-auto min-w-0" (change)="queue({ visibility: $any($event.target).value }, true)">
           @for (v of visibilities; track v) {
             <option [value]="v" [selected]="v === p.visibility">{{ visibilityLabels[v] }}</option>
           }
@@ -65,15 +70,15 @@
         @for (tag of p.tags; track tag) {
           <span class="inline-flex items-center gap-1 rounded-full bg-panel-2 px-2 py-0.5 text-xs">
             #{{ tag }}
-            <button type="button" class="text-muted hover:text-accent" (click)="removeTag(tag)" [attr.aria-label]="'Remove tag ' + tag">✕</button>
+            <button type="button" class="inline-flex items-center justify-center text-muted hover:text-accent touch:min-h-[44px] touch:min-w-[44px]" (click)="removeTag(tag)" [attr.aria-label]="'Remove tag ' + tag">✕</button>
           </span>
         }
-        <input #tagInput class="w-24 rounded-md border border-line bg-panel px-2 py-0.5 text-xs" placeholder="+ tag" (keydown.enter)="addTag(tagInput)" aria-label="Add tag" />
+        <input #tagInput class="cn-input w-28" placeholder="+ tag" (keydown.enter)="addTag(tagInput)" aria-label="Add tag" />
       </div>
-      <div class="ml-auto flex gap-2">
+      <div class="ml-auto flex flex-wrap gap-2">
         <button
           type="button"
-          class="rounded-md border px-2 py-1 hover:border-accent"
+          class="cn-btn"
           [class.border-accent]="previewing()"
           [class.text-accent]="previewing()"
           [class.border-line]="!previewing()"
@@ -83,25 +88,25 @@
         >
           👁 Preview as player
         </button>
-        <button type="button" class="rounded-md border border-line px-2 py-1 text-muted hover:border-accent" (click)="openApply()">🧩 Apply template</button>
-        <button type="button" class="rounded-md border border-line px-2 py-1 text-muted hover:border-accent" (click)="addSubpage()">+ Subpage</button>
-        <button type="button" class="rounded-md border border-line px-2 py-1 text-muted hover:border-accent hover:text-accent" [attr.aria-disabled]="deleting() || null" [attr.aria-busy]="deleting() || null" (click)="remove()">Delete</button>
+        <button type="button" class="cn-btn text-muted" (click)="openApply()">🧩 Apply template</button>
+        <button type="button" class="cn-btn text-muted" (click)="addSubpage()">+ Subpage</button>
+        <button type="button" class="cn-btn text-muted hover:text-accent" [attr.aria-disabled]="deleting() || null" [attr.aria-busy]="deleting() || null" (click)="remove()">Delete</button>
       </div>
     </div>
     @if (p.visibility === 'selected') {
       <div class="mt-2 flex flex-wrap items-center gap-3 text-sm" role="group" aria-label="Players who see this page">
         <span class="text-muted">Shown to</span>
         @for (m of players(); track m.userId) {
-          <label class="flex items-center gap-1"><input type="checkbox" [checked]="p.viewers.includes(m.userId)" (change)="toggleViewer(m.userId, $any($event.target).checked)" /> {{ m.displayName }}</label>
+          <label class="flex items-center gap-1 touch:min-h-[44px] touch:gap-2"><input type="checkbox" [checked]="p.viewers.includes(m.userId)" (change)="toggleViewer(m.userId, $any($event.target).checked)" /> {{ m.displayName }}</label>
         } @empty {
           <span class="text-muted">No players yet. Invite them in Settings.</span>
         }
       </div>
     }
     @if (p.type === 'pc') {
-      <label class="mt-2 flex items-center gap-2 text-sm">
+      <label class="mt-2 flex max-w-full min-w-0 items-center gap-2 text-sm">
         <span class="text-muted">Played by</span>
-        <select class="rounded-md border border-line bg-panel px-2 py-1" (change)="onFacet({ playerUserId: $any($event.target).value || null })" aria-label="Played by">
+        <select class="cn-input w-auto min-w-0" (change)="onFacet({ playerUserId: $any($event.target).value || null })" aria-label="Played by">
           <option value="" [selected]="!p.facet?.['playerUserId']">— nobody —</option>
           @for (m of players(); track m.userId) {<option [value]="m.userId" [selected]="m.userId === p.facet?.['playerUserId']">{{ m.displayName }}</option>}
         </select>
@@ -126,17 +131,24 @@
     }
     <div [hidden]="previewing()">
       @if (facetType(); as ft) {
-        <!-- A disabled fieldset makes every control read-only for players who may not edit -->
-        <fieldset class="mt-4 rounded-xl border border-line bg-panel p-3 sm:p-4" aria-label="Details" [disabled]="!canEdit()">
-          <cn-facet-form [facetType]="ft" [value]="p.facet ?? {}" [pageId]="p.id" (changed)="onFacet($event)" />
-        </fieldset>
+        <!-- Phone: a collapsible section with a one-line digest. Otherwise the sheet is always open and the summary is hidden. -->
+        <details class="mt-4 rounded-xl border border-line bg-panel" [open]="!collapsible() || sheetOpen()" (toggle)="onSheetToggle($any($event.target).open)">
+          <summary class="min-h-[44px] cursor-pointer items-center justify-between gap-3 px-3 text-sm" [class.flex]="collapsible()" [class.hidden]="!collapsible()">
+            <span class="shrink-0 font-semibold">{{ ft === 'pc' ? 'Character sheet' : 'Details' }}</span>
+            @if (digest(); as d) {<span class="min-w-0 truncate text-muted">{{ d }}</span>}
+          </summary>
+          <!-- A disabled fieldset makes every control read-only for players who may not edit -->
+          <fieldset class="min-w-0 p-3 sm:p-4" aria-label="Details" [disabled]="!canEdit()">
+            <cn-facet-form [facetType]="ft" [value]="p.facet ?? {}" [pageId]="p.id" [readOnly]="!canEdit()" (changed)="onFacet($event)" />
+          </fieldset>
+        </details>
       }
 
       @if (store.isGm() || hasProps()) {
-        <details class="mt-3 rounded-xl border border-line bg-panel px-3 py-2 sm:px-4" [open]="showProps()" (toggle)="showProps.set($any($event.target).open)">
-          <summary class="cursor-pointer text-sm text-muted">Properties</summary>
-          <fieldset class="py-2" [disabled]="!canEdit()">
-            <cn-properties-panel [pageId]="p.id" [pageType]="p.type" [values]="p.props" [manage]="store.isGm()" (changed)="onProps($event)" />
+        <details class="mt-3 rounded-xl border border-line bg-panel px-3 sm:px-4" [open]="showProps()" (toggle)="showProps.set($any($event.target).open)">
+          <summary class="flex min-h-[44px] cursor-pointer items-center text-sm text-muted">Properties</summary>
+          <fieldset class="min-w-0 pb-3" [disabled]="!canEdit()">
+            <cn-properties-panel [pageId]="p.id" [pageType]="p.type" [values]="p.props" [manage]="store.isGm()" [readOnly]="!canEdit()" (changed)="onProps($event)" />
           </fieldset>
         </details>
       }
@@ -159,10 +171,10 @@
     @if (children().length) {
       <section class="mt-6 border-t border-line pt-3">
         <h2 class="mb-1 text-xs font-semibold tracking-wide text-muted uppercase">Subpages</h2>
-        <ul class="grid gap-1 sm:grid-cols-2">
+        <ul class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,16rem),1fr))] gap-1">
           @for (child of children(); track child.id) {
             <li>
-              <a class="flex items-center gap-2 rounded px-2 py-1 hover:bg-panel-2" [routerLink]="['/c', store.id(), 'p', child.id]">
+              <a class="flex touch:min-h-[44px] items-center gap-2 rounded px-2 py-1 hover:bg-panel-2 [overflow-wrap:anywhere]" [routerLink]="['/c', store.id(), 'p', child.id]">
                 <span>{{ child.icon || icons[child.type] }}</span>{{ child.title }}
               </a>
             </li>

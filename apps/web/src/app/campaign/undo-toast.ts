@@ -112,9 +112,9 @@ export class UndoToast {
   private focusMain(waitForEditor = false, attempt = 0) {
     setTimeout(() => {
       const main = document.querySelector<HTMLElement>('[data-campaign-main]');
-      const target = main?.querySelector<HTMLElement>('input[aria-label="Page title"], h1[tabindex]');
+      const target = main?.querySelector<HTMLElement>('input[aria-label="Page title"], textarea[aria-label="Page title"], h1[tabindex]');
       if (!target && waitForEditor && attempt < 20) return this.focusMain(true, attempt + 1);
-      (target ?? main?.querySelector<HTMLElement>('input, h1[tabindex]') ?? main)?.focus();
+      (target ?? main?.querySelector<HTMLElement>('input, textarea, h1[tabindex]') ?? main)?.focus();
     }, waitForEditor ? 50 : 0);
   }
 }

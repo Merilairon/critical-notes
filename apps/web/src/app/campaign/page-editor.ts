@@ -18,7 +18,10 @@ import {
 import { firstValueFrom } from 'rxjs';
 import { BlockView } from '../blocks/block-view';
 import { errorMessage } from '../core/http.interceptor';
+import { LayoutService } from '../core/layout.service';
 import { BlockEditor } from '../editor/block-editor';
+import { AutosizeTitle, singleLine } from './autosize-title';
+import { pcDigest } from './facet-digest';
 import { BacklinksPanel } from './backlinks-panel';
 import { CampaignStore } from './campaign.store';
 import { FacetForm } from './facet-form';
@@ -32,7 +35,7 @@ const VISIBILITY_LABELS: Record<PageVisibility, string> = { dm: 'DM only', all: 
 
 @Component({
   selector: 'cn-page-editor',
-  imports: [RouterLink, BlockEditor, BlockView, FacetForm, NpcStatblock, PropertiesPanel, BacklinksPanel, PageTemplateDialog],
+  imports: [RouterLink, AutosizeTitle, BlockEditor, BlockView, FacetForm, NpcStatblock, PropertiesPanel, BacklinksPanel, PageTemplateDialog],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './page-editor.html',
 })
@@ -57,6 +60,12 @@ export class PageEditor implements OnDestroy {
   protected readonly previewing = signal(false);
   protected readonly showProps = signal(false);
   protected readonly applying = signal(false);
+  private readonly layout = inject(LayoutService);
+  /** On a phone (portrait, or short landscape) the character sheet is a collapsible section; otherwise it is always open. */
+  protected readonly collapsible = this.layout.phone;
+  protected readonly sheetOpen = signal(false);
+  /** One line for the collapsed sheet of a character: HP, AC and speed. */
+  protected readonly digest = computed(() => (this.page()?.type === 'pc' ? pcDigest(this.page()?.facet) : ''));
   protected readonly canEdit = computed(() => {
     const p = this.page();
     return !!p && this.store.canEdit(p);
@@ -169,6 +178,15 @@ export class PageEditor implements OnDestroy {
     const p = this.page();
     if (p) this.page.set({ ...p, body: doc });
     this.queue({ body: doc });
+  }
+
+  protected onTitle(value: string) {
+    this.queue({ title: singleLine(value).trim() ? singleLine(value) : 'Untitled' });
+  }
+
+  /** On a phone the choice is remembered for the page; the always-open sheet does not count as a choice. */
+  protected onSheetToggle(open: boolean) {
+    if (this.collapsible()) this.sheetOpen.set(open);
   }
 
   protected setType(type: string) {

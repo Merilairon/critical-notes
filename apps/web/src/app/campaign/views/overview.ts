@@ -15,11 +15,11 @@ import { CampaignStore } from '../campaign.store';
     }
     <p class="mt-1 text-sm text-muted">{{ context.ruleset().label }}</p>
 
-    <div class="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <div class="mt-5 grid grid-cols-[repeat(auto-fill,minmax(min(100%,7rem),1fr))] gap-2 sm:grid-cols-4">
       @for (c of counts(); track c.type) {
         <a [routerLink]="c.link" class="rounded-lg border border-line bg-panel px-3 py-3 hover:border-accent">
           <div class="text-2xl">{{ icons[c.type] }}</div>
-          <div class="mt-1 flex items-baseline justify-between"><span class="font-medium">{{ c.label }}</span><span class="text-muted">{{ c.count }}</span></div>
+          <div class="mt-1 flex flex-wrap items-baseline justify-between gap-x-2"><span class="min-w-0 font-medium [overflow-wrap:anywhere]">{{ c.label }}</span><span class="text-muted">{{ c.count }}</span></div>
         </a>
       }
     </div>
@@ -27,7 +27,7 @@ import { CampaignStore } from '../campaign.store';
     @if (store.isGm()) {
       <div class="mt-5 flex flex-wrap gap-2">
         @for (t of quickTypes; track t) {
-          <button type="button" class="rounded-md border border-line px-3 py-1.5 text-sm hover:border-accent" (click)="create(t)">+ {{ labels[t] }}</button>
+          <button type="button" class="rounded-md border border-line px-3 py-1.5 text-sm hover:border-accent touch:min-h-[44px]" (click)="create(t)">+ {{ labels[t] }}</button>
         }
       </div>
     }
@@ -36,7 +36,7 @@ import { CampaignStore } from '../campaign.store';
     <ul class="divide-y divide-line rounded-lg border border-line bg-panel">
       @for (p of recent(); track p.id) {
         <li>
-          <a class="flex items-center gap-2 px-3 py-2 hover:bg-panel-2" [routerLink]="['/c', store.id(), 'p', p.id]">
+          <a class="flex items-center gap-2 px-3 py-2 hover:bg-panel-2 touch:min-h-[44px]" [routerLink]="['/c', store.id(), 'p', p.id]">
             <span>{{ p.icon || icons[p.type] }}</span><span class="flex-1 truncate">{{ p.title }}</span>
             <span class="text-xs text-muted">{{ labels[p.type] }}</span>
           </a>

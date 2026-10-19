@@ -12,20 +12,20 @@ import { EntityLink } from '../reference/render/entity-link';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `<div class="relative">
     @if (value() && !editing()) {
-      <div class="flex items-center gap-2 rounded-md border border-line bg-bg px-2 py-1.5 text-sm">
+      <div class="flex flex-wrap items-center gap-x-2 rounded-md border border-line bg-bg px-2 py-1.5 text-sm touch:min-h-[44px]">
         @if (current.hasValue()) {
           <cn-entity-link [uid]="current.value().uid" [kind]="kind()">{{ current.value().name }}</cn-entity-link>
           <span class="text-xs text-muted">{{ current.value().source }}</span>
         } @else {
           <span class="text-muted">{{ value() }}</span>
         }
-        <button type="button" class="ml-auto text-xs text-muted hover:text-accent" (click)="editing.set(true)">change</button>
-        <button type="button" class="text-xs text-muted hover:text-accent" (click)="selected.emit(null)" aria-label="Clear">✕</button>
+        <button type="button" class="cn-edit-only ml-auto text-xs text-muted hover:text-accent touch:min-h-[44px] touch:px-2 touch:text-sm" (click)="editing.set(true)">change</button>
+        <button type="button" class="cn-edit-only text-xs text-muted hover:text-accent touch:min-h-[44px] touch:min-w-[44px] touch:text-sm" (click)="selected.emit(null)" aria-label="Clear">✕</button>
       </div>
     } @else {
       <input
         type="search"
-        class="w-full rounded-md border border-line bg-bg px-2 py-1.5 text-sm"
+        class="cn-input"
         [placeholder]="placeholder()"
         [value]="query()"
         (input)="onInput($any($event.target).value)"
@@ -38,7 +38,7 @@ import { EntityLink } from '../reference/render/entity-link';
             <li role="option" [attr.aria-selected]="i === active()">
               <button
                 type="button"
-                class="flex w-full items-baseline gap-2 px-3 py-1 text-left text-sm hover:bg-panel-2"
+                class="flex w-full items-baseline gap-2 px-3 py-1 text-left text-sm hover:bg-panel-2 touch:min-h-[44px] touch:items-center"
                 [class.bg-panel-2]="i === active()"
                 (mousedown)="$event.preventDefault()"
                 (click)="pick(hit)"

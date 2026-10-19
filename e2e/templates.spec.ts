@@ -84,7 +84,7 @@ test('a new page from a built-in page template', async () => {
   await page.locator('[role=dialog] button', { hasText: 'Create page' }).click();
   await page.waitForURL((u) => u.pathname.includes('/p/') && !u.pathname.endsWith(ruinsId));
   // The editor component is reused across pages: wait for it to show the new one
-  await expect(page.locator('input[aria-label="Page title"]')).toHaveValue('Phandalin');
+  await expect(page.locator('[data-campaign-main] [aria-label="Page title"]')).toHaveValue('Phandalin');
   await statValue(page, '500');
   await expect(page.locator('.tiptap', { hasText: 'Who is here' })).toBeVisible();
 });

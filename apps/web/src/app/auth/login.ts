@@ -9,21 +9,21 @@ import { errorMessage } from '../core/http.interceptor';
   imports: [FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `<div class="flex min-h-full items-center justify-center p-4">
-    <form class="w-full max-w-sm rounded-xl border border-line bg-panel p-6 shadow-sm" (ngSubmit)="submit()">
+    <form class="w-full max-w-sm rounded-xl border border-line bg-panel p-4 shadow-sm sm:p-6" (ngSubmit)="submit()">
       <h1 class="font-display text-2xl font-bold text-accent">Critical Notes</h1>
       <p class="mb-4 text-sm text-muted">Sign in to your campaigns.</p>
       <label class="mb-3 block text-sm">
         <span class="mb-1 block font-medium">Username</span>
-        <input class="w-full rounded-md border border-line bg-bg px-3 py-2" name="username" autocomplete="username" [(ngModel)]="username" required />
+        <input class="cn-input" name="username" autocomplete="username" [(ngModel)]="username" required />
       </label>
       <label class="mb-4 block text-sm">
         <span class="mb-1 block font-medium">Password</span>
-        <input class="w-full rounded-md border border-line bg-bg px-3 py-2" type="password" name="password" autocomplete="current-password" [(ngModel)]="password" required />
+        <input class="cn-input" type="password" name="password" autocomplete="current-password" [(ngModel)]="password" required />
       </label>
       @if (error()) {
         <p class="mb-3 text-sm text-accent" role="alert">{{ error() }}</p>
       }
-      <button class="w-full rounded-md bg-accent px-3 py-2 font-medium text-accent-ink disabled:opacity-60" [disabled]="busy()">Sign in</button>
+      <button class="cn-btn-primary w-full" [disabled]="busy()">Sign in</button>
     </form>
   </div>`,
 })

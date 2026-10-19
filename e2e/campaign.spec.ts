@@ -20,7 +20,7 @@ test('an NPC with a customized statblock', async () => {
   const { page } = shared;
   await page.getByRole('button', { name: '+ NPC' }).click();
   await page.waitForURL(/\/p\//);
-  await page.locator('input[aria-label="Page title"]').fill('Glasstaff');
+  await page.locator('[aria-label="Page title"]').fill('Glasstaff');
   await page.locator('input[placeholder="Search the bestiary…"]').fill('mage');
   await page.locator('[role=listbox] button').filter({ has: page.getByText(/^Mage$/) }).click();
   await expect(page.locator('.cn-statblock')).toBeVisible();
