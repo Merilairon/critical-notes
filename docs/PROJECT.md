@@ -418,8 +418,9 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 
 ### 5.6 Epic M6: Phone-width player and table flows
 
-### [ ] Task M6.1: Phone audit
+### [x] Task M6.1: Phone audit
 **Owner**: Evidence Collector · **QA**: UX Architect
+**Done:** 2026-10-19, QA UX Architect: PASS with required additions (1 round, all added). `docs/qa/phone-audit.md`: 6 flows at 320/360/390/430 px, light and dark, plus landscape, text zoom and axe. Headlines: the header needs about 369 px so every signed-in page overflows at 360 and 320 (High); header is 160-199 px tall; tap targets under 44 px in nav, inventory, dice log, account; 390 and 430 show no sideways scroll; the combat player screen is the only flow that passes at every width. The player-edit scare (#16) was proven a false positive by the Application Security Engineer (server refuses every write; controls disabled by fieldset); cosmetic only. Screenshots not committed (possible rules text), they live in the session scratchpad. Not tested: real devices/iOS Safari/real keyboard, axe at 360/430, live combat updates. The doc ends with numbers for M6.2 (minimum width 320, header budget, safe areas, stacking order).
 **Description**: At 360, 390 and 430 px wide: invite and registration, shared page reading, own character page (editing), inventory, combat player screen, dice log. Screenshots and an issue list.
 **Acceptance Criteria**: `docs/qa/phone-audit.md` with each flow PASS/FAIL and evidence
 **Reference**: PRD §8 M6
