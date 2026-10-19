@@ -388,8 +388,9 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 **Files**: `.github/workflows/ci.yml`
 **Depends on**: M5.1
 
-### [ ] Task M5.3: Browser tests in CI without leaking data
+### [x] Task M5.3: Browser tests in CI without leaking data
 **Owner**: DevOps Automator · **QA**: Application Security Engineer
+**Done:** 2026-10-19, QA Application Security Engineer: PASS (1 retry). `.github/workflows/e2e.yml` for a self-hosted runner (`[self-hosted, linux, 5etools]`), same-repository PRs and manual runs only, no artifacts or caches; under `E2E_NO_ARTIFACTS=1` a custom reporter (`e2e/ci-reporter.ts`) prints only titles, status and file:line (a leak probe with rules text and console output left the log clean), the web server output is dropped, and cleanup removes reports, results and temp data. Inactive until the owner registers a runner (D4: workflow now, runner later). Trust warning in STATUS.md: a collaborator's PR runs its own code on the runner, so use a private repo, an ephemeral unprivileged runner, a read-only clone and required reviewers. Also fixed a real race in `homebrew.spec.ts` (Ctrl+K before the app was ready). Never run on GitHub. Follow-up (low): the same race pattern at `e2e/editor.spec.ts:88`.
 **Description**: A job for `pnpm e2e` on a self-hosted runner that has a local 5etools clone. Traces and screenshots are not uploaded as artifacts (they contain rules text).
 **Acceptance Criteria**: runs on pull requests from the main repository only; no data leaves the runner
 **Depends on**: M5.2, decision D4 (§8)

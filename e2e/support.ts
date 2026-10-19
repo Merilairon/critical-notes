@@ -44,7 +44,9 @@ export function sharedPage(storageState: string | undefined = DM_STATE) {
 /** Calls the API with the page's cookies (as the server's own origin, which it requires for writes). */
 export async function api<T = unknown>(page: Page, method: string, path: string, data?: unknown): Promise<T> {
   const res = await page.request.fetch(path, { method, ...(data === undefined ? {} : { data }), headers: { origin: BASE_URL } });
-  expect(res.ok(), `${method} ${path}: ${res.status()} ${await res.text().catch(() => '')}`).toBe(true);
+  // With E2E_NO_ARTIFACTS (CI on a runner with rules data) the message carries no response body
+  const detail = process.env.E2E_NO_ARTIFACTS ? '' : ` ${await res.text().catch(() => '')}`;
+  expect(res.ok(), `${method} ${path}: ${res.status()}${detail}`).toBe(true);
   return (res.status() === 204 ? null : await res.json()) as T;
 }
 

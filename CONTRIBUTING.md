@@ -52,6 +52,9 @@ pnpm e2e
 
 Unit and API tests use a small invented fixture, not 5etools content, so the gate runs without the clone.
 
+In CI the browser tests run only on a self-hosted runner that holds the clone (`.github/workflows/e2e.yml`, for
+pull requests from this repository only, no artifacts). Runner setup: `docs/STATUS.md`, "Browser tests in CI".
+
 ## The rules
 
 A change that breaks one of these is not merged.

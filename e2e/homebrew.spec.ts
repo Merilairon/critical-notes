@@ -77,6 +77,8 @@ test('share with a campaign; its search finds the homebrew', async () => {
   await page.locator('label', { hasText: 'Misty Campaign' }).locator('input').check();
   await expect(page.locator('label', { hasText: 'Misty Campaign' }).locator('input')).toBeChecked();
   await page.goto(`/c/${campaignId}`);
+  // The shortcut is only bound once the app has started (a race when tracing is off and the machine is fast)
+  await page.waitForLoadState('networkidle');
   await page.keyboard.press('Control+k');
   await page.locator('input[type=search]').fill('fog hound');
   await expect(page.locator('#cn-palette-results button', { hasText: 'Fog Hound' })).toBeVisible();
