@@ -41,7 +41,7 @@ git clone --depth 1 https://github.com/5etools-mirror-3/5etools-img.git 5etools-
 ## Running it with Docker
 
 ```sh
-docker compose up -d       # builds the image the first time; then open http://localhost:3000
+docker compose up -d       # pulls the published image the first time; then open http://localhost:3000
 ```
 
 The first visit asks you to create the admin account. Players join through invite links that a DM creates
@@ -54,6 +54,12 @@ in the campaign's settings (there is no open sign-up).
   to publish another port).
 - Set `PUBLIC_URL` to the address people use (for example `https://notes.example.org` behind a reverse proxy
   that handles TLS). With an `https://` address, session cookies are marked Secure.
+
+**Image and versions.** Compose uses the published image `ghcr.io/merilairon/critical-notes` (linux/amd64 and
+linux/arm64). `docker compose pull && docker compose up -d` moves to the newest release; database migrations run when the
+server starts, so [make a backup first](#backups). Pin a version with `CN_VERSION=1.2.0` in `.env` (the default is `latest`).
+To build from a checkout instead, for example while developing:
+`docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
 
 **Updating the 5etools data:**
 
@@ -478,7 +484,7 @@ Every restore writes a line to `restore-log.jsonl` in the data directory (who, w
 
 1. Get the app ready as in [Running it with Docker](#running-it-with-docker) (or without Docker), but stop before the
    start command: clone the 5etools data, restore your settings (`.env` or the compose file, especially
-   `PUBLIC_URL`), and with Docker build the image with `docker compose build`.
+   `PUBLIC_URL`), and with Docker the image is pulled by `docker compose up` (`docker compose pull` fetches it ahead of time; from a checkout use `-f docker-compose.yml -f docker-compose.build.yml build`).
 2. **Do not run `docker compose up` yet** (or start the server). With Docker, `docker compose run` creates the
    volume for you.
 3. Get the backup file onto the machine (decrypt it first if you encrypted it) and run the `--check` and the
@@ -565,7 +571,7 @@ some odd mounts file locking does not work at all; restore on a local disk.
 - Exit 65, `This is not a complete Critical Notes backup`: the file is damaged, cut short (an interrupted copy),
   or not a backup. Get the copy again and compare its size with the original. The checks apply to the content,
   so a file that unzips fine can still be refused if it was changed.
-- Exit 66, `made by a newer Critical Notes`: update the app (pull, rebuild, `docker compose up -d --build`) and run
+- Exit 66, `made by a newer Critical Notes`: update the app (`docker compose pull && docker compose up -d`, or `-f docker-compose.yml -f docker-compose.build.yml up -d --build` from a checkout) and run
   the restore again.
 - Exit 67, `The migration history of this backup differs`: it was made by another branch, a fork or with an
   edited database. Restore it with the same checkout or Docker image that made the backup (check your git history
@@ -628,11 +634,11 @@ sure a pre-incident backup exists.
 An untested backup is a hope, not a backup. Once, and again after you update, restore one into a scratch copy
 that cannot hurt your real data, on another port. Use a recent backup and your own copy of it, not the live files.
 
-With Docker, using a throwaway volume (`rehearsal`) and the image your compose file built (`critical-notes:latest`):
+With Docker, using a throwaway volume (`rehearsal`) and the image your compose file runs (`docker compose images` shows it; below `ghcr.io/merilairon/critical-notes:latest`, or `critical-notes:local` when built from a checkout):
 
 ```sh
-docker run --rm -v "$PWD/backup-20261017T223817Z.zip:/restore/backup.zip:ro" -v rehearsal:/data/app critical-notes:latest node admin.mjs restore /restore/backup.zip --yes
-docker run -d --rm --name rehearsal-app -p 3999:3000 -e PUBLIC_URL=http://localhost:3999 -v rehearsal:/data/app critical-notes:latest
+docker run --rm -v "$PWD/backup-20261017T223817Z.zip:/restore/backup.zip:ro" -v rehearsal:/data/app ghcr.io/merilairon/critical-notes:latest node admin.mjs restore /restore/backup.zip --yes
+docker run -d --rm --name rehearsal-app -p 3999:3000 -e PUBLIC_URL=http://localhost:3999 -v rehearsal:/data/app ghcr.io/merilairon/critical-notes:latest
 # open http://localhost:3999, sign in with your old password, look at a campaign and an image; then:
 docker stop rehearsal-app
 docker volume rm rehearsal

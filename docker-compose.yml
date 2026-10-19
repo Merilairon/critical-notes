@@ -1,12 +1,15 @@
 # Critical Notes with the 5etools clones mounted read-only (clone them first: `pnpm data:clone`, or the
 # two `git clone --depth 1` commands in the README). App data lives in the `app-data` volume.
-#   docker compose up -d                              start (http://localhost:3000)
+#   docker compose up -d                              start (http://localhost:3000), pulling the published image
+#   docker compose pull && docker compose up -d       update to the newest release (migrations run on start)
+#   CN_VERSION=1.2.0 docker compose up -d             pin a version (or put CN_VERSION=1.2.0 in .env)
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build   build from this checkout instead
 #   docker compose --profile tools run --rm data-update   pull the latest 5etools data, then:
 #   docker compose restart app                        re-index on start (only changed files are read)
 services:
   app:
-    build: .
-    image: critical-notes:latest
+    # The published image (built by .github/workflows/release.yml). Builds from the checkout: docker-compose.build.yml
+    image: ghcr.io/merilairon/critical-notes:${CN_VERSION:-latest}
     ports:
       - "${PORT:-3000}:3000"
     environment:

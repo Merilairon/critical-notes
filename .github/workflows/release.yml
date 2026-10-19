@@ -1,0 +1,188 @@
+# Release: on a pushed tag vX.Y.Z (or vX.Y.Z-rc.1) run the gate, publish the multi-arch image to GHCR and create the
+# GitHub Release with the notes from CHANGELOG.md. How to cut a release: docs/RELEASE.md.
+#
+# Version policy (decision): the tag MUST equal the root package.json "version". The bundle bakes that version in at build
+# time (apps/server/scripts/build.mjs), so a tag that differs from it would publish an image whose /api/health, Account
+# page and backup manifests disagree with its own tag. The workflow therefore fails instead of rewriting the version:
+# the commit that is tagged is exactly the commit that was tested. Bump the version and CHANGELOG.md in a commit, then tag it.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+# No workflow_dispatch and no pull_request trigger: only a pushed tag publishes anything.
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Check tag, version and changelog
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Tag must be vX.Y.Z and equal the package.json version
+        id: v
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag '$TAG' is not vX.Y.Z or vX.Y.Z-prerelease"; exit 1
+          fi
+          version="${TAG#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$version" != "$pkg" ]; then
+            echo "::error::Tag $TAG does not match package.json version $pkg. Bump the version in package.json, commit, and tag that commit."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$version" == *-* ]]; then echo "prerelease=true" >> "$GITHUB_OUTPUT"; else echo "prerelease=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Tagged commit must be on main
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::The tagged commit is not on main. Merge it first, then tag."; exit 1
+          fi
+
+      - name: CHANGELOG.md must have a section for this version
+        run: node scripts/changelog-section.mjs "${{ steps.v.outputs.version }}" > /dev/null
+
+  gate:
+    name: Typecheck, lint, test, build
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Same steps as ci.yml (keep them in step)
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.15.0
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm -s typecheck
+
+      - name: Lint
+        run: pnpm -s lint
+
+      - name: Test
+        run: pnpm -s test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Restore drill
+        run: pnpm --filter @cn/server drill
+
+  publish:
+    name: Publish image and release
+    needs: [verify, gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write # create the GitHub Release
+      packages: write # push to ghcr.io
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
+      PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Image name and tags
+        id: meta
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/critical-notes" # GHCR names must be lowercase
+          tags="$image:$VERSION"
+          if [ "$PRERELEASE" = "false" ]; then
+            tags="$tags"$'\n'"$image:${VERSION%.*}"$'\n'"$image:latest" # X.Y.Z, X.Y, latest; a pre-release gets only its own tag
+          fi
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          { echo "tags<<EOF"; echo "$tags"; echo "EOF"; } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Smoke test before anything is pushed: build the native platform, start it on an empty volume and read /api/health
+      - name: Build amd64 image for a smoke test
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: critical-notes:smoke
+          cache-from: type=gha,scope=release
+          cache-to: type=gha,scope=release,mode=max
+
+      - name: Smoke test
+        run: |
+          docker run -d --name smoke -p 3000:3000 critical-notes:smoke
+          for i in $(seq 1 30); do
+            out="$(curl -fsS http://127.0.0.1:3000/api/health || true)"
+            [ -n "$out" ] && break
+            sleep 2
+          done
+          echo "health: $out"
+          echo "$out" | grep -F "\"version\":\"$VERSION\"" || { docker logs smoke; echo "::error::/api/health did not report version $VERSION"; exit 1; }
+          docker rm -f smoke
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push (linux/amd64, linux/arm64)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          # Provenance and SBOM attestations are stored in the registry next to the image
+          provenance: mode=max
+          sbom: true
+          labels: |
+            org.opencontainers.image.title=Critical Notes
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=Apache-2.0
+          cache-from: type=gha,scope=release
+          cache-to: type=gha,scope=release,mode=max
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          node scripts/changelog-section.mjs "$VERSION" > release-notes.md
+          flags=()
+          [ "$PRERELEASE" = "true" ] && flags+=(--prerelease)
+          [ "$PRERELEASE" = "false" ] && flags+=(--latest)
+          gh release create "$TAG" --verify-tag --title "Critical Notes $VERSION" --notes-file release-notes.md "${flags[@]}"
