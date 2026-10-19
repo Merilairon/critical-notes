@@ -624,7 +624,7 @@ Defaults below were decided with the owner's delegate on 2026-10-19; the owner m
 | Q4 | Do landscape phones get the compact shell? | **Yes** (they are below `lg`). |
 | Q5 | Editable page title as an autosizing `textarea`, readers get an `h1`? | **Yes** (6.1). |
 | Q6 | Inventory cards at all widths for M6.4? | **Yes** (6.3); the DM's table is not kept. |
-| Q7 | Real devices for iOS input zoom, notch and keyboard? | **Unresolved; owner to say.** Until then everything is emulation only: iOS zoom on focus, notch/safe areas and a real on-screen keyboard stay **untested** and are listed as such in the M6.4 and M6.5 results. |
+| Q7 | Real devices for iOS input zoom, notch and keyboard? | **Decided 2026-10-19 (owner): no physical devices; test on the browser's built-in virtual device sizes** (Chrome device emulation / Playwright `devices` with touch). iOS zoom on focus, notch/safe areas and a real on-screen keyboard stay **untested** and are listed as such in the M6.4 and M6.5 results and in the 1.0 certification (G1.4). |
 
 ## 11. Implementation order
 
