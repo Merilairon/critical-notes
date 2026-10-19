@@ -89,6 +89,10 @@ export class App {
     });
     // The drawer takes over: close the header popovers when it opens; on close focus returns to the header's menu button
     // (the header is un-inerted first, so wait for the next render)
+    // A menu left open when the window grows past lg would leave its invisible backdrop behind
+    effect(() => {
+      if (!this.layout.compact()) untracked(() => this.closePopovers(false));
+    });
     let drawerWasOpen = false;
     effect(() => {
       const open = this.layout.drawerOpen();

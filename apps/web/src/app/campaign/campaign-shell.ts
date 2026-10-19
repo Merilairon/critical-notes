@@ -230,7 +230,7 @@ export class CampaignShell implements OnDestroy {
     // Opening the drawer puts focus on its close button
     effect(() => {
       if (this.layout.drawerOpen())
-        afterNextRender(() => this.closeBtn()?.nativeElement.focus(), { injector: this.injector });
+        untracked(() => afterNextRender(() => this.closeBtn()?.nativeElement.focus(), { injector: this.injector }));
     });
     this.store.navigateTo = (pageId) => this.router.navigate(['/c', this.campaignId(), 'p', pageId]);
   }
@@ -249,8 +249,10 @@ export class CampaignShell implements OnDestroy {
     await this.router.navigate(['/c', this.campaignId(), 'p', page.id]);
   }
 
-  @HostListener('document:keydown.escape')
-  protected onEscape() {
+  @HostListener('document:keydown.escape', ['$event'])
+  protected onEscape(event: Event) {
+    // One Escape closes one thing: skip when something on top handled it or is open
+    if (event.defaultPrevented || document.querySelector('cn-command-palette, cn-sources-panel')) return;
     if (this.layout.drawerOpen() && !this.fromTemplate()) this.layout.drawerOpen.set(false);
   }
 

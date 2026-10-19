@@ -198,4 +198,25 @@ describe('header', () => {
     fixture.detectChanges();
     expect(el.querySelector('#dice-log')).toBeNull();
   });
+
+  it('moves focus to the first menu row on open and back to the drawer button when the drawer closes', async () => {
+    const fixture = mount(admin);
+    const el = fixture.nativeElement as HTMLElement;
+    document.body.append(el);
+    TestBed.inject(ContextService).campaign.set({ id: 'c1', name: 'Lantern Coast', ruleset: '2014' as never, crossEdition: false, overrides: {}, role: 'player' } as never);
+    fixture.detectChanges();
+    button(el, 'Menu')!.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(menu(el)!.querySelector('a'));
+
+    const layout = TestBed.inject(LayoutService);
+    layout.drawerOpen.set(true);
+    fixture.detectChanges();
+    layout.drawerOpen.set(false);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(button(el, 'Campaign navigation'));
+    el.remove();
+  });
 });

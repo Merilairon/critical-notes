@@ -126,7 +126,10 @@ export class CommandPalette {
 
   protected onKey(event: KeyboardEvent) {
     const hits = this.items();
-    if (event.key === 'Escape') this.closed.emit();
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.closed.emit();
+    }
     else if (event.key === 'ArrowDown') {
       event.preventDefault();
       this.active.update((i) => Math.min(hits.length - 1, i + 1));
