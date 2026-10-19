@@ -153,8 +153,10 @@ describe('backup service: round trip and consistency', () => {
       other.prepare('insert into ticks values (?, ?)').run(i, i);
       other.prepare('insert into ticks values (?, ?)').run(i, -i);
     });
+    // A bounded burst of foreign writes: each one restarts the copy, but the burst ends by itself. An endless writer
+    // could starve the copy on a slow machine (design 4), and that is not what this test is about.
     const timer = setInterval(() => {
-      if (!stop) tx(n++);
+      if (!stop && n < 200) tx(n++);
     }, 2);
     try {
       const started = Date.now();
