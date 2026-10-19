@@ -503,3 +503,21 @@ Everything in PLAN.md is built. Candidates for what comes next, roughly by value
 - `e2e/trash.spec.ts`, 4 tests, about 4 s, no trace, screenshot or video. Each test builds its own campaign through the API (a page with a unique word, a subpage, a second page with a `pageLink` to it) and unique names: (1) Delete in the editor shows no `confirm()` and the "Deleted ... and 1 subpage" toast, the search misses the page; Undo lands on the page and content, subpage, backlink ("Linked from") and search hit are back; (2) delete, open Trash from the nav, Restore (no confirm, status message, row gone): same checks; (3) Delete permanently: one native confirm naming the title and "1 subpage", the page and subpage answer 404, search misses, the page cannot be opened, the trash is empty; (4) a player (one sign-up through an invite) has no Trash link, `/trash` redirects to the campaign, and the API answers 403.
 - Sign-up budget: the file registers one person, so `pnpm e2e` registers 8 in total (admin 6, players 1, trash 1), exactly the limit of 8 per minute per address. A new test that registers someone must share a person or the suites must be spread out.
 - Runs: the file alone 3 times in a row, each on a fresh data folder: 5/5 (setup plus 4), about 10.7 s each; full `pnpm e2e` 64/64. The Docker image (`E2E_BASE`) was not run for this task.
+
+## Browser tests in CI (Task M5.3, decision D4)
+
+`.github/workflows/e2e.yml` runs `pnpm e2e` on pull requests and by hand. **It is inactive until the owner registers a self-hosted runner**: with no runner carrying the labels, the job only queues.
+
+- **Who runs**: only pull requests whose head repository is this repository (`head.repo.full_name == github.repository`); fork PRs are skipped. The trigger is `pull_request`, never `pull_request_target`. Permissions: `contents: read`; checkout uses `persist-credentials: false`; actions pinned by SHA (same as `ci.yml`); `timeout-minutes: 20`; one run per PR (`concurrency`, older runs cancelled).
+- **No data leaves the runner**: no `upload-artifact`, no cache. The workflow sets `E2E_NO_ARTIFACTS=1`; `playwright.config.ts` then turns tracing and the HTML report off (screenshots and video are always off), and an `always()` step deletes `playwright-report`, `test-results`, `e2e/.auth` and `blob-report`. Local runs are unchanged (trace on failure, HTML report).
+- **The 5etools clone** is read in place, never copied or committed: set `FIVETOOLS_SRC_PATH` to the absolute path of the runner's `5etools-src` clone (a first step fails the job when it is unset, relative or has no `data/` folder). `FIVETOOLS_IMG_PATH` is optional (the tests need no images).
+
+### Registering the runner (owner)
+
+1. On a machine you control (Linux, Google Chrome or Chromium): repository Settings > Actions > Runners > New self-hosted runner, and follow the steps. Give it the labels `self-hosted`, `linux`, `5etools` (the first two are automatic; add `5etools` when configuring). Run it as an unprivileged user, ideally in a VM or container, never as root.
+2. Put the data on it once: shallow-clone `https://github.com/5etools-mirror-3/5etools-src.git` to e.g. `/opt/5etools/5etools-src`, and pull there now and then.
+3. In the runner folder create a `.env` file (the runner loads it at start) with `FIVETOOLS_SRC_PATH=/opt/5etools/5etools-src` and, if Chrome is not at `/opt/google/chrome/chrome`, `CHROME_PATH=/usr/bin/chromium`. Restart the runner.
+4. Settings > Actions > General > "Fork pull request workflows from outside collaborators": choose **Require approval for all outside collaborators**. A self-hosted runner must never run fork PRs (they could run code on your machine and read the clone); the workflow condition is a second barrier, not the only one. Only trusted people should be able to push branches to this repository.
+5. Check: Actions > E2E > Run workflow on a branch. A green run proves the labels, the path and Chrome.
+
+Notes: the full suite uses exactly the 8 sign-ups per minute the server allows (M4.5 caveat); a new spec that registers another person must share a user or the suite goes red here. The runner keeps its workspace between runs, which is why the cleanup step exists.
