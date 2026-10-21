@@ -1,6 +1,7 @@
 /** Encounters and combat: difficulty, the tracker, the live player view, conditions, and loot. */
 import { expect, test, type Page } from '@playwright/test';
-import { api, editor, pickSuggestion, saved, sharedPage, watch } from './support';
+import { expectNoSidewaysScroll, smallTargets } from './phone-checks';
+import { api, dmState, editor, isPhone, newPage, pickSuggestion, saved, sharedPage } from './support';
 
 const shared = sharedPage();
 const abilities = { str: 10, dex: 14, con: 12, int: 10, wis: 10, cha: 10 };
@@ -54,13 +55,24 @@ test('run it in the tracker', async () => {
   expect(names.sort()).toEqual(['Aria', 'Bram', 'Goblin 1', 'Goblin 2', 'Goblin 3', 'Goblin 4', 'Shadow']);
 });
 
-test('the player view hides the Shadow', async () => {
-  table = watch(await shared.page.context().newPage(), shared.errors);
+test('the player view hides the Shadow', async ({ browser }) => {
+  // The table screen is the player's view: on an emulated phone in the phone project (the tracker stays on the desktop)
+  table = await newPage(browser, dmState(), shared.errors, isPhone());
   await table.goto(`${trackerUrl}/view`);
   await expect(table.locator('li', { hasText: 'Goblin 1' })).toBeVisible();
   await expect(table.locator('li', { hasText: 'Shadow' })).toHaveCount(0);
   // A full-screen view for the table: no app header
   await expect(table.locator('header', { hasText: 'Sign out' })).toHaveCount(0);
+  if (isPhone()) {
+    // docs/design/phone-layout.md 6.7 and 9.6: fits the width, the way back is first in tab order and 44 px
+    await expectNoSidewaysScroll(table, 'table screen');
+    const back = table.getByRole('link', { name: '← Campaign' });
+    await expect(back).toHaveAttribute('href', `/c/${campaignId}`);
+    expect((await back.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await table.keyboard.press('Tab');
+    await expect(back).toBeFocused();
+    expect(await smallTargets(table), 'table screen: tap targets under 44 px').toEqual([]);
+  }
 });
 
 test('keyboard turns and live updates', async () => {
@@ -111,7 +123,7 @@ test("ending combat saves the party's hit points", async () => {
   await expect(page.getByText('This combat has ended')).toBeVisible();
   const aria = await api<{ facet: { hpCurrent: number } }>(page, 'GET', `/api/campaigns/${campaignId}/pages/${ariaId}`);
   expect(aria.facet.hpCurrent).toBe(23);
-  await table.close();
+  await table.context().close();
 });
 
 test('encounter and loot blocks; loot reaches the inventory', async () => {

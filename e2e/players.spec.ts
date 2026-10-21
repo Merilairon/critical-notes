@@ -4,7 +4,8 @@
  * the DM's campaign export, import and edition change.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { api, BASE_URL, editor, newPage, saved, sharedPage } from './support';
+import { expectCompactHeader, expectNoSidewaysScroll, smallFields, smallTargets } from './phone-checks';
+import { api, baseUrl, editor, isPhone, newPage, saved, sharedPage } from './support';
 
 // Only the DM may ever see these: the player's browser must never receive them
 const HIDDEN = ['SMOKE-SECRET', 'SMOKE-VILLAIN', 'SMOKE-RING', 'SMOKE-WREN-NOTE'];
@@ -57,14 +58,15 @@ test('the DM makes an invite link in the members panel', async () => {
 });
 
 test('a new player registers through the link', async ({ browser }) => {
-  player = await newPage(browser, undefined, playerErrors);
+  // In the phone project the player is on an emulated phone (the DM stays on the desktop: DM tools are desktop-first)
+  player = await newPage(browser, undefined, playerErrors, isPhone());
   // Every API response the player's browser gets is checked for hidden content
   player.on('response', async (res) => {
     if (!res.url().includes('/api/')) return;
     const body = await res.text().catch(() => '');
     for (const s of HIDDEN) if (body.includes(s)) leaks.push(`${s} in ${res.url()}`);
   });
-  await player.goto(inviteUrl.replace(/^https?:\/\/[^/]+/, BASE_URL));
+  await player.goto(inviteUrl.replace(/^https?:\/\/[^/]+/, baseUrl()));
   await expect(player.getByText('Shadows over Vell').first()).toBeVisible();
   await player.locator('input[name=displayName]').fill('Pia');
   await player.locator('input[name=username]').fill(`pia${Date.now().toString(36)}`);
@@ -185,4 +187,54 @@ test('move the imported copy to the other edition', async () => {
   // The original keeps its references
   const original = await api<{ body: unknown }>(page, 'GET', `/api/campaigns/${campaignId}/pages/${townId}`);
   expect(JSON.stringify(original.body)).toContain('fireball|phb');
+});
+
+// Phone checks (docs/design/phone-layout.md section 9) on the player's own screens. Phone project only; they run
+// last on the same player, who registered above (no extra sign-up). Emulation only: iOS zoom, notch, keyboard untested.
+test.describe('as a player on a phone', () => {
+  test.skip(() => !isPhone(), 'phone project only');
+
+  // Known gap, not in M6.4's scope: the editor's formatting toolbar buttons are 24 px tall (docs/STATUS.md, phone project)
+  const KNOWN_SMALL = '[role=toolbar][aria-label=Formatting]';
+  const screens: [string, () => string, (p: Page) => Promise<void>, { fields?: boolean; skip?: string }][] = [
+    ['campaigns', () => '/campaigns', (p) => expect(p.getByRole('heading', { name: 'Campaigns' })).toBeVisible(), {}],
+    ['campaign overview', () => `/c/${campaignId}`, (p) => expect(p.locator('main h1').first()).toBeVisible(), {}],
+    ['shared page', () => `/c/${campaignId}/p/${townId}`, (p) => expect(p.locator('cn-block-view', { hasText: 'foggy harbour town' })).toBeVisible(), {}],
+    ['own character', () => `/c/${campaignId}/p/${wrenId}`, (p) => expect(editor(p).getByText('Wren, a wandering bard.')).toBeVisible(), { fields: true, skip: KNOWN_SMALL }],
+    ['inventory', () => `/c/${campaignId}/inventory`, (p) => expect(p.locator('section[aria-label=Wren]')).toBeVisible(), { fields: true }],
+    ['members and rules', () => `/c/${campaignId}/settings`, (p) => expect(p.locator('section[aria-label=Members]')).toBeVisible(), {}],
+    ['account', () => '/account', (p) => expect(p.locator('main h1').first()).toBeVisible(), { fields: true }],
+  ];
+
+  for (const [name, url, ready, opts] of screens) {
+    test(`${name}: no sideways scroll, compact header, 44px targets${opts.fields ? ', 16px fields' : ''}`, async () => {
+      await player.goto(url());
+      await ready(player);
+      await expectNoSidewaysScroll(player, name);
+      await expectCompactHeader(player, name);
+      expect.soft(await smallTargets(player, opts.skip), `${name}: tap targets under 44 px`).toEqual([]);
+      // The sweep must have something to measure, or it proves nothing
+      if (opts.fields) expect(await player.locator('input:visible:not([type=checkbox]), select:visible, textarea:visible').count(), `${name}: visible fields`).toBeGreaterThan(0);
+      if (opts.fields) expect.soft(await smallFields(player), `${name}: fields under 16 px or 44 px`).toEqual([]);
+    });
+  }
+
+  test('the app menu and the campaign drawer: targets and sign out', async () => {
+    await player.goto(`/c/${campaignId}`);
+    await expect(player.locator('main h1').first()).toBeVisible();
+    // The drawer
+    await player.getByRole('button', { name: 'Campaign navigation', exact: true }).tap();
+    await expect(player.getByRole('button', { name: 'Campaign navigation', exact: true })).toHaveAttribute('aria-expanded', 'true');
+    expect.soft(await smallTargets(player), 'drawer: tap targets under 44 px').toEqual([]);
+    await player.keyboard.press('Escape');
+    await expect(player.getByRole('button', { name: 'Campaign navigation', exact: true })).toHaveAttribute('aria-expanded', 'false');
+    // The menu holds Sign out (the desktop header's button is not there below lg)
+    await expect(player.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
+    await player.getByRole('button', { name: 'Menu', exact: true }).tap();
+    await expect(player.getByRole('button', { name: 'Menu', exact: true })).toHaveAttribute('aria-expanded', 'true');
+    expect.soft(await smallTargets(player), 'menu: tap targets under 44 px').toEqual([]);
+    await expectCompactHeader(player, 'menu open');
+    await player.getByRole('button', { name: 'Sign out' }).tap();
+    await player.waitForURL('**/login');
+  });
 });

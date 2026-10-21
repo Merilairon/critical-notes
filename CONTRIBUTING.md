@@ -47,8 +47,18 @@ data folder and drive the system Chrome (set `CHROME_PATH` to use another one). 
 clone from above.
 
 ```sh
-pnpm e2e
+pnpm e2e         # all projects: desktop (1440 x 1000) and phone
+pnpm e2e:phone   # only the phone project
 ```
+
+The phone project (Task M6.5) runs `players.spec.ts` and `combat.spec.ts` with the player in an emulated phone
+(390 x 844, touch, mobile user agent) plus the phone checks of `docs/design/phone-layout.md` (no sideways scroll,
+header height, 44 px targets, 16 px fields, the menu's Sign out). It starts its own second server on port 3211 with
+its own data folder, so its sign-ups do not count against the 8 per minute of the desktop run; keep ports 3210 and
+3211 free. Add phone checks to those two specs inside `isPhone()` guards, using `e2e/phone-checks.ts`, and on a
+phone open the app menu before you click Sign out. Emulation is not a device: iOS zoom, the notch and the on-screen
+keyboard need a real phone. Against a running instance (`E2E_BASE`) the phone project needs a second fresh one in
+`E2E_PHONE_BASE`.
 
 Unit and API tests use a small invented fixture, not 5etools content, so the gate runs without the clone.
 
