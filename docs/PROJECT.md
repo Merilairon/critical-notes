@@ -444,8 +444,9 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 **Files**: `campaign/page-editor.*`, `play/inventory-page.ts`, `play/tracker-player.ts`, shell dice log
 **Depends on**: M6.2
 
-### [ ] Task M6.5: Phone test project
+### [x] Task M6.5: Phone test project
 **Owner**: Test Automation Engineer · **QA**: Reality Checker
+**Done:** 2026-10-21, QA Reality Checker: CERTIFIED as scoped (no retries). Playwright projects `phone-setup` and `phone` (390x844, touch, DPR 2, mobile UA) run `players.spec.ts` and the combat player view with the design §9 checks (no sideways scroll on document and main, header <= 56 px and one row, 44 px tap targets, 16 px/44 px fields, menu Sign out path). The phone project has its own server (port 3211), data folder, admin and sign-up limiter, because the desktop run already uses all 8 sign-ups per minute. `pnpm e2e` runs everything (99 passed, 8 skipped, about 60 s, run 3x by the developer and 2x by QA); `pnpm e2e:phone` runs only the phone project (29/29, about 22 s). Mutation tests by QA (500 px element in the header, 30 px header buttons, broken back link, 14 px inputs, empty field selector, 404 page) each made the phone tests fail; with `E2E_NO_ARTIFACTS=1` the log holds only titles and status. **Not covered:** real devices (iOS zoom, notch, keyboard), the DM on a phone, other specs on the phone, widths 320/360/430, landscape, text zoom, dark mode, axe, a 9th sign-up getting a 429. Weak spots (low): the readiness probe of some screens is only `main h1`; the editor toolbar (24 px) is excluded from the target sweep. **Epic M6 is complete.** Per D7 the changelog paragraph "phone width is not part of this release" must now be removed (G1.3) and the claims re-read after the release candidate.
 **Description**: A Playwright project with a phone viewport (390×844, touch) running `players.spec.ts` and the combat player view.
 **Files**: `playwright.config.ts`, `e2e/`
 **Depends on**: M6.3, M6.4
