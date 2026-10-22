@@ -9,6 +9,29 @@ Before you update, read the entries between your version and the new one, and
 
 ## [Unreleased]
 
+### Added
+
+- **Sign out other sessions** on the Account page: ends every other browser session of your account without changing
+  your password. This browser stays signed in.
+
+### Changed
+
+- Revoking an AI token on the Account page asks in the app's own dialog instead of the browser's confirm box.
+- Accessibility: after you open another page, focus moves to its main heading (and the page is announced), so keyboard
+  and screen-reader users start at the top of the new page.
+- Accessibility: form fields in campaign settings, NPC lists and statblocks, the homebrew editors, the reference
+  filter, the command palette and the editor blocks now have a border that meets the 3:1 contrast minimum.
+- Accessibility: the campaign sidebar links and header buttons are at least 24 x 24 px on desktop.
+
+### Fixed
+
+- Accessibility: the phone campaign menu is a proper dialog (was an invalid role on `aside`); editors now have a page
+  heading and a named editing area; read-only task items, ability scores, reference pickers and the "DM only" menu
+  ticks have proper names; read-only page icons are no longer shown as disabled text boxes; primary buttons use readable
+  text in the dark theme.
+- The campaign list (and the AI assistant's `list_campaigns`) now counts only the pages a player can see. Before, a
+  player's count included pages hidden from them (no titles or text were exposed).
+
 ## [1.0.0] - 2026-10-22
 
 The first stable release. It adds account recovery, instance backups and restore, undo for deletions, a layout for

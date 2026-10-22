@@ -792,7 +792,8 @@ URL); export a source as a 5etools homebrew file. Share a source with chosen cam
 one-off creatures in a campaign's own homebrew.
 
 **Accounts and users.** Under **Account** (click your name at the top) you change your display name and your
-password; changing the password signs out your other sessions. The account page also shows the app version and your
+password; changing the password signs out your other sessions, and **Sign out other sessions** does the same without
+changing the password (this browser stays signed in). Revoking an AI token asks for confirmation first. The account page also shows the app version and your
 AI tokens. Admins get **Admin > Users**: disable and enable accounts (a disabled user cannot sign in and their tokens
 stop working), grant or revoke the admin role, create a one-time password reset link, and delete a user. For each
 campaign the user owns, you choose whether to transfer it to a member or archive it, so campaign content is never
