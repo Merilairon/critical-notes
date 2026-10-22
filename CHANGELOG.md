@@ -9,6 +9,21 @@ Before you update, read the entries between your version and the new one, and
 
 ## [Unreleased]
 
+### Added
+
+- The editor's block options (turn into, wrap, move up and down, duplicate, delete, DM-only) can be opened without a mouse: press `Ctrl+.` with the caret in a block, or use the new "Block options" button in the formatting toolbar. The menu works with the arrow keys, Home, End, Esc and Tab, and a screen reader is told what an action did ("Block moved down").
+- Block options has "Move up" and "Move down" (before, a block could only be moved by dragging).
+
+### Changed
+
+- Block options (move, duplicate, wrap) add an empty paragraph when they leave a table, list, callout, embed or rule as the last block, so a caret can always go below it.
+- Every page title now ends with "— Critical Notes" (Trash, the campaign pages and the campaign overview were missing it), and the title is set before the page loads where the route knows it.
+- Accessibility: Trash shows its "purged in N days" text in the accent colour from 3 days left; checked for contrast in both themes (8.5:1 and 5.7:1) and the days are written out, so colour is not the only cue.
+
+### Fixed
+
+- On a wide window that is less than 500 px high (a laptop with a docked console, a landscape tablet, or any window in forced-colours mode), the second row of the top bar covered the page heading.
+
 ## [1.1.2] - 2026-10-22
 
 An accessibility and size release. There is nothing to do when updating; no database change is needed. The web app loads

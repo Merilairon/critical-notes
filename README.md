@@ -785,6 +785,11 @@ page exactly as a player receives it.
 **Writing.** Type `/` for blocks, `[[` to link (or create) a page, `{@` to insert a rules reference such as
 `{@spell fireball|XPHB}`, and dice like `{@dice 2d6+3}`.
 
+**Keyboard.** `Ctrl+.` (also on a Mac) opens the block options menu for the block that holds the caret (the same menu as the
+handle next to a block and the "Block options" button in the toolbar): turn into, wrap, move up or down, duplicate, delete.
+Arrow keys, Home and End move in the menu, Esc closes it and returns focus, Tab closes it. `Ctrl+Shift+D` marks the block
+DM-only, `Ctrl+Shift+R` reveals it, `Ctrl+K` searches.
+
 **Homebrew.** Under Homebrew, create a source (its name, abbreviation and edition), then add creatures,
 spells, items, species, backgrounds, feats and more, in the form editor or as 5etools JSON. "Copy to homebrew"
 on any reference entry starts a variant that stores only your changes. Import 5etools homebrew files (or a
