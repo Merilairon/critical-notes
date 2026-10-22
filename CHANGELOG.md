@@ -99,6 +99,18 @@ phone-width screens, and a published Docker image to update from.
 - If you ran a development build of Critical Notes, **make a backup first**. This release adds database migrations that
   cannot be undone, and you cannot go back to the older build with the migrated data.
 
+## [1.0.0-rc.3] - 2026-10-22
+
+Third release candidate. It fixes the findings of the CodeQL code scan; none of them changes what you see.
+
+- **Security hardening:** several regular expressions that could run slowly on crafted input are now linear, and the
+  helper that sets a value by path refuses `__proto__`, `constructor` and `prototype` keys.
+- **Reference data:** the content hash of indexed rows is now SHA-256 instead of SHA-1. The first start after the update
+  rewrites the reference rows once.
+
+What to test is the same as for rc.1 and rc.2. A release candidate publishes only its own tag; it does not move `1.0` or
+`latest`.
+
 ## [1.0.0-rc.2] - 2026-10-22
 
 Second release candidate. It fixes one bug found while testing rc.1.
@@ -124,5 +136,6 @@ The changes in 1.0.0 are listed in the draft above, under "Unreleased". A releas
 `1.0.0-rc.1`; it does not move `1.0` or `latest`.
 
 [Unreleased]: https://github.com/Merilairon/critical-notes/commits/main
+[1.0.0-rc.3]: https://github.com/Merilairon/critical-notes/releases/tag/v1.0.0-rc.3
 [1.0.0-rc.2]: https://github.com/Merilairon/critical-notes/releases/tag/v1.0.0-rc.2
 [1.0.0-rc.1]: https://github.com/Merilairon/critical-notes/releases/tag/v1.0.0-rc.1
