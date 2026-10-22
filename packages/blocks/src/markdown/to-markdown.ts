@@ -321,7 +321,9 @@ function imageNode(block: BlockNode): Image {
  */
 export function edgeSpaceOutside(text: string, marks: Mark[]): [string, Mark[]][] {
   if (marks.some((m) => m.type === 'code') || !marks.some((m) => m.type === 'bold' || m.type === 'italic' || m.type === 'strike')) return [[text, marks]];
-  const m = /^(\s*)([\s\S]*?)(\s*)$/.exec(text)!;
+  const lead = text.length - text.trimStart().length;
+  const core = text.slice(lead).trimEnd();
+  const m = [text, text.slice(0, lead), core, text.slice(lead + core.length)];
   const outer = marks.filter((x) => x.type === 'link');
   return [
     ...(m[1] ? [[m[1], outer] as [string, Mark[]]] : []),

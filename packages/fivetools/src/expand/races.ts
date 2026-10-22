@@ -14,10 +14,11 @@ export interface RaceMergeResult {
 
 export function subraceName(raceName: string, subName: string | undefined | null): string {
   if (!subName) return raceName;
-  const m = /^(.*?)(\(.*?\))$/i.exec(raceName || '');
-  if (!m) return `${raceName} (${subName})`;
-  const bracket = m[2]!.slice(1, -1);
-  return `${m[1]}(${[bracket, subName].join('; ')})`;
+  const name = raceName || '';
+  const open = name.indexOf('(');
+  if (open < 0 || !name.endsWith(')')) return `${raceName} (${subName})`;
+  const bracket = name.slice(open + 1, -1);
+  return `${name.slice(0, open)}(${[bracket, subName].join('; ')})`;
 }
 
 function applyLineage(race: JsonObject): JsonObject {

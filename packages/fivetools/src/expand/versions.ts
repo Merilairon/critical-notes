@@ -25,7 +25,7 @@ function versionsFromMeta(ver: JsonObject): JsonObject[] {
       const cpyImpl = clone(impl);
       if (isObject(cpyImpl._variables)) {
         const vars = cpyImpl._variables;
-        tpl = mapStrings(tpl, (s) => s.replace(/{{([^}]+)}}/g, (m, k: string) => (vars[k] != null ? String(vars[k]) : m))) as JsonObject;
+        tpl = mapStrings(tpl, (s) => s.replace(/{{([^{}]+)}}/g, (m, k: string) => (vars[k] != null ? String(vars[k]) : m))) as JsonObject;
         delete cpyImpl._variables;
       }
       return Object.assign(tpl, cpyImpl);

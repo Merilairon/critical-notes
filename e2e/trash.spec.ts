@@ -7,6 +7,7 @@
  * registered is one player (sign-up is limited to 8 per minute per address; see the M2.10 notes in STATUS.md).
  * Nothing is recorded (no trace, screenshot or video).
  */
+import { randomBytes } from 'node:crypto';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { api, BASE_URL, editor, watch } from './support';
 
@@ -144,7 +145,7 @@ test('a player has no Trash link and is sent away from /trash', async ({ page, b
   const http: APIRequestContext = await playwright.request.newContext({ baseURL: BASE_URL, extraHTTPHeaders: { origin: BASE_URL } });
   closers.push(() => http.dispose());
   const username = `trp${run}`;
-  const reg = await http.post('/api/auth/register', { data: { token, username, displayName: `Trash Player ${run}`, password: `pw-${run}-${Math.random().toString(36).slice(2)}` } });
+  const reg = await http.post('/api/auth/register', { data: { token, username, displayName: `Trash Player ${run}`, password: `pw-${run}-${randomBytes(6).toString('hex')}` } });
   expect(reg.status(), 'register').toBe(201);
 
   const context = await browser.newContext({ baseURL: BASE_URL, viewport: { width: 1440, height: 1000 }, storageState: await http.storageState() });

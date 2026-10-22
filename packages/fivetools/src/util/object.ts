@@ -22,6 +22,7 @@ export function getPath(obj: unknown, path: readonly string[]): unknown {
 
 export function setPath(obj: JsonObject, path: readonly string[], value: unknown): void {
   if (!path.length) throw new Error('setPath requires a non-empty path');
+  if (path.some((key) => key === '__proto__' || key === 'constructor' || key === 'prototype')) throw new Error('setPath refuses a prototype key');
   let cur: JsonObject = obj;
   for (let i = 0; i < path.length - 1; ++i) {
     const key = path[i]!;

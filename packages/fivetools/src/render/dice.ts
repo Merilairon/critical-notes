@@ -28,13 +28,34 @@ export interface DiceRoll {
 const MAX_DICE = 200;
 const MAX_FACES = 10_000;
 
+const OPERATORS = '+-×*';
+
+/** Drops whitespace next to an operator (a linear scan: a regex for this backtracks quadratically on long runs). */
+function tightenOperators(s: string): string {
+  let out = '';
+  let i = 0;
+  while (i < s.length) {
+    if (!/\s/.test(s[i]!)) {
+      out += s[i++];
+      continue;
+    }
+    let j = i;
+    while (j < s.length && /\s/.test(s[j]!)) j++;
+    const prev = out[out.length - 1];
+    const next = s[j];
+    if (!(prev && OPERATORS.includes(prev)) && !(next && OPERATORS.includes(next))) out += s.slice(i, j);
+    i = j;
+  }
+  return out;
+}
+
 export function parseDice(input: string): DiceExpression | null {
   if (typeof input !== 'string') return null;
   let src = input
     .toLowerCase()
     .replace(/[−–]/g, '-')
-    .trim()
-    .replace(/\s*([+\-×*])\s*/g, '$1');
+    .trim();
+  src = tightenOperators(src);
   if (!src || /\s/.test(src)) return null;
   let multiplier = 1;
   const mult = /[×x*](\d+)$/.exec(src);

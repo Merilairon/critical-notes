@@ -86,7 +86,7 @@ function injectableProps(base: JsonObject, inherits: JsonObject): JsonObject {
 }
 
 function evaluateExpression(base: JsonObject, sv: JsonObject, expr: string): number | null {
-  const replaced = expr.replace(/\[\[([^\]]+)]]/g, (_m, p: string) => {
+  const replaced = expr.replace(/\[\[([^[\]]+)]]/g, (_m, p: string) => {
     const path = p.split('.');
     const value = path[0] === 'item' ? getPath(sv, path.slice(1)) : path[0] === 'baseItem' ? getPath(base, path.slice(1)) : getPath(sv, path);
     return String(value ?? 0);

@@ -153,7 +153,7 @@ export function entityToRow(
     homebrew_entity_id: homebrewEntityId,
     file: e.file,
   };
-  const hash = createHash('sha1').update(stableStringify(partial)).digest('hex');
+  const hash = createHash('sha256').update(stableStringify(partial)).digest('hex');
   const aliases = Array.isArray(data.alias) ? data.alias.filter((a): a is string => typeof a === 'string') : [];
   return {
     row: { ...partial, hash },

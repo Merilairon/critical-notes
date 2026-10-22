@@ -121,7 +121,7 @@ export function coerceValue(type: VariableType, raw: unknown): { value?: Templat
     }
     case 'reference': {
       const s = String(raw).trim().toLowerCase();
-      if (!/^[a-z]+:.+\|.+$/.test(s)) return { error: 'Not a reference' };
+      if (!/^[a-z]+:[^|]+\|.+$/.test(s)) return { error: 'Not a reference' };
       return s.startsWith(`${type.refKind.toLowerCase()}:`) ? { value: s } : { error: `Must be a ${type.refKind}` };
     }
     case 'pageLink': {
