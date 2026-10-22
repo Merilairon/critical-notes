@@ -622,23 +622,39 @@ describe('hardening (review round 1)', () => {
   const leases = () => (service as unknown as { leases: Map<string, number> }).leases;
 
   it('a stalled reader is cut off after the idle time: its slot and lease are freed', async () => {
-    downloadLimits.idleMs = 200;
-    const big = 'backup-20260120T000000Z.zip';
-    seedFile(big, Buffer.alloc(8 * MiB, 3));
-    const held = [];
-    for (let i = 0; i < MAX_CONCURRENT_DOWNLOADS; i++) {
-      const { ticket } = await ticketFor(admin, big);
-      const res = await dl(admin, big, ticket);
-      expect(res.status).toBe(200);
-      held.push(res); // never read
+    // Deterministic: a real 200 ms idle timer can fire while the test is still setting up under load (each ticket
+    // costs a password hash). So the idle timers are recorded (and still really scheduled, with a long delay) and
+    // the test fires them itself, once the 429 is proven. The callbacks are the production watchdog's own.
+    const IDLE = 4321;
+    downloadLimits.idleMs = IDLE;
+    const watchdogs: Array<() => void> = [];
+    const realSetTimeout = globalThis.setTimeout;
+    const spy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) => {
+      if (ms === IDLE) watchdogs.push(fn);
+      return realSetTimeout(fn, ms);
+    }) as unknown as typeof setTimeout);
+    try {
+      const big = 'backup-20260120T000000Z.zip';
+      seedFile(big, Buffer.alloc(8 * MiB, 3));
+      const held = [];
+      for (let i = 0; i < MAX_CONCURRENT_DOWNLOADS; i++) {
+        const { ticket } = await ticketFor(admin, big);
+        const res = await dl(admin, big, ticket);
+        expect(res.status).toBe(200);
+        held.push(res); // never read
+      }
+      expect(leases().has(big)).toBe(true);
+      expect(watchdogs.length).toBeGreaterThanOrEqual(MAX_CONCURRENT_DOWNLOADS); // at least one armed idle watchdog per stalled download
+      const { ticket: blocked } = await ticketFor(admin, big);
+      expect((await dl(admin, big, blocked)).status).toBe(429);
+      for (const fire of watchdogs) fire(); // the idle time passes
+      await vi.waitFor(() => expect(leases().has(big)).toBe(false), { timeout: 10_000 });
+      expect(await okDl(admin, big, blocked)).toBe(200); // slots are back, and the 429 did not burn the ticket
+      // the stalled reader gets an error, not a silent hang
+      await expect(held[0]!.arrayBuffer()).rejects.toThrow();
+    } finally {
+      spy.mockRestore();
     }
-    expect(leases().has(big)).toBe(true);
-    const { ticket: blocked } = await ticketFor(admin, big);
-    expect((await dl(admin, big, blocked)).status).toBe(429);
-    await vi.waitFor(() => expect(leases().has(big)).toBe(false), { timeout: 3000 });
-    expect(await okDl(admin, big, blocked)).toBe(200); // slots are back, and the 429 did not burn the ticket
-    // the stalled reader gets an error, not a silent hang
-    await expect(held[0]!.arrayBuffer()).rejects.toThrow();
   });
 
   it('a 429 on the slot check does not burn the ticket', async () => {
