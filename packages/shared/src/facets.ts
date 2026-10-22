@@ -3,7 +3,7 @@
  * Field descriptors drive both server validation and the web forms; facet fields also act as built-in
  * properties for query blocks (milestone d).
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import type { PageType } from './pages';
 
 const pageId = z.string().max(64).nullable().default(null);

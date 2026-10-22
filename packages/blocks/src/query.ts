@@ -2,7 +2,7 @@
  * Query block DSL: a live list of pages filtered by type, tags, parent and properties.
  * Evaluated server-side per viewer (so players never see pages they cannot access).
  */
-import { z } from 'zod';
+import * as z from 'zod';
 
 export const CURRENT_PAGE = { $ctx: 'currentPage' } as const;
 

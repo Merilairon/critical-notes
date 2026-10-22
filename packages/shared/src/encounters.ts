@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 
 /** One line of an encounter: a bestiary monster, an NPC page (its statblock), or a custom creature. */
 export const encounterCreatureSchema = z.object({

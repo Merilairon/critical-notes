@@ -3,7 +3,7 @@
  * tabs never overwrite each other), plus the player projection: hidden combatants are left out and only
  * player characters show exact hit points.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 
 export const COMBATANT_KINDS = ['monster', 'npc', 'pc', 'custom'] as const;
 export type CombatantKind = (typeof COMBATANT_KINDS)[number];

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 
 export const COINS = ['cp', 'sp', 'ep', 'gp', 'pp'] as const;
 export type Coin = (typeof COINS)[number];

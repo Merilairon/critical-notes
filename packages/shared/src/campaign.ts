@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 
 export const RULESET_VALUES = ['2014', '2024'] as const;
 export const rulesetSchema = z.enum(RULESET_VALUES);

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 
 /** Homebrew editions: a source is written for one ruleset, or for both. */
 export const HOMEBREW_EDITIONS = ['2014', '2024', 'any'] as const;

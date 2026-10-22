@@ -4,7 +4,7 @@
  * extension, editor NodeView and read-only renderer under the same name. New block types register here;
  * the core never changes.
  */
-import { z } from 'zod';
+import * as z from 'zod';
 import { queryFilterSchema } from './query';
 import type { BlockNode } from './doc';
 

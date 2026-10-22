@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 import { PAGE_TYPES, type PageType } from './page-types';
 
 export { PAGE_TYPES, PAGE_TYPE_ICONS, PAGE_TYPE_LABELS, type PageType } from './page-types';

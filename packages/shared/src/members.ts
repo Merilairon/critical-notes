@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 import { passwordSchema, usernameSchema } from './auth';
 import type { CampaignRole } from './campaign';
 

@@ -1,5 +1,5 @@
 /** Instance backups (Task M3.4, docs/design/backup.md 10, 11 and 13). Admin-only routes under /api/admin/backups. */
-import { z } from 'zod';
+import * as z from 'zod';
 
 /** A backup file name; the server checks it before touching the file system. Anything else is a uniform 404. */
 export const BACKUP_NAME_PATTERN = /^backup-\d{8}T\d{6}Z\.zip$/;

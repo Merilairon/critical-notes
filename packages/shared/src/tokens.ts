@@ -1,5 +1,5 @@
 /** Personal API tokens for AI assistants (the MCP endpoint). */
-import { z } from 'zod';
+import * as z from 'zod';
 
 export const API_TOKEN_SCOPES = ['read', 'write'] as const;
 export type ApiTokenScope = (typeof API_TOKEN_SCOPES)[number];

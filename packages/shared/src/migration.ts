@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 import { RULESET_VALUES } from './campaign';
 
 /** Where a campaign refers to rules content. */

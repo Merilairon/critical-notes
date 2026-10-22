@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 import { PAGE_TYPES, type PageSummaryDto, type PageType } from './pages';
 
 export const PROPERTY_TYPES = ['text', 'number', 'select', 'multiselect', 'date', 'checkbox', 'pageLink', 'refLink', 'url'] as const;

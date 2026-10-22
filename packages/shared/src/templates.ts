@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 import { PAGE_TYPES, VISIBILITY_VALUES, type PageType } from './pages';
 import { PROPERTY_TYPES } from './properties';
 
