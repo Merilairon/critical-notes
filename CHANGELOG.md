@@ -99,4 +99,19 @@ phone-width screens, and a published Docker image to update from.
 - If you ran a development build of Critical Notes, **make a backup first**. This release adds database migrations that
   cannot be undone, and you cannot go back to the older build with the migrated data.
 
+## [1.0.0-rc.1] - 2026-10-22
+
+First release candidate of 1.0.0. It exists to prove the release pipeline and the image, not to add anything.
+
+What to test:
+
+- The image on `linux/amd64` and, above all, `linux/arm64` (a Raspberry Pi or another arm64 machine). The arm64 build has
+  never run.
+- An update from a previous build on a volume that holds data, and `/api/health` showing `1.0.0-rc.1`.
+- Phone-width screens for players on a real phone. They were checked in Chrome's phone emulation only.
+
+The changes in 1.0.0 are listed in the draft above, under "Unreleased". A release candidate publishes only the tag
+`1.0.0-rc.1`; it does not move `1.0` or `latest`.
+
 [Unreleased]: https://github.com/Merilairon/critical-notes/commits/main
+[1.0.0-rc.1]: https://github.com/Merilairon/critical-notes/releases/tag/v1.0.0-rc.1
