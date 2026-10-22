@@ -6,7 +6,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `<textarea
       class="block w-full rounded-md border bg-bg px-2 py-1 font-mono text-xs"
-      [class.border-line]="!error()"
+      [class.border-control]="!error()"
       [class.border-accent]="!!error()"
       [rows]="rows()"
       [value]="text()"

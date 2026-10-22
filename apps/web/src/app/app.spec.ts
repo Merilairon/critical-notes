@@ -1,9 +1,9 @@
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { signal } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import type { ComponentFixture } from '@angular/core/testing';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import type { UserDto } from '@cn/shared';
 import { App } from './app';
 import { AuthService } from './core/auth.service';
@@ -273,5 +273,85 @@ describe('header', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect(menu(el)).toBeNull();
+  });
+});
+
+@Component({ selector: 'cn-test-a', template: '<h1>Page A</h1>' })
+class PageA {}
+@Component({ selector: 'cn-test-b', template: '<h1>Page B</h1>' })
+class PageB {}
+@Component({ selector: 'cn-test-c', template: '<p>No heading</p>' })
+class PageC {}
+
+describe('focus on route change', () => {
+  async function setup() {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([
+          { path: 'a', component: PageA },
+          { path: 'b', component: PageB },
+          { path: 'c', component: PageC },
+          { path: 'c/:id/trackers/:t/view', component: PageB },
+        ]),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AuthService, useValue: { user: signal(player), logout: async () => undefined } },
+      ],
+    });
+    const fixture = TestBed.createComponent(App);
+    document.body.append(fixture.nativeElement);
+    fixture.detectChanges();
+    const router = TestBed.inject(Router);
+    const go = async (url: string) => {
+      await router.navigateByUrl(url);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+    };
+    return { fixture, el: fixture.nativeElement as HTMLElement, go };
+  }
+
+  it('leaves focus alone on the first load, then moves it to the new h1 and keeps it for query changes', async () => {
+    const { el, go } = await setup();
+    await go('/a');
+    expect(document.activeElement).toBe(document.body);
+    await go('/b');
+    expect(document.activeElement).toBe(el.querySelector('main h1'));
+    expect(document.activeElement?.textContent).toBe('Page B');
+    (document.activeElement as HTMLElement).blur();
+    await go('/b?x=1');
+    expect(document.activeElement).toBe(document.body);
+    el.remove();
+  });
+
+  it('focuses <main> and announces the title when the page has no heading', async () => {
+    const { fixture, el, go } = await setup();
+    document.title = 'Plain page';
+    await go('/a');
+    await go('/c');
+    await new Promise((r) => setTimeout(r, 1600));
+    fixture.detectChanges();
+    expect(document.activeElement).toBe(el.querySelector('main'));
+    expect(el.querySelector('[aria-live="polite"][aria-atomic]')?.textContent).toBe('Plain page');
+    el.remove();
+  });
+
+  it('never pulls focus out of a field the person is typing in', async () => {
+    const { el, go } = await setup();
+    await go('/a');
+    const field = document.createElement('input');
+    el.append(field);
+    field.focus();
+    await go('/b');
+    expect(document.activeElement).toBe(field);
+    el.remove();
+  });
+
+  it('does not move focus on the bare table screen', async () => {
+    const { el, go } = await setup();
+    await go('/a');
+    await go('/c/1/trackers/2/view');
+    expect(document.activeElement).toBe(document.body);
+    el.remove();
   });
 });

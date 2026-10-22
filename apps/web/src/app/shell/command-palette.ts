@@ -31,7 +31,7 @@ interface PaletteItem {
       <input
         #input
         type="search"
-        class="w-full border-b border-line bg-transparent px-4 py-3 text-base outline-none"
+        class="w-full border-b border-control bg-transparent px-4 py-3 text-base outline-none"
         [placeholder]="context.campaign() ? 'Search pages, spells, monsters, items…' : 'Search spells, monsters, items, rules…'"
         [value]="text()"
         (input)="onInput($any($event.target).value)"

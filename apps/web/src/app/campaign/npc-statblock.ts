@@ -43,7 +43,7 @@ import { RefPicker } from './ref-picker';
           <p class="mb-1 text-xs text-muted">
             Stored as a 5etools <code>_copy</code> of the original: only your changes are saved, everything else is inherited. Full editors arrive with homebrew support.
           </p>
-          <textarea class="h-64 w-full rounded-md border border-line bg-bg p-2 font-mono text-xs" [(ngModel)]="jsonText" spellcheck="false" aria-label="Statblock JSON"></textarea>
+          <textarea class="h-64 w-full rounded-md border border-control bg-bg p-2 font-mono text-xs" [(ngModel)]="jsonText" spellcheck="false" aria-label="Statblock JSON"></textarea>
           <div class="mt-1 flex items-center gap-2">
             <button type="button" class="rounded-md bg-accent px-3 py-1 text-sm font-medium text-accent-ink" (click)="saveJson()" [disabled]="busy()">Save</button>
             @if (jsonError()) {

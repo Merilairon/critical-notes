@@ -37,11 +37,11 @@ import { UndoToast } from './undo-toast';
         <a class="cn-link" routerLink="/campaigns">Back to campaigns</a>
       </div>
     } @else {
-      <aside
+      <div
         id="campaign-drawer"
         class="flex w-72 shrink-0 flex-col border-r border-line bg-panel max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-40 max-lg:w-[min(20rem,85vw)] max-lg:overflow-y-auto max-lg:overscroll-contain max-lg:pt-[env(safe-area-inset-top)] max-lg:pb-[env(safe-area-inset-bottom)] max-lg:pl-[env(safe-area-inset-left)] max-lg:shadow-xl"
         [class.max-lg:hidden]="!layout.drawerOpen()"
-        [attr.role]="layout.compact() ? 'dialog' : null"
+        [attr.role]="layout.compact() ? 'dialog' : 'complementary'"
         [attr.aria-modal]="layout.compact() ? 'true' : null"
         aria-label="Campaign navigation"
         (keydown.tab)="trapTab($event, false)"
@@ -51,7 +51,7 @@ import { UndoToast } from './undo-toast';
           <div class="flex items-center justify-between gap-2">
             <a
               routerLink="/campaigns"
-              class="flex min-h-[44px] items-center text-sm text-muted hover:text-accent lg:min-h-0 lg:text-xs"
+              class="flex min-h-[44px] items-center text-sm text-muted hover:text-accent lg:min-h-6 lg:text-xs"
               (click)="layout.drawerOpen.set(false)"
               >← All campaigns</a
             >
@@ -95,7 +95,7 @@ import { UndoToast } from './undo-toast';
           <div class="relative" [hidden]="!store.isGm()">
             <button
               type="button"
-              class="rounded px-2 text-sm text-muted hover:bg-panel-2 hover:text-accent max-lg:min-h-[44px] max-lg:min-w-[44px]"
+              class="rounded px-2 text-sm text-muted hover:bg-panel-2 hover:text-accent max-lg:min-h-[44px] max-lg:min-w-[44px] lg:min-h-6 lg:min-w-6"
               (click)="newMenu.set(!newMenu())"
               aria-haspopup="menu"
             >
@@ -135,7 +135,7 @@ import { UndoToast } from './undo-toast';
             <p class="px-2 py-3 text-sm text-muted">No pages yet.</p>
           }
         </div>
-      </aside>
+      </div>
       @if (layout.drawerOpen()) {
         <div class="fixed inset-0 z-35 bg-black/30 lg:hidden" (click)="layout.drawerOpen.set(false)"></div>
       }
@@ -255,7 +255,9 @@ export class CampaignShell implements OnDestroy {
   protected trapTab(event: Event, back: boolean) {
     const drawer = document.getElementById('campaign-drawer');
     if (!this.layout.compact() || !drawer) return;
-    const items = Array.from(drawer.querySelectorAll<HTMLElement>('a[href], button:not([disabled])')).filter(
+    const items = Array.from(drawer.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )).filter(
       (e) => e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden',
     );
     const first = items[0];

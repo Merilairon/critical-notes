@@ -23,7 +23,7 @@ const SCOPE_LABELS = { campaign: 'This campaign', user: 'My templates', global: 
         <a class="rounded-md border border-line px-3 py-1.5 text-sm hover:border-accent" [href]="exportUrl()" download="templates.json">Export {{ campaignId() ? 'campaign + mine' : 'mine' }}</a>
       }
       <button type="button" class="rounded-md border border-line px-3 py-1.5 text-sm hover:border-accent" (click)="create('block')">New block template</button>
-      <button type="button" class="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-white" (click)="create('page')">New page template</button>
+      <button type="button" class="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-ink" (click)="create('page')">New page template</button>
     </div>
     <p class="mt-1 text-sm text-muted">
       Write <code>{{ examples[0] }}</code>, <code>{{ examples[1] }}</code> or <code>{{ examples[2] }}</code> in a template; you fill them in when you use it.

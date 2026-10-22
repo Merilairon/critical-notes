@@ -75,9 +75,9 @@ const NEW_ENTRIES: { label: string; make: () => Entry }[] = [
             }
             @case ('container') {
               <div class="flex flex-wrap gap-2">
-                <input class="min-w-0 flex-1 rounded-md border border-line bg-bg px-2 py-1 text-sm font-semibold" [value]="field(entry, 'name')" placeholder="Heading (optional)" aria-label="Heading" (change)="patch(i, { name: $any($event.target).value || undefined })" />
+                <input class="min-w-0 flex-1 rounded-md border border-control bg-bg px-2 py-1 text-sm font-semibold" [value]="field(entry, 'name')" placeholder="Heading (optional)" aria-label="Heading" (change)="patch(i, { name: $any($event.target).value || undefined })" />
                 @if (field(entry, 'type') === 'quote') {
-                  <input class="min-w-0 flex-1 rounded-md border border-line bg-bg px-2 py-1 text-sm" [value]="field(entry, 'by')" placeholder="Quoted person" aria-label="Quoted person" (change)="patch(i, { by: $any($event.target).value || undefined })" />
+                  <input class="min-w-0 flex-1 rounded-md border border-control bg-bg px-2 py-1 text-sm" [value]="field(entry, 'by')" placeholder="Quoted person" aria-label="Quoted person" (change)="patch(i, { by: $any($event.target).value || undefined })" />
                 }
               </div>
               <div class="mt-2 border-l-2 border-line pl-2">
@@ -90,8 +90,8 @@ const NEW_ENTRIES: { label: string; make: () => Entry }[] = [
               </div>
             }
             @case ('table') {
-              <input class="mb-1 w-full rounded-md border border-line bg-bg px-2 py-1 text-sm" [value]="field(entry, 'caption')" placeholder="Caption" aria-label="Table caption" (change)="patch(i, { caption: $any($event.target).value || undefined })" />
-              <input class="mb-1 w-full rounded-md border border-line bg-bg px-2 py-1 text-xs" [value]="labels(entry).join(' | ')" placeholder="Column labels, separated by |" aria-label="Column labels" (change)="setLabels(i, $any($event.target).value)" />
+              <input class="mb-1 w-full rounded-md border border-control bg-bg px-2 py-1 text-sm" [value]="field(entry, 'caption')" placeholder="Caption" aria-label="Table caption" (change)="patch(i, { caption: $any($event.target).value || undefined })" />
+              <input class="mb-1 w-full rounded-md border border-control bg-bg px-2 py-1 text-xs" [value]="labels(entry).join(' | ')" placeholder="Column labels, separated by |" aria-label="Column labels" (change)="setLabels(i, $any($event.target).value)" />
               <cn-table-rows [rows]="$any(list(entry, 'rows'))" [labels]="labels(entry)" (changed)="patch(i, { rows: $event })" />
             }
             @default {

@@ -31,7 +31,7 @@ const TYPE_SUGGESTIONS = [
             <div class="mb-1 flex items-center gap-2">
               <code class="min-w-0 flex-1 truncate text-xs font-semibold">{{ v.name }}</code>
               <label class="flex items-center gap-1 text-xs text-muted">
-                <input type="checkbox" [checked]="!!v.required" [disabled]="!editable()" (change)="patch(v, { required: $any($event.target).checked || undefined })" [attr.aria-label]="v.name + ' required'" />
+                <input type="checkbox" class="h-6 w-6" [checked]="!!v.required" [disabled]="!editable()" (change)="patch(v, { required: $any($event.target).checked || undefined })" [attr.aria-label]="v.name + ' required'" />
                 required
               </label>
             </div>

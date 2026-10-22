@@ -39,7 +39,7 @@ describe('FacetForm on a phone', () => {
     const el = mount('pc', { classes: [{ classUid: 'bard|phb', subclassUid: null, level: 3 }] });
     const editOnly = [...el.querySelectorAll('button')].filter((b) => b.classList.contains('cn-edit-only'));
     // The pickers' "change" and "Clear" buttons are edit-only too
-    expect(editOnly.map((b) => b.getAttribute('aria-label') ?? b.textContent!.trim())).toEqual(['change', 'Clear', 'Remove class', '+ add class']);
+    expect(editOnly.map((b) => b.getAttribute('aria-label') ?? b.textContent!.trim())).toEqual(['Change class', 'Clear class', 'Remove class', '+ add class']);
   });
 
   it('shows an en dash for an empty value when read-only, the control otherwise', () => {

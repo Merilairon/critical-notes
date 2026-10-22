@@ -44,7 +44,7 @@ const STATUS_LABELS = { mapped: 'Will change', unchanged: 'Stays', unmapped: 'No
         </table>
       </div>
       <div class="mt-2 flex gap-2">
-        <button type="button" class="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-white" [disabled]="busy()" (click)="apply()">Move to the {{ other().label }}</button>
+        <button type="button" class="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-ink" [disabled]="busy()" (click)="apply()">Move to the {{ other().label }}</button>
         <button type="button" class="rounded-md border border-line px-3 py-1.5 text-sm text-muted" (click)="report.set(null)">Cancel</button>
       </div>
     }

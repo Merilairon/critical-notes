@@ -12,7 +12,7 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { NavigationEnd, NavigationStart, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { RULESET_IDS, type RulesetId } from '@cn/fivetools';
 import { filter, map } from 'rxjs';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -88,10 +88,69 @@ export class App {
   protected readonly toastVisible = signal(false);
   private toastTimer: ReturnType<typeof setTimeout> | undefined;
 
+  /** Polite status text for a page that has no heading to focus (the page title). */
+  protected readonly announcement = signal('');
+  private lastPath: string | undefined;
+  private focusBefore: Element | null = null;
+  private focusObserver: MutationObserver | undefined;
+  private focusTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /**
+   * SPA focus management: after a real page change focus moves to the main heading (or <main>), so keyboard and
+   * screen-reader users start at the new page. Not on the first load, not for query or fragment changes on the same
+   * path, not on bare screens, and not when the new page already placed focus itself.
+   */
+  private focusNewPage(url: string, bare: boolean) {
+    const path = url.split(/[?#]/)[0];
+    const previous = this.lastPath;
+    this.lastPath = path;
+    this.focusObserver?.disconnect();
+    clearTimeout(this.focusTimer);
+    if (previous === undefined || previous === path || bare) return;
+    const main = document.getElementById('main');
+    if (!main) return;
+    const start = this.focusBefore;
+    const settle = () => {
+      this.focusObserver?.disconnect();
+      clearTimeout(this.focusTimer);
+      const active = document.activeElement;
+      // The page (or the user) moved focus on purpose: leave it
+      // (the drawer button gets focus back when the drawer closes after a tap on a link: that is not the page's choice)
+      if (active && active !== document.body && active !== start && active !== this.drawerBtn()?.nativeElement) return;
+      // Never pull focus out of a field the person is typing in
+      if (active instanceof HTMLElement && (active.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName))) return;
+      const heading = main.querySelector<HTMLElement>('h1');
+      if (heading) {
+        if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
+        heading.focus({ preventScroll: false });
+      } else {
+        main.focus();
+        this.announcement.set('');
+        afterNextRender(() => this.announcement.set(document.title), { injector: this.injector });
+      }
+    };
+    // Lazy routes and data load after NavigationEnd: wait for an h1, but not longer than 1.5 s
+    afterNextRender(
+      () => {
+        if (main.querySelector('h1')) return settle();
+        this.focusObserver = new MutationObserver(() => {
+          if (main.querySelector('h1')) settle();
+        });
+        this.focusObserver.observe(main, { childList: true, subtree: true });
+        this.focusTimer = setTimeout(settle, 1500);
+      },
+      { injector: this.injector },
+    );
+  }
+
   constructor() {
-    this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => {
+    this.router.events.pipe(filter((e) => e instanceof NavigationStart)).subscribe(() => {
+      this.focusBefore = document.activeElement;
+    });
+    this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe((e) => {
       this.preview.close();
       this.closePopovers(false);
+      this.focusNewPage(e.urlAfterRedirects, this.bare());
     });
     // The drawer takes over: close the header popovers when it opens; on close focus returns to the header's menu button
     // (the header is un-inerted first, so wait for the next render)

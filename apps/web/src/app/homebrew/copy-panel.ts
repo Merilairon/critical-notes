@@ -32,7 +32,7 @@ import { HomebrewApi } from './homebrew-api';
           <label class="flex items-center gap-2"><input type="radio" name="mode" [checked]="mode() === 'clone'" (change)="mode.set('clone')" /> Full copy: independent of the original</label>
         </fieldset>
         <div class="flex items-center gap-2 sm:col-span-2">
-          <button type="submit" class="rounded-md bg-accent px-3 py-1.5 font-semibold text-white" [disabled]="busy()">Copy and edit</button>
+          <button type="submit" class="rounded-md bg-accent px-3 py-1.5 font-semibold text-accent-ink" [disabled]="busy()">Copy and edit</button>
           <button type="button" class="rounded-md border border-line px-3 py-1.5 text-muted" (click)="closed.emit()">Cancel</button>
           @if (error()) {<span class="text-accent" role="alert">{{ error() }}</span>}
         </div>

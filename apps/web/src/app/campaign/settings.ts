@@ -40,11 +40,11 @@ import { MembersPanel } from './members-panel';
         <h2 class="mb-2 font-semibold">General</h2>
         <label class="mb-3 block text-sm">
           <span class="mb-1 block text-muted">Name</span>
-          <input class="w-full rounded-md border border-line bg-bg px-3 py-2" [value]="c.name" (change)="save({ name: $any($event.target).value })" />
+          <input class="w-full rounded-md border border-control bg-bg px-3 py-2" [value]="c.name" (change)="save({ name: $any($event.target).value })" />
         </label>
         <label class="mb-3 block text-sm">
           <span class="mb-1 block text-muted">Description</span>
-          <textarea class="w-full rounded-md border border-line bg-bg px-3 py-2" rows="2" [value]="c.description" (change)="save({ description: $any($event.target).value })"></textarea>
+          <textarea class="w-full rounded-md border border-control bg-bg px-3 py-2" rows="2" [value]="c.description" (change)="save({ description: $any($event.target).value })"></textarea>
         </label>
         <p class="text-sm">Rules: <strong>{{ context.ruleset().label }}</strong></p>
         <div class="mt-3 flex flex-wrap gap-2 text-sm">
@@ -116,7 +116,7 @@ import { MembersPanel } from './members-panel';
 
       <section class="mt-4 rounded-xl border border-line bg-panel p-4">
         <h2 class="mb-2 font-semibold">House rules</h2>
-        <cn-block-editor [doc]="houseRules()" placeholder="Describe your table's house rules…" (changed)="queueHouseRules($event)" />
+        <cn-block-editor label="House rules" [doc]="houseRules()" placeholder="Describe your table's house rules…" (changed)="queueHouseRules($event)" />
       </section>
 
       @if (store.isOwner()) {

@@ -36,7 +36,7 @@ import { TemplateValuesForm } from './values-form';
         @if (error()) {<p class="mt-2 text-sm text-accent" role="alert">{{ error() }}</p>}
         <div class="mt-4 flex justify-end gap-2">
           <button type="button" class="rounded-md border border-line px-3 py-1.5 text-sm text-muted" (click)="closed.emit()">Cancel</button>
-          <button type="button" class="rounded-md bg-accent px-4 py-1.5 text-sm font-semibold text-white" [disabled]="busy()" (click)="submit(t)">{{ pageId() ? 'Apply' : 'Create page' }}</button>
+          <button type="button" class="rounded-md bg-accent px-4 py-1.5 text-sm font-semibold text-accent-ink" [disabled]="busy()" (click)="submit(t)">{{ pageId() ? 'Apply' : 'Create page' }}</button>
         </div>
       } @else {
         <h2 class="mb-2 font-semibold">{{ pageId() ? 'Apply a page template' : 'New page from a template' }}</h2>

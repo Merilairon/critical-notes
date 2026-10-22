@@ -24,7 +24,7 @@ type Rows = unknown[][];
               <tr>
                 @for (cell of row; track $index; let c = $index) {
                   <td class="p-0.5">
-                    <input class="w-full rounded border border-line bg-bg px-1.5 py-0.5" [value]="cell" [attr.aria-label]="'Row ' + (r + 1) + ' column ' + (c + 1)" (change)="setCell(r, c, $any($event.target).value)" />
+                    <input class="w-full rounded border border-control bg-bg px-1.5 py-0.5" [value]="cell" [attr.aria-label]="'Row ' + (r + 1) + ' column ' + (c + 1)" (change)="setCell(r, c, $any($event.target).value)" />
                   </td>
                 }
                 <td class="w-6"><button type="button" class="text-muted hover:text-accent" (click)="removeRow(r)" [attr.aria-label]="'Remove row ' + (r + 1)">✕</button></td>

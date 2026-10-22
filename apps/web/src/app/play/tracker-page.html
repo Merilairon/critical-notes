@@ -13,9 +13,9 @@
       <div class="sticky top-0 z-10 mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-panel/95 p-2 text-sm backdrop-blur" role="toolbar" aria-label="Combat">
         @if (started()) {
           <button type="button" class="rounded-md border border-line px-3 py-1.5" (click)="act({ type: 'prev' })" title="Previous turn (p)">◀ Prev</button>
-          <button type="button" class="rounded-md bg-accent px-4 py-1.5 font-semibold text-white" (click)="act({ type: 'next' })" title="Next turn (n)">Next turn ▶</button>
+          <button type="button" class="rounded-md bg-accent px-4 py-1.5 font-semibold text-accent-ink" (click)="act({ type: 'next' })" title="Next turn (n)">Next turn ▶</button>
         } @else {
-          <button type="button" class="rounded-md bg-accent px-4 py-1.5 font-semibold text-white" (click)="act({ type: 'start' })" title="Start (n)">Start combat</button>
+          <button type="button" class="rounded-md bg-accent px-4 py-1.5 font-semibold text-accent-ink" (click)="act({ type: 'start' })" title="Start (n)">Start combat</button>
         }
         <button type="button" class="rounded-md border border-line px-3 py-1.5" (click)="act({ type: 'rollInitiative', which: 'missing' })" title="Roll for everyone without initiative (r)">🎲 Roll missing</button>
         <button type="button" class="rounded-md border border-line px-3 py-1.5" (click)="act({ type: 'rollInitiative', which: 'npcs' })">🎲 Reroll monsters</button>
@@ -38,7 +38,7 @@
             <label class="flex flex-col gap-1"><span class="text-xs text-muted">HP</span><input #hp type="number" class="cn-prop-input w-20" /></label>
             <label class="flex flex-col gap-1"><span class="text-xs text-muted">AC</span><input #ac type="number" class="cn-prop-input w-16" /></label>
             <label class="flex flex-col gap-1"><span class="text-xs text-muted">Initiative</span><input #init type="number" class="cn-prop-input w-20" /></label>
-            <button type="submit" class="rounded-md bg-accent px-3 py-1.5 font-semibold text-white">Add</button>
+            <button type="submit" class="rounded-md bg-accent px-3 py-1.5 font-semibold text-accent-ink">Add</button>
           </form>
         }
       }

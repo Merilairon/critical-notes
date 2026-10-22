@@ -61,7 +61,7 @@ const VISIBILITY_LABELS: Record<string, string> = { dm: 'DM only', all: 'All pla
       </label>
     </div>
 
-    <h3 class="mt-4 mb-1 text-xs font-semibold tracking-wide text-muted uppercase">Properties</h3>
+    <h2 class="mt-4 mb-1 text-xs font-semibold tracking-wide text-muted uppercase">Properties</h2>
     <p class="mb-1 text-xs text-muted">Added to the campaign if missing, and set on new pages.</p>
     @for (p of d.properties; track $index; let i = $index) {
       <div class="mb-1 flex flex-wrap items-center gap-1 text-sm">
@@ -79,7 +79,7 @@ const VISIBILITY_LABELS: Record<string, string> = { dm: 'DM only', all: 'All pla
     }
     @if (editable()) {<button type="button" class="text-xs text-muted hover:text-accent" (click)="addProperty()">+ Property</button>}
 
-    <h3 class="mt-4 mb-1 text-xs font-semibold tracking-wide text-muted uppercase">Subpages</h3>
+    <h2 class="mt-4 mb-1 text-xs font-semibold tracking-wide text-muted uppercase">Subpages</h2>
     @for (c of d.children; track $index; let i = $index) {
       <div class="mb-1 flex flex-wrap items-center gap-1 text-sm">
         <input class="cn-prop-input w-48" [value]="c.title" placeholder="Title" (change)="setChild(i, { title: $any($event.target).value || 'Untitled' })" aria-label="Subpage title" />

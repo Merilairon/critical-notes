@@ -46,7 +46,7 @@ const ROLE_LABELS = { dm: 'DM (owner)', codm: 'Co-DM', player: 'Player' } as con
         <label class="flex flex-col gap-1"><span class="text-xs text-muted">Uses</span>
           <select #uses class="cn-prop-input"><option value="1">1 person</option><option value="" selected>Any number</option></select>
         </label>
-        <button type="submit" class="rounded-md bg-accent px-3 py-1.5 font-semibold text-white">Create link</button>
+        <button type="submit" class="rounded-md bg-accent px-3 py-1.5 font-semibold text-accent-ink">Create link</button>
       </form>
       @if (link(); as l) {
         <div class="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-accent/50 bg-accent/5 px-3 py-2 text-sm">

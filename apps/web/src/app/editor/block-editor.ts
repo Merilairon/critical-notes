@@ -89,11 +89,11 @@ const VisibilityShortcuts = Extension.create<{ enabled: () => boolean }>({
         <div class="cn-block-menu-label">{{ m.node.type.name }}</div>
         @if (gm()) {
           <button type="button" role="menuitemcheckbox" [attr.aria-checked]="m.node.attrs['visibility'] === 'dm'" (click)="toggleAttr(m, 'visibility')">
-            {{ m.node.attrs['visibility'] === 'dm' ? '✓ ' : '' }}DM only <kbd>Ctrl⇧D</kbd>
+            @if (m.node.attrs['visibility'] === 'dm') {<span aria-hidden="true">✓ </span>}DM only <kbd>Ctrl⇧D</kbd>
           </button>
           @if (m.node.attrs['visibility'] === 'dm' || m.node.type.name === 'secret') {
             <button type="button" role="menuitemcheckbox" [attr.aria-checked]="!!m.node.attrs['revealed']" (click)="toggleAttr(m, 'revealed')">
-              {{ m.node.attrs['revealed'] ? '✓ ' : '' }}Revealed to players <kbd>Ctrl⇧R</kbd>
+              @if (m.node.attrs['revealed']) {<span aria-hidden="true">✓ </span>}Revealed to players <kbd>Ctrl⇧R</kbd>
             </button>
           }
           <hr />
@@ -115,6 +115,8 @@ export class BlockEditor implements OnDestroy {
   readonly doc = input<BlockDoc | null>(null);
   readonly editable = input(true);
   readonly placeholder = input('Write something, or type / for blocks…');
+  /** The accessible name of the editing area (several editors can share a page). */
+  readonly label = input('Page content');
   readonly pageId = input<string | null>(null);
   readonly changed = output<BlockDoc>();
 
@@ -208,6 +210,14 @@ export class BlockEditor implements OnDestroy {
       });
     });
     effect(() => this.editor.setEditable(this.editable()));
+    effect(() => {
+      const label = this.label();
+      untracked(() =>
+        this.editor.setOptions({
+          editorProps: { attributes: { class: 'min-h-48 outline-none pl-6', spellcheck: 'true', 'aria-label': label } },
+        }),
+      );
+    });
   }
 
   private createHandle(): HTMLElement {

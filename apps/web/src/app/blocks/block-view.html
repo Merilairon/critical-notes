@@ -17,7 +17,7 @@
     @case ('listItem') { <li><cn-block-nodes [nodes]="n.content ?? []" [pageId]="pageId()" /></li> }
     @case ('taskList') { <ul class="cn-list-plain"><cn-block-nodes [nodes]="n.content ?? []" [pageId]="pageId()" /></ul> }
     @case ('taskItem') {
-      <li class="flex gap-2"><input type="checkbox" disabled [checked]="!!n.attrs?.['checked']" /><div class="flex-1"><cn-block-nodes [nodes]="n.content ?? []" [pageId]="pageId()" /></div></li>
+      <li class="flex gap-2"><input type="checkbox" disabled aria-label="Task" [checked]="!!n.attrs?.['checked']" /><div class="flex-1"><cn-block-nodes [nodes]="n.content ?? []" [pageId]="pageId()" /></div></li>
     }
     @case ('horizontalRule') { <hr /> }
     @case ('callout') {

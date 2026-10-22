@@ -17,7 +17,7 @@ import { SourceForm } from './source-form';
     <div class="flex flex-wrap items-center gap-2">
       <h1 class="flex-1 font-display text-3xl font-bold">Homebrew</h1>
       <button type="button" class="rounded-md border border-line px-3 py-1.5 text-sm hover:border-accent" [attr.aria-expanded]="panel() === 'import'" (click)="toggle('import')">Import</button>
-      <button type="button" class="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-white" [attr.aria-expanded]="panel() === 'new'" (click)="toggle('new')">New source</button>
+      <button type="button" class="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-ink" [attr.aria-expanded]="panel() === 'new'" (click)="toggle('new')">New source</button>
     </div>
     <p class="mt-1 text-sm text-muted">
       Homebrew uses the 5etools format, so it works like official content: in the reference, in {{ '{@tags}' }}, as NPC statblocks. Share a source with a

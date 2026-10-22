@@ -4,15 +4,19 @@
   <div class="mx-auto w-full max-w-6xl p-4 sm:p-6">
     <nav class="mb-1 text-xs text-muted"><a class="hover:text-accent" [routerLink]="backLink()">Templates</a> /</nav>
     <header class="flex flex-wrap items-center gap-2">
-      <input
-        class="w-12 shrink-0 rounded-md bg-transparent text-center text-3xl hover:bg-panel-2 focus:bg-panel-2"
-        [value]="icon() ?? ''"
-        [placeholder]="templateKind() === 'page' ? '📄' : '🧩'"
-        maxlength="8"
-        aria-label="Template icon"
-        [disabled]="!editable()"
-        (change)="icon.set($any($event.target).value || null); touch()"
-      />
+      <h1 class="sr-only">{{ editable() ? 'Editing template' : 'Template' }}: {{ name() || 'Untitled' }}</h1>
+      @if (editable()) {
+        <input
+          class="w-12 shrink-0 rounded-md bg-transparent text-center text-3xl hover:bg-panel-2 focus:bg-panel-2"
+          [value]="icon() ?? ''"
+          [placeholder]="templateKind() === 'page' ? '📄' : '🧩'"
+          maxlength="8"
+          aria-label="Template icon"
+          (change)="icon.set($any($event.target).value || null); touch()"
+        />
+      } @else {
+        <span class="w-12 shrink-0 text-center text-3xl" aria-hidden="true">{{ icon() ?? (templateKind() === 'page' ? '📄' : '🧩') }}</span>
+      }
       <input
         class="min-w-0 flex-1 rounded-md bg-transparent font-display text-3xl font-bold outline-none hover:bg-panel-2/50 focus:bg-panel-2/50"
         [value]="name()"
@@ -29,7 +33,7 @@
         }
       }
       @if (editable()) {
-        <button type="button" class="rounded-md bg-accent px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50" [disabled]="!dirty() && !isNew()" (click)="save()">
+        <button type="button" class="rounded-md bg-accent px-4 py-1.5 text-sm font-semibold text-accent-ink disabled:opacity-50" [disabled]="!dirty() && !isNew()" (click)="save()">
           {{ isNew() ? 'Create' : 'Save' }}
         </button>
       }
@@ -55,7 +59,7 @@
           </details>
         }
         <div [class.pointer-events-none]="!editable()">
-          <cn-block-editor [doc]="loadedDoc()" [editable]="editable()" [placeholder]="'Template content. Type / for blocks; write ' + field('field') + ' for things to fill in.'" (changed)="onContent($event)" />
+          <cn-block-editor label="Template content" [doc]="loadedDoc()" [editable]="editable()" [placeholder]="'Template content. Type / for blocks; write ' + field('field') + ' for things to fill in.'" (changed)="onContent($event)" />
         </div>
       </section>
       <aside class="flex flex-col gap-4">

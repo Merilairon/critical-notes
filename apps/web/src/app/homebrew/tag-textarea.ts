@@ -47,7 +47,7 @@ export function entityCompletion(tag: string, hit: Pick<SearchHitDto, 'name' | '
     </div>
     <textarea
       #area
-      class="block w-full rounded-md border border-line bg-bg px-2 py-1.5 font-mono text-sm leading-snug"
+      class="block w-full rounded-md border border-control bg-bg px-2 py-1.5 font-mono text-sm leading-snug"
       [rows]="rows()"
       [value]="value()"
       [attr.aria-label]="label()"

@@ -27,7 +27,7 @@ import { PlayApi } from './play-api';
         </span>
         @if (difficulty(); as d) {<span class="rounded-full border border-line px-2 py-0.5 text-xs capitalize" title="Difficulty for the party">{{ d }}</span>}
         <a class="rounded-md border border-line px-2 py-1 text-sm hover:border-accent" [routerLink]="['/c', store?.id(), 'encounters', e.id]">Edit</a>
-        <button type="button" class="rounded-md bg-accent px-3 py-1 text-sm font-semibold text-white" (click)="run(e.id)">Run</button>
+        <button type="button" class="rounded-md bg-accent px-3 py-1 text-sm font-semibold text-accent-ink" (click)="run(e.id)">Run</button>
       </div>
     } @else if (encounterId()) {
       <p class="text-sm text-muted">{{ error() || 'Loading encounter…' }}</p>
@@ -156,7 +156,7 @@ interface LootItem {
           <option value="party">Party stash</option>
           @for (pc of pcs(); track pc.id) {<option [value]="pc.id">{{ pc.title }}</option>}
         </select>
-        <button type="button" class="rounded-md bg-accent px-3 py-1 font-semibold text-white disabled:opacity-50" [disabled]="busy() || (!items().length && !hasCoins())" (click)="award()">
+        <button type="button" class="rounded-md bg-accent px-3 py-1 font-semibold text-accent-ink disabled:opacity-50" [disabled]="busy() || (!items().length && !hasCoins())" (click)="award()">
           {{ awarded() ? 'Award again' : 'Award' }}
         </button>
         @if (message()) {<span class="text-xs" [class.text-accent]="isError()" role="status">{{ message() }}</span>}

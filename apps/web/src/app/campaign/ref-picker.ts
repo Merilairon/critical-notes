@@ -19,13 +19,14 @@ import { EntityLink } from '../reference/render/entity-link';
         } @else {
           <span class="text-muted">{{ value() }}</span>
         }
-        <button type="button" class="cn-edit-only ml-auto text-xs text-muted hover:text-accent touch:min-h-[44px] touch:px-2 touch:text-sm" (click)="editing.set(true)">change</button>
-        <button type="button" class="cn-edit-only text-xs text-muted hover:text-accent touch:min-h-[44px] touch:min-w-[44px] touch:text-sm" (click)="selected.emit(null)" aria-label="Clear">✕</button>
+        <button type="button" class="cn-edit-only ml-auto text-xs text-muted hover:text-accent touch:min-h-[44px] touch:px-2 touch:text-sm" (click)="editing.set(true)" [attr.aria-label]="'Change ' + kind()">change</button>
+        <button type="button" class="cn-edit-only text-xs text-muted hover:text-accent touch:min-h-[44px] touch:min-w-[44px] touch:text-sm" (click)="selected.emit(null)" [attr.aria-label]="'Clear ' + kind()"><span aria-hidden="true">✕</span></button>
       </div>
     } @else {
       <input
         type="search"
         class="cn-input px-2"
+        [attr.aria-label]="placeholder()"
         [placeholder]="placeholder()"
         [value]="query()"
         (input)="onInput($any($event.target).value)"

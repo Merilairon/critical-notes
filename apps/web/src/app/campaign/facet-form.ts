@@ -72,7 +72,7 @@ import { RefPicker } from './ref-picker';
         @for (a of abilities; track a) {
           <label class="block min-w-0 text-center text-xs">
             <span class="block text-xs font-semibold uppercase">{{ a }}</span>
-            <input type="number" inputmode="numeric" min="1" max="30" class="cn-input px-1 py-1 text-center" [value]="ability(a)" (change)="setAbility(a, $any($event.target).value)" />
+            <input type="number" inputmode="numeric" min="1" max="30" class="cn-input px-1 py-1 text-center" [attr.aria-label]="abilityNames[a] + ' score'" [value]="ability(a)" (change)="setAbility(a, $any($event.target).value)" />
           </label>
         }
       </div>
@@ -88,6 +88,14 @@ export class FacetForm {
   readonly changed = output<Record<string, unknown>>();
 
   protected readonly abilities = ABILITY_KEYS;
+  protected readonly abilityNames: Record<string, string> = {
+    str: 'Strength',
+    dex: 'Dexterity',
+    con: 'Constitution',
+    int: 'Intelligence',
+    wis: 'Wisdom',
+    cha: 'Charisma',
+  };
   protected readonly fields = computed(() => FACET_FIELDS[this.facetType()].filter((f) => !(this.facetType() === 'npc' && f.key === 'statblockUid')));
   protected readonly classes = computed(() => (Array.isArray(this.value()['classes']) ? (this.value()['classes'] as { classUid: string; subclassUid: string | null; level: number }[]) : []));
 

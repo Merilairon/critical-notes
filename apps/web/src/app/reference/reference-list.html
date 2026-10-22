@@ -8,7 +8,7 @@
       </div>
       <input
         type="search"
-        class="w-full rounded-md border border-line bg-panel px-3 py-2 text-sm outline-none focus:border-accent"
+        class="w-full rounded-md border border-control bg-panel px-3 py-2 text-sm outline-none focus:border-accent"
         [placeholder]="'Filter ' + label().toLowerCase() + '…'"
         [value]="query()"
         (input)="onSearch($any($event.target).value)"

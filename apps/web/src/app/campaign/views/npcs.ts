@@ -10,7 +10,7 @@ import { facetStr, typedPages, type TypedPage } from './typed-pages';
   template: `<div class="mx-auto w-full max-w-6xl p-4 sm:p-6">
     <div class="flex flex-wrap items-center gap-2">
       <h1 class="font-display text-3xl font-bold">NPCs</h1>
-      <input class="ml-auto rounded-md border border-line bg-panel px-3 py-1.5 text-sm" placeholder="Filter…" (input)="filter.set($any($event.target).value)" aria-label="Filter NPCs" />
+      <input class="ml-auto rounded-md border border-control bg-panel px-3 py-1.5 text-sm" placeholder="Filter…" (input)="filter.set($any($event.target).value)" aria-label="Filter NPCs" />
       @if (store.isGm()) {
         <button type="button" class="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink" (click)="create()">+ NPC</button>
       }

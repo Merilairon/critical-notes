@@ -52,7 +52,7 @@ const EDITION_LABELS: Record<HomebrewEdition, string> = { '2014': '2014 rules', 
       </label>
     }
     <div class="flex items-center gap-2 sm:col-span-2">
-      <button type="submit" class="rounded-md bg-accent px-4 py-1.5 font-semibold text-white">{{ source() ? 'Save' : 'Create source' }}</button>
+      <button type="submit" class="rounded-md bg-accent px-4 py-1.5 font-semibold text-accent-ink">{{ source() ? 'Save' : 'Create source' }}</button>
       @if (cancellable()) {<button type="button" class="rounded-md border border-line px-3 py-1.5 text-muted" (click)="cancelled.emit()">Cancel</button>}
       @if (error()) {<span class="text-accent" role="alert">{{ error() }}</span>}
     </div>

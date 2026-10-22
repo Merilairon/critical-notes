@@ -9,15 +9,15 @@
     </nav>
 
     <header class="flex flex-wrap items-start gap-x-2 gap-y-1">
-      <input
-        class="w-12 shrink-0 rounded-md bg-transparent text-center text-3xl hover:bg-panel-2 focus:bg-panel-2 touch:min-h-[44px]"
-        [value]="p.icon ?? icons[p.type]"
-        maxlength="8"
-        aria-label="Page icon"
-        [disabled]="!canEdit()"
-        (change)="queue({ icon: $any($event.target).value || null }, true)"
-      />
       @if (canEdit()) {
+        <input
+          class="w-12 shrink-0 rounded-md bg-transparent text-center text-3xl hover:bg-panel-2 focus:bg-panel-2 touch:min-h-[44px]"
+          [value]="p.icon ?? icons[p.type]"
+          maxlength="8"
+          aria-label="Page icon"
+          (change)="queue({ icon: $any($event.target).value || null }, true)"
+        />
+        <h1 class="sr-only">Editing: {{ p.title || 'Untitled' }}</h1>
         <textarea
           rows="1"
           class="min-w-0 flex-1 basis-40 resize-none overflow-hidden rounded-md bg-transparent font-display text-2xl font-bold [overflow-wrap:anywhere] outline-none hover:bg-panel-2/50 focus:bg-panel-2/50 sm:text-3xl touch:py-2"
@@ -27,6 +27,7 @@
           (input)="onTitle($any($event.target).value)"
         ></textarea>
       } @else {
+        <span class="w-12 shrink-0 text-center text-3xl" aria-hidden="true">{{ p.icon ?? icons[p.type] }}</span>
         <h1 tabindex="-1" class="min-w-0 flex-1 basis-40 py-0.5 font-display text-2xl font-bold [overflow-wrap:anywhere] outline-none sm:text-3xl">{{ p.title }}</h1>
       }
       <span class="order-last w-full text-xs text-muted sm:order-none sm:mt-3 sm:w-auto sm:shrink-0" aria-live="polite">

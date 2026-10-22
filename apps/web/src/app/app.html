@@ -39,7 +39,7 @@
   @if (auth.user()) {
   <nav class="items-center gap-1 text-sm max-lg:hidden lg:flex" aria-label="Main">
     @for (l of navLinks(); track l.path) {
-    <a [routerLink]="l.path" routerLinkActive="bg-panel-2 text-ink" class="rounded px-2 py-1 text-muted hover:text-ink"
+    <a [routerLink]="l.path" routerLinkActive="bg-panel-2 text-ink" class="inline-flex min-h-6 items-center rounded px-2 py-1 text-muted hover:text-ink"
       >{{ l.label }}</a
     >
     }
@@ -84,7 +84,7 @@
       </label>
       <button
         type="button"
-        class="rounded-md border border-line px-2.5 py-1 text-sm text-muted hover:border-accent"
+        class="min-h-6 rounded-md border border-line px-2.5 py-1 text-sm text-muted hover:border-accent"
         (click)="sourcesOpen.set(true)"
       >
         Sources
@@ -107,7 +107,7 @@
     <div class="contents max-lg:hidden">
       <button
         type="button"
-        class="rounded-md px-2 py-1 text-muted hover:bg-panel-2"
+        class="min-h-6 min-w-6 rounded-md px-2 py-1 text-muted hover:bg-panel-2"
         (click)="theme.cycle()"
         [attr.aria-label]="'Theme: ' + theme.mode()"
       >
@@ -115,11 +115,11 @@
       </button>
       <a
         routerLink="/account"
-        class="rounded-md px-2 py-1 text-sm text-muted hover:bg-panel-2"
+        class="inline-flex min-h-6 items-center rounded-md px-2 py-1 text-sm text-muted hover:bg-panel-2"
         title="Account and AI assistants"
         >{{ auth.user()?.displayName }}</a
       >
-      <button type="button" class="rounded-md px-2 py-1 text-sm text-muted hover:bg-panel-2" (click)="logout()">
+      <button type="button" class="inline-flex min-h-6 items-center rounded-md px-2 py-1 text-sm text-muted hover:bg-panel-2" (click)="logout()">
         Sign out
       </button>
     </div>
@@ -275,6 +275,8 @@
 <main id="main" tabindex="-1" class="flex min-h-0 flex-1 flex-col overflow-y-auto scroll-pb-24 outline-none">
   <router-outlet />
 </main>
+
+<div class="sr-only" aria-live="polite" aria-atomic="true">{{ announcement() }}</div>
 
 @if (paletteOpen()) {
 <cn-command-palette (closed)="paletteOpen.set(false)" />

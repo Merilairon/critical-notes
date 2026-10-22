@@ -15,7 +15,7 @@ import { PlayApi } from './play-api';
     <div class="flex flex-wrap items-center gap-2">
       <h1 class="flex-1 font-display text-3xl font-bold">Encounters</h1>
       <button type="button" class="rounded-md border border-line px-3 py-1.5 text-sm hover:border-accent" (click)="newTracker()">New combat</button>
-      <button type="button" class="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-white" (click)="newEncounter()">New encounter</button>
+      <button type="button" class="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-ink" (click)="newEncounter()">New encounter</button>
     </div>
     @if (error()) {<p class="mt-2 text-sm text-accent" role="alert">{{ error() }}</p>}
     @if (trackers().length) {
