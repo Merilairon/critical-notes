@@ -9,6 +9,10 @@ Before you update, read the entries between your version and the new one, and
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-22
+
+An accessibility release. There is nothing to do when updating; no database change is needed.
+
 ### Changed
 
 - Every confirmation (deleting, leaving, discarding changes, ending combat) now asks in the app's own dialog instead of the browser's confirm box: keyboard and screen-reader friendly, and it follows the dark theme.
@@ -164,7 +168,8 @@ What to test:
 The changes in 1.0.0 are listed in the draft above, under "Unreleased". A release candidate publishes only the tag
 `1.0.0-rc.1`; it does not move `1.0` or `latest`.
 
-[Unreleased]: https://github.com/Merilairon/critical-notes/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/Merilairon/critical-notes/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/Merilairon/critical-notes/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/Merilairon/critical-notes/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Merilairon/critical-notes/releases/tag/v1.0.0
 [1.0.0-rc.3]: https://github.com/Merilairon/critical-notes/releases/tag/v1.0.0-rc.3
