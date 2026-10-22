@@ -27,15 +27,30 @@ export async function newPage(browser: Browser, storageState: string | undefined
   return watch(await context.newPage(), errors);
 }
 
-/** Records the page's browser errors in `errors`, and accepts its confirm dialogs. */
+/** Records the page's browser errors in `errors`. A native confirm()/alert() is an error too: the app has its own dialog (`confirmDialog`). */
 export function watch(page: Page, errors: string[]): Page {
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
     // Refused requests the app handles (401 before signing in, 403/404 by design) are not errors
     if (m.type() === 'error' && !/status of 40[0349]/.test(m.text())) errors.push(`console: ${m.text()}`);
   });
-  page.on('dialog', (d) => void d.accept());
+  page.on('dialog', (d) => {
+    // The browser's own "leave this page?" prompt (an editor with pending changes) is accepted as before: dismissing it
+    // would cancel the test's own navigation. Only a native confirm()/alert() is an error.
+    if (d.type() === 'beforeunload') return void d.accept();
+    errors.push(`native dialog: ${d.message()}`);
+    void d.dismiss();
+  });
   return page;
+}
+
+/** Answers the app's own confirm dialog (role alertdialog): checks it is there, clicks the named button, waits for it to close. */
+export async function confirmDialog(page: Page, button: string | RegExp, contains?: string[]) {
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog).toBeVisible();
+  for (const text of contains ?? []) await expect(dialog).toContainText(text);
+  await dialog.getByRole('button', { name: button, exact: typeof button === 'string' }).click();
+  await expect(dialog).toHaveCount(0);
 }
 
 /**

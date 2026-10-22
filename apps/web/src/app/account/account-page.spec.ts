@@ -1,3 +1,4 @@
+import { ConfirmService } from '../core/confirm.service';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { signal } from '@angular/core';
@@ -55,48 +56,29 @@ describe('AccountPage', () => {
     expect(second.el.textContent).not.toContain('Critical Notes 1');
   });
 
-  it('lists tokens, marks expired ones and revokes', async () => {
+  it('lists tokens, marks expired ones and revokes after the shared confirm dialog says yes', async () => {
     const { fixture, el, http } = await mount([token('old', { expiresAt: 1, scope: 'read' }), token('new')]);
     expect(el.textContent).toContain('Expired');
     expect(el.textContent).toContain('Read only');
-    const confirmSpy = vi.spyOn(window, 'confirm');
+    const nativeSpy = vi.spyOn(window, 'confirm');
+    const ask = vi.spyOn(TestBed.inject(ConfirmService), 'ask').mockResolvedValue(true);
     el.querySelector<HTMLButtonElement>('button[aria-label="Revoke old"]')!.click();
-    fixture.detectChanges();
-    expect(confirmSpy).not.toHaveBeenCalled(); // the app's own dialog, not the browser's
-    const dialog = el.querySelector('[role="alertdialog"]')!;
-    expect(dialog.getAttribute('aria-modal')).toBe('true');
-    expect(dialog.textContent).toContain('Revoke “old”?');
-    http.expectNone({ method: 'DELETE', url: '/api/auth/tokens/old' });
-    [...dialog.querySelectorAll('button')].find((b) => b.textContent === 'Revoke token')!.click();
+    expect(nativeSpy).not.toHaveBeenCalled(); // the app's own dialog, not the browser's
+    expect(ask).toHaveBeenCalledWith(expect.objectContaining({ title: 'Revoke “old”?', confirmLabel: 'Revoke token', message: expect.stringContaining('This cannot be undone') }));
+    await settle();
     http.expectOne({ method: 'DELETE', url: '/api/auth/tokens/old' }).flush(null);
     await settle();
     http.expectOne('/api/auth/tokens').flush({ tokens: [token('new')] });
     await settle();
     fixture.detectChanges();
-    expect(el.querySelector('[role="alertdialog"]')).toBeNull();
     expect(el.querySelector('button[aria-label="Revoke old"]')).toBeNull();
   });
 
-  it('cancelling the revoke dialog (button or Escape) revokes nothing and returns focus to the Revoke button', async () => {
-    const { fixture, el, http } = await mount([token('keep')]);
-    const open = () => {
-      const button = el.querySelector<HTMLButtonElement>('button[aria-label="Revoke keep"]')!;
-      button.focus();
-      button.click();
-      fixture.detectChanges();
-      return button;
-    };
-    let button = open();
-    expect(el.querySelector('[role="alertdialog"]')).not.toBeNull();
-    [...el.querySelectorAll('[role="alertdialog"] button')].find((b) => b.textContent === 'Cancel')!.dispatchEvent(new Event('click'));
-    fixture.detectChanges();
-    expect(el.querySelector('[role="alertdialog"]')).toBeNull();
-    expect(document.activeElement).toBe(button);
-    button = open();
-    el.querySelector('[role="alertdialog"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    fixture.detectChanges();
-    expect(el.querySelector('[role="alertdialog"]')).toBeNull();
-    expect(document.activeElement).toBe(button);
+  it('revokes nothing when the confirm dialog is cancelled', async () => {
+    const { el, http } = await mount([token('keep')]);
+    vi.spyOn(TestBed.inject(ConfirmService), 'ask').mockResolvedValue(false);
+    el.querySelector<HTMLButtonElement>('button[aria-label="Revoke keep"]')!.click();
+    await settle();
     http.expectNone({ method: 'DELETE', url: '/api/auth/tokens/keep' });
   });
 

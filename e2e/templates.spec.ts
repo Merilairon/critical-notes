@@ -1,6 +1,6 @@
 /** Templates: the built-in library, block templates with typed fields, linked copies, page templates and defaults. */
 import { expect, test, type Page } from '@playwright/test';
-import { api, editor, saved, sharedPage } from './support';
+import { api, confirmDialog, editor, saved, sharedPage } from './support';
 
 const shared = sharedPage();
 let campaignId: string, templateId: string, ruinsId: string;
@@ -59,6 +59,7 @@ test('changing the template updates the linked copy', async () => {
   await page.keyboard.press('Control+End');
   await page.keyboard.type(' UPDATED');
   await page.locator('header button', { hasText: 'Save' }).click();
+  await confirmDialog(page, 'Save and update', ['1 page']);
   await expect(page.locator('[aria-live=polite]', { hasText: '1 linked page updated' })).toBeVisible();
   await page.goto(`/c/${campaignId}/p/${ruinsId}`);
   await expect(page.locator('.cn-linked-template', { hasText: 'UPDATED' })).toBeVisible();
@@ -132,6 +133,25 @@ test('deleted templates: restore a personal one, delete a campaign one permanent
 
   await page.goto(`/c/${campaignId}/templates`);
   await deleted.getByRole('button', { name: 'Delete permanently: Bin campaign' }).click();
+  await confirmDialog(page, 'Delete permanently', ['Bin campaign']);
   await expect(deleted.locator('div[role=status]')).toContainText('Permanently deleted "Bin campaign"');
   await expect(deleted.locator('li')).toHaveCount(0);
+});
+
+test('leaving a template with unsaved changes asks in the app dialog: Stay keeps the page, Leave goes', async () => {
+  const { page } = shared;
+  await page.goto(`/templates/${templateId}`);
+  await editor(page).click();
+  await page.keyboard.type(' unsaved');
+  const url = page.url();
+  const nav = page.locator('header nav a, header a', { hasText: 'Reference' }).first();
+  await nav.click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog).toContainText('You have unsaved changes');
+  await dialog.getByRole('button', { name: 'Stay' }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(page.url()).toBe(url);
+  await nav.click();
+  await confirmDialog(page, 'Leave');
+  await page.waitForURL('**/reference**');
 });

@@ -1,3 +1,4 @@
+import { ConfirmService } from '../core/confirm.service';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting, type TestRequest } from '@angular/common/http/testing';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
@@ -95,8 +96,8 @@ describe('TemplateTrash', () => {
   });
 
   it('restores a row without a confirm, tells the library and moves focus to the next row', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm');
     const { el, http, fixture, btn, rows, changed } = await mount([item('a', 'Trap'), item('b', 'Room', { deletedAt: Date.now() - DAY })]);
+    const confirmSpy = vi.spyOn(TestBed.inject(ConfirmService), 'ask');
     btn(0, 'restore').click();
     const req = http.expectOne('/api/templates/a/restore');
     expect(req.request.method).toBe('POST');
@@ -111,11 +112,13 @@ describe('TemplateTrash', () => {
 
   it('asks before deleting permanently; cancel does nothing; the last row hands focus to the heading', async () => {
     const { http, fixture, btn, rows, el } = await mount([item('a', 'Trap')]);
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const confirmSpy = vi.spyOn(TestBed.inject(ConfirmService), 'ask').mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     btn(0, 'purge').click();
-    expect(confirmSpy).toHaveBeenLastCalledWith('Permanently delete "Trap"? This cannot be undone.');
+    await settle();
+    expect(confirmSpy).toHaveBeenLastCalledWith(expect.objectContaining({ message: 'Permanently delete "Trap"? This cannot be undone.' }));
     http.expectNone('/api/templates/a/purge');
     btn(0, 'purge').click();
+    await settle();
     const req = http.expectOne('/api/templates/a/purge');
     expect(req.request.method).toBe('DELETE');
     req.flush({ purged: ['a'] });
@@ -142,8 +145,9 @@ describe('TemplateTrash', () => {
 
   it('treats 404 on purge as no longer in the trash', async () => {
     const { el, http, fixture, btn, rows } = await mount([item('a', 'Trap')]);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(TestBed.inject(ConfirmService), 'ask').mockResolvedValue(true);
     btn(0, 'purge').click();
+    await settle();
     err(http.expectOne('/api/templates/a/purge'), 404, { error: 'Not found' });
     await settle();
     http.expectOne((r) => r.url === '/api/templates/trash').flush({ templates: [] });
@@ -178,8 +182,9 @@ describe('TemplateTrash', () => {
 
   it('ignores a second purge click while the first one runs', async () => {
     const { http, fixture, btn } = await mount([item('a', 'Trap'), item('b', 'Room', { deletedAt: Date.now() - DAY })]);
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const confirmSpy = vi.spyOn(TestBed.inject(ConfirmService), 'ask').mockResolvedValue(true);
     btn(0, 'purge').click();
+    await settle();
     btn(0, 'purge').click();
     btn(1, 'purge').click();
     expect(confirmSpy).toHaveBeenCalledTimes(1);
@@ -281,8 +286,9 @@ describe('TemplateTrash', () => {
     expect(sep.textContent).toBe(', ');
     // Present at every width: never hidden by a breakpoint class
     expect(sep.className).not.toContain('hidden');
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(TestBed.inject(ConfirmService), 'ask').mockResolvedValue(true);
     btn(0, 'purge').click();
+    await settle();
     fixture.detectChanges();
     expect(btn(0, 'purge').getAttribute('aria-label')).toBe('Deleting…: Trap');
     expect(btn(0, 'restore').getAttribute('aria-label')).toBe('Restore: Trap');

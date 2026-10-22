@@ -4,6 +4,7 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { Router } from '@angular/router';
 import type { CreatedInviteDto, InviteDto, MemberDto } from '@cn/shared';
 import { firstValueFrom } from 'rxjs';
+import { ConfirmService } from '../core/confirm.service';
 import { errorMessage } from '../core/http.interceptor';
 import { CampaignStore } from './campaign.store';
 
@@ -71,6 +72,7 @@ const ROLE_LABELS = { dm: 'DM (owner)', codm: 'Co-DM', player: 'Player' } as con
     @if (error()) {<p class="mt-2 text-sm text-accent" role="alert">{{ error() }}</p>}`,
 })
 export class MembersPanel {
+  private readonly confirm = inject(ConfirmService);
   protected readonly store = inject(CampaignStore);
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
@@ -137,14 +139,14 @@ export class MembersPanel {
     void this.run(() => firstValueFrom(this.http.patch(`${this.base()}/members/${m.userId}`, { role })));
   }
 
-  protected remove(m: MemberDto) {
-    if (confirm(`Remove ${m.displayName} from the campaign? Their characters stay, without a player.`)) {
-      void this.run(() => firstValueFrom(this.http.delete(`${this.base()}/members/${m.userId}`)));
+  protected async remove(m: MemberDto) {
+    if (await this.confirm.ask({ title: `Remove ${m.displayName}?`, message: `Remove ${m.displayName} from the campaign? Their characters stay, without a player.`, confirmLabel: 'Remove' })) {
+      await this.run(() => firstValueFrom(this.http.delete(`${this.base()}/members/${m.userId}`)));
     }
   }
 
   protected async leave() {
-    if (!confirm('Leave this campaign? You will need a new invite to come back.')) return;
+    if (!(await this.confirm.ask({ title: 'Leave campaign?', message: 'Leave this campaign? You will need a new invite to come back.', confirmLabel: 'Leave' }))) return;
     try {
       await firstValueFrom(this.http.delete(`${this.base()}/members/${this.store.myId()}`));
       await this.router.navigate(['/campaigns']);

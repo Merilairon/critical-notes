@@ -2,6 +2,7 @@ import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { afterNextRender, ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, Injector, input, output, signal, untracked, viewChild } from '@angular/core';
 import { TRASH_RETENTION_DAYS, type TemplateTrashItemDto } from '@cn/shared';
+import { ConfirmService } from '../core/confirm.service';
 import { errorMessage } from '../core/http.interceptor';
 import { TemplateApi } from './template-api';
 
@@ -94,6 +95,7 @@ export class TemplateTrash {
   /** A template was restored or purged (the library reloads its list). */
   readonly changed = output<void>();
 
+  private readonly confirm = inject(ConfirmService);
   private readonly api = inject(TemplateApi);
   private readonly injector = inject(Injector);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -231,7 +233,7 @@ export class TemplateTrash {
 
   protected async purge(it: TemplateTrashItemDto) {
     if (this.busy()) return;
-    if (!confirm(`Permanently delete "${it.name}"? This cannot be undone.`)) return;
+    if (!(await this.confirm.ask({ title: 'Delete permanently?', message: `Permanently delete "${it.name}"? This cannot be undone.`, confirmLabel: 'Delete permanently' }))) return;
     const epoch = this.epoch;
     await this.run(it, 'purge', async () => {
       await this.api.purge(it.id);

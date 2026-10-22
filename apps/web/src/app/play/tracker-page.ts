@@ -8,6 +8,7 @@ import { api } from '../core/api';
 import { ContextService } from '../core/context.service';
 import { CampaignStore } from '../campaign/campaign.store';
 import { RefPicker } from '../campaign/ref-picker';
+import { ConfirmService } from '../core/confirm.service';
 import { errorMessage } from '../core/http.interceptor';
 import { parseHpInput } from './combat-math';
 import { PlayApi } from './play-api';
@@ -22,6 +23,7 @@ import { PlayApi } from './play-api';
 })
 export class TrackerPage implements OnDestroy {
   readonly trackerId = input.required<string>();
+  private readonly confirm = inject(ConfirmService);
   private readonly api = inject(PlayApi);
   private readonly router = inject(Router);
   private readonly http = inject(HttpClient);
@@ -132,11 +134,11 @@ export class TrackerPage implements OnDestroy {
   }
 
   protected async end() {
-    if (confirm('End this combat? Player characters keep their current hit points.')) await this.act({ type: 'end' });
+    if (await this.confirm.ask({ title: 'End combat?', message: 'End this combat? Player characters keep their current hit points.', confirmLabel: 'End combat' })) await this.act({ type: 'end' });
   }
 
   protected async remove() {
-    if (!confirm('Delete this tracker?')) return;
+    if (!(await this.confirm.ask({ title: 'Delete tracker?', message: 'Delete this tracker?', confirmLabel: 'Delete tracker' }))) return;
     await this.api.deleteTracker(this.store.id()!, this.trackerId());
     await this.router.navigate(['/c', this.store.id(), 'encounters']);
   }

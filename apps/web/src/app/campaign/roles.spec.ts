@@ -1,3 +1,4 @@
+import { ConfirmService } from '../core/confirm.service';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { computed, signal, type Type } from '@angular/core';
@@ -191,7 +192,7 @@ describe('EditionMigrationPanel', () => {
     keep[0]!.click();
     fixture.detectChanges();
 
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(TestBed.inject(ConfirmService), 'ask').mockResolvedValue(true);
     [...el.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent!.startsWith('Move to'))!.click();
     await settle();
     const req = http.expectOne({ method: 'POST', url: '/api/campaigns/c1/migrate-edition' });

@@ -4,6 +4,7 @@ import { afterNextRender, ChangeDetectionStrategy, Component, computed, effect, 
 import { RouterLink } from '@angular/router';
 import { PAGE_TYPE_ICONS, PAGE_TYPE_LABELS, TRASH_RETENTION_DAYS, type TrashEntryDto } from '@cn/shared';
 import { firstValueFrom } from 'rxjs';
+import { ConfirmService } from '../core/confirm.service';
 import { errorMessage } from '../core/http.interceptor';
 import { CampaignStore } from './campaign.store';
 
@@ -82,6 +83,7 @@ const subpages = (n: number) => (n === 0 ? 'no subpages' : `${n} ${plural(n, 'su
   </div>`,
 })
 export class CampaignTrash {
+  private readonly confirm = inject(ConfirmService);
   protected readonly store = inject(CampaignStore);
   private readonly http = inject(HttpClient);
   private readonly injector = inject(Injector);
@@ -172,7 +174,8 @@ export class CampaignTrash {
     if (this.busy()) return;
     const n = it.subpageCount;
     const what = n ? `"${it.title}" and its ${n} ${plural(n, 'subpage', 'subpages')}` : `"${it.title}"`;
-    if (!confirm(`Permanently delete ${what}? This cannot be undone.`)) return;
+    if (!(await this.confirm.ask({ title: 'Delete permanently?', message: `Permanently delete ${what}? This cannot be undone.`, confirmLabel: 'Delete permanently' }))) return;
+    if (this.busy()) return; // another row started while the question was open
     await this.run(it, 'purge', async () => {
       const res = await firstValueFrom(this.http.delete<{ purged: string[] }>(this.url(`/pages/${it.id}/purge`)));
       const k = Math.max(0, res.purged.length - 1);

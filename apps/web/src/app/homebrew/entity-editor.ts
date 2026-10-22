@@ -15,6 +15,7 @@ import {
   type HomebrewValidationDto,
 } from '@cn/shared';
 import { ContextService } from '../core/context.service';
+import { ConfirmService } from '../core/confirm.service';
 import { errorMessage } from '../core/http.interceptor';
 import { EntityView } from '../reference/entity-view';
 import { EntriesEditor, type EntriesPatch } from './entries-editor';
@@ -43,6 +44,7 @@ export class HomebrewEntityEditor implements OnDestroy {
   readonly sourceId = input<string | undefined>(undefined);
   readonly type = input<string | undefined>(undefined);
 
+  private readonly confirm = inject(ConfirmService);
   private readonly api = inject(HomebrewApi);
   private readonly router = inject(Router);
   private readonly title = inject(Title);
@@ -220,7 +222,7 @@ export class HomebrewEntityEditor implements OnDestroy {
     if (!e) return;
     const used = await this.api.usage(e.id).catch(() => []);
     const note = used.length ? `\n\nIt is used on ${used.length} page${used.length === 1 ? '' : 's'}; those keep showing it with a "deleted" badge.` : '';
-    if (!confirm(`Delete "${e.name}"? You can restore it later from the source's deleted items.${note}`)) return;
+    if (!(await this.confirm.ask({ title: 'Delete entry?', message: `Delete "${e.name}"? You can restore it later from the source's deleted items.${note}`, confirmLabel: 'Delete' }))) return;
     await this.api.delete(e.id);
     this.dirty.set(false);
     await this.router.navigate(['/homebrew/s', e.sourceId]);
@@ -250,7 +252,7 @@ export class HomebrewEntityEditor implements OnDestroy {
 
   protected async restoreRevision(revNo: number) {
     const e = this.entity();
-    if (!e || (this.dirty() && !confirm('Discard your unsaved changes and restore this revision?'))) return;
+    if (!e || (this.dirty() && !(await this.confirm.ask({ title: 'Restore this revision?', message: 'Discard your unsaved changes and restore this revision?', confirmLabel: 'Discard and restore' })))) return;
     const restored = await this.api.restoreRevision(e.id, revNo);
     this.entity.set(restored);
     this.setData(stripSource(restored.data), restored.fluff, false);
@@ -272,8 +274,8 @@ export class HomebrewEntityEditor implements OnDestroy {
   }
 
   /** Used by the route guard. */
-  canLeave(): boolean {
-    return !this.dirty() || confirm('You have unsaved changes. Leave anyway?');
+  canLeave(): boolean | Promise<boolean> {
+    return !this.dirty() || this.confirm.ask({ title: 'Leave without saving?', message: 'You have unsaved changes. Leave anyway?', confirmLabel: 'Leave', cancelLabel: 'Stay' });
   }
 
   ngOnDestroy() {

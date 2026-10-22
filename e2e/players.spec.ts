@@ -5,7 +5,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { expectCompactHeader, expectNoSidewaysScroll, smallFields, smallTargets } from './phone-checks';
-import { api, baseUrl, editor, isPhone, newPage, saved, sharedPage } from './support';
+import { api, confirmDialog, baseUrl, editor, isPhone, newPage, saved, sharedPage } from './support';
 
 // Only the DM may ever see these: the player's browser must never receive them
 const HIDDEN = ['SMOKE-SECRET', 'SMOKE-VILLAIN', 'SMOKE-RING', 'SMOKE-WREN-NOTE'];
@@ -180,6 +180,7 @@ test('move the imported copy to the other edition', async () => {
   await edition.getByRole('button', { name: 'Check what would change' }).click();
   await expect(edition.locator('tr', { hasText: 'Fireball' })).toBeVisible();
   await edition.getByRole('button', { name: /^Move to the/ }).click();
+  await confirmDialog(page, 'Move campaign');
   await expect(edition.locator('[role=status]', { hasText: 'Done:' })).toBeVisible();
   const { pages } = await api<{ pages: { id: string }[] }>(page, 'GET', `/api/campaigns/${importedId}/pages?type=location`);
   const town = await api<{ body: unknown }>(page, 'GET', `/api/campaigns/${importedId}/pages/${pages[0]!.id}`);
@@ -194,13 +195,11 @@ test('move the imported copy to the other edition', async () => {
 test.describe('as a player on a phone', () => {
   test.skip(() => !isPhone(), 'phone project only');
 
-  // Known gap, not in M6.4's scope: the editor's formatting toolbar buttons are 24 px tall (docs/STATUS.md, phone project)
-  const KNOWN_SMALL = '[role=toolbar][aria-label=Formatting]';
-  const screens: [string, () => string, (p: Page) => Promise<void>, { fields?: boolean; skip?: string }][] = [
+  const screens: [string, () => string, (p: Page) => Promise<void>, { fields?: boolean }][] = [
     ['campaigns', () => '/campaigns', (p) => expect(p.getByRole('heading', { name: 'Campaigns' })).toBeVisible(), {}],
     ['campaign overview', () => `/c/${campaignId}`, (p) => expect(p.locator('main h1').first()).toBeVisible(), {}],
     ['shared page', () => `/c/${campaignId}/p/${townId}`, (p) => expect(p.locator('cn-block-view', { hasText: 'foggy harbour town' })).toBeVisible(), {}],
-    ['own character', () => `/c/${campaignId}/p/${wrenId}`, (p) => expect(editor(p).getByText('Wren, a wandering bard.')).toBeVisible(), { fields: true, skip: KNOWN_SMALL }],
+    ['own character', () => `/c/${campaignId}/p/${wrenId}`, (p) => expect(editor(p).getByText('Wren, a wandering bard.')).toBeVisible(), { fields: true }],
     ['inventory', () => `/c/${campaignId}/inventory`, (p) => expect(p.locator('section[aria-label=Wren]')).toBeVisible(), { fields: true }],
     ['members and rules', () => `/c/${campaignId}/settings`, (p) => expect(p.locator('section[aria-label=Members]')).toBeVisible(), {}],
     ['account', () => '/account', (p) => expect(p.locator('main h1').first()).toBeVisible(), { fields: true }],
@@ -212,7 +211,7 @@ test.describe('as a player on a phone', () => {
       await ready(player);
       await expectNoSidewaysScroll(player, name);
       await expectCompactHeader(player, name);
-      expect.soft(await smallTargets(player, opts.skip), `${name}: tap targets under 44 px`).toEqual([]);
+      expect.soft(await smallTargets(player), `${name}: tap targets under 44 px`).toEqual([]);
       // The sweep must have something to measure, or it proves nothing
       if (opts.fields) expect(await player.locator('input:visible:not([type=checkbox]), select:visible, textarea:visible').count(), `${name}: visible fields`).toBeGreaterThan(0);
       if (opts.fields) expect.soft(await smallFields(player), `${name}: fields under 16 px or 44 px`).toEqual([]);

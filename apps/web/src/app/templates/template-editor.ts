@@ -5,6 +5,7 @@ import { Router, RouterLink } from '@angular/router';
 import type { BlockNode } from '@cn/blocks';
 import type { BlockDoc, TemplateDto, TemplateKindDto, TemplateSummaryDto, TemplateUsageDto } from '@cn/shared';
 import { coerceValue, pageMetaNodes, parseType, syncVariables, type PageTemplateDef, type TemplateVariable } from '@cn/templates';
+import { ConfirmService } from '../core/confirm.service';
 import { errorMessage } from '../core/http.interceptor';
 import { BlockEditor } from '../editor/block-editor';
 import { PageTemplateFields, type PageFields } from './page-template-fields';
@@ -28,6 +29,7 @@ export class TemplateEditor {
   /** Inside a campaign (route param). */
   readonly campaignId = input<string | undefined>(undefined);
 
+  private readonly confirm = inject(ConfirmService);
   private readonly api = inject(TemplateApi);
   private readonly router = inject(Router);
   private readonly title = inject(Title);
@@ -151,7 +153,11 @@ export class TemplateEditor {
     return this.templateKind() === 'page' ? { ...this.pageFields(), body: this.content(), variables } : { content: this.content(), variables };
   }
 
+  /** True while the linked-pages question is open: a second save must not start (it would replace the question). */
+  private asking = false;
+
   protected async save() {
+    if (this.asking) return;
     this.error.set('');
     this.status.set('Saving…');
     const meta = { name: this.name().trim() || 'Untitled template', description: this.description(), icon: this.icon(), tags: this.tags() };
@@ -164,7 +170,7 @@ export class TemplateEditor {
         await this.router.navigate(c ? ['/c', c, 'templates', created.id] : ['/templates', created.id], { replaceUrl: true });
         return;
       }
-      if (this.linkedCount() && !confirm(`This template is linked on ${this.linkedCount()} page${this.linkedCount() === 1 ? '' : 's'}. Saving updates those copies. Continue?`)) {
+      if (this.linkedCount() && !(await this.askLinked())) {
         this.status.set('');
         return;
       }
@@ -184,6 +190,16 @@ export class TemplateEditor {
     }
   }
 
+  private async askLinked(): Promise<boolean> {
+    const n = this.linkedCount();
+    this.asking = true;
+    try {
+      return await this.confirm.ask({ title: 'Update linked pages?', message: `This template is linked on ${n} page${n === 1 ? '' : 's'}. Saving updates those copies. Continue?`, confirmLabel: 'Save and update' });
+    } finally {
+      this.asking = false;
+    }
+  }
+
   protected async duplicate() {
     const t = this.template();
     if (!t) return;
@@ -194,7 +210,7 @@ export class TemplateEditor {
 
   protected async remove() {
     const t = this.template();
-    if (!t || !confirm(`Delete the template "${t.name}"? Pages made from it keep their content.`)) return;
+    if (!t || !(await this.confirm.ask({ title: 'Delete template?', message: `Delete the template "${t.name}"? Pages made from it keep their content.`, confirmLabel: 'Delete template' }))) return;
     await this.api.remove(t.id);
     this.dirty.set(false);
     await this.router.navigate(this.backLink());
@@ -214,7 +230,7 @@ export class TemplateEditor {
     if (this.dirty()) event.preventDefault();
   }
 
-  canLeave(): boolean {
-    return !this.dirty() || confirm('You have unsaved changes. Leave anyway?');
+  canLeave(): boolean | Promise<boolean> {
+    return !this.dirty() || this.confirm.ask({ title: 'Leave without saving?', message: 'You have unsaved changes. Leave anyway?', confirmLabel: 'Leave', cancelLabel: 'Stay' });
   }
 }

@@ -3,7 +3,7 @@ import { authGuard } from './core/auth.guard';
 import { gmGuard } from './campaign/gm.guard';
 import { adminGuard } from './admin/admin.guard';
 
-const leaveGuard = (c: { canLeave(): boolean }) => c.canLeave();
+const leaveGuard = (c: { canLeave(): boolean | Promise<boolean> }) => c.canLeave();
 
 const templateRoutes: Routes = [
   { path: '', loadComponent: () => import('./templates/template-library').then((m) => m.TemplateLibrary), title: 'Templates — Critical Notes' },

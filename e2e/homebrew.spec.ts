@@ -1,6 +1,6 @@
 /** Homebrew: sources, the form editor with {@ autocomplete and preview, variants, sharing, import, export, delete. */
 import { expect, test } from '@playwright/test';
-import { api, sharedPage } from './support';
+import { api, confirmDialog, sharedPage } from './support';
 
 const shared = sharedPage();
 let campaignId: string, sourceId: string, houndId: string;
@@ -32,7 +32,7 @@ test('a new monster: form, {@ autocomplete, live preview', async () => {
   const area = page.locator('textarea[aria-label="Paragraph 1"]').first();
   await area.click();
   await area.pressSequentially('Breathes like {@spell fire bo');
-  await expect(page.locator('[role=listbox] button', { hasText: 'Fire Bolt' }).first()).toBeVisible();
+  await expect(page.locator('[role=listbox] [role=option]', { hasText: 'Fire Bolt' }).first()).toBeVisible();
   await page.keyboard.press('Enter');
   await area.pressSequentially(' when angry.');
   await expect(area).toHaveValue(/\{@spell Fire Bolt\|PHB\} when angry\./);
@@ -81,7 +81,7 @@ test('share with a campaign; its search finds the homebrew', async () => {
   await page.waitForLoadState('networkidle');
   await page.keyboard.press('Control+k');
   await page.locator('input[type=search]').fill('fog hound');
-  await expect(page.locator('#cn-palette-results button', { hasText: 'Fog Hound' })).toBeVisible();
+  await expect(page.locator('#cn-palette-results [role=option]', { hasText: 'Fog Hound' })).toBeVisible();
   await page.keyboard.press('Escape');
 });
 
@@ -121,6 +121,7 @@ test('delete and restore', async () => {
   const { page } = shared;
   await page.goto(`/homebrew/e/${houndId}`);
   await page.locator('header button', { hasText: 'Delete' }).click();
+  await confirmDialog(page, 'Delete');
   await page.waitForURL(/\/homebrew\/s\//);
   await expect(page.locator('a', { hasText: 'Fog Hound' })).toHaveCount(0);
   await page.locator('label', { hasText: 'Show deleted' }).locator('input').check();

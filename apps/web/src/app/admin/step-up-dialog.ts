@@ -3,20 +3,7 @@ import { afterNextRender, ChangeDetectionStrategy, Component, DestroyRef, Elemen
 import { A11yModule } from '@angular/cdk/a11y';
 import { AuthService } from '../core/auth.service';
 import { errorMessage, requestError } from '../core/http.interceptor';
-
-/** Makes everything outside `el` inert (no focus, no virtual cursor). Returns the undo. */
-function inertOutside(el: HTMLElement): () => void {
-  const changed: HTMLElement[] = [];
-  for (let node: HTMLElement | null = el; node && node !== document.body; node = node.parentElement) {
-    for (const sibling of Array.from(node.parentElement?.children ?? [])) {
-      if (sibling !== node && sibling instanceof HTMLElement && !sibling.hasAttribute('inert')) {
-        sibling.setAttribute('inert', '');
-        changed.push(sibling);
-      }
-    }
-  }
-  return () => changed.forEach((s) => s.removeAttribute('inert'));
-}
+import { inertOutside } from '../core/inert';
 
 /**
  * The one confirmation dialog for every protected admin action: the acting admin's own password, focus

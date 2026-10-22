@@ -1,3 +1,4 @@
+import { ConfirmService } from '../core/confirm.service';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting, type TestRequest } from '@angular/common/http/testing';
 import { signal } from '@angular/core';
@@ -88,11 +89,13 @@ describe('CampaignTrash', () => {
 
   it('asks before deleting permanently, naming subpages; cancel does nothing', async () => {
     const { http, fixture, btn, rows, el } = await mount([entry('a', 'Harbour', { subpageCount: 3 })]);
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const confirmSpy = vi.spyOn(TestBed.inject(ConfirmService), 'ask').mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     btn(0, 'purge').click();
-    expect(confirmSpy).toHaveBeenLastCalledWith('Permanently delete "Harbour" and its 3 subpages? This cannot be undone.');
+    await settle();
+    expect(confirmSpy).toHaveBeenLastCalledWith(expect.objectContaining({ message: 'Permanently delete "Harbour" and its 3 subpages? This cannot be undone.' }));
     http.expectNone('/api/campaigns/c1/pages/a/purge');
     btn(0, 'purge').click();
+    await settle();
     const req = http.expectOne('/api/campaigns/c1/pages/a/purge');
     expect(req.request.method).toBe('DELETE');
     req.flush({ purged: ['a', '1', '2', '3'] });
@@ -152,8 +155,9 @@ describe('CampaignTrash', () => {
 
   it('treats 404 on purge as no longer in the trash', async () => {
     const { el, http, fixture, btn, rows } = await mount([entry('a', 'Harbour')]);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(TestBed.inject(ConfirmService), 'ask').mockResolvedValue(true);
     btn(0, 'purge').click();
+    await settle();
     err(http.expectOne('/api/campaigns/c1/pages/a/purge'), 404, { error: 'Not found' });
     await settle();
     http.expectOne('/api/campaigns/c1/trash').flush({ items: [] });

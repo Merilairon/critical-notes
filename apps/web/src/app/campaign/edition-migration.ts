@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { RULESET_IDS, getRuleset, type RulesetId } from '@cn/fivetools';
 import type { MigrationEntryDto, MigrationReportDto, MigrationResultDto, ReferenceSite } from '@cn/shared';
 import { firstValueFrom } from 'rxjs';
+import { ConfirmService } from '../core/confirm.service';
 import { errorMessage } from '../core/http.interceptor';
 import { CampaignStore } from './campaign.store';
 
@@ -52,6 +53,7 @@ const STATUS_LABELS = { mapped: 'Will change', unchanged: 'Stays', unmapped: 'No
     @if (error()) {<p class="mt-2 text-sm text-accent" role="alert">{{ error() }}</p>}`,
 })
 export class EditionMigrationPanel {
+  private readonly confirm = inject(ConfirmService);
   private readonly store = inject(CampaignStore);
   private readonly http = inject(HttpClient);
   protected readonly report = signal<MigrationReportDto | null>(null);
@@ -89,7 +91,7 @@ export class EditionMigrationPanel {
   }
 
   protected async apply() {
-    if (!confirm(`Move this campaign to the ${this.other().label}? Source choices are reset to the new edition's defaults.`)) return;
+    if (!(await this.confirm.ask({ title: 'Change edition?', message: `Move this campaign to the ${this.other().label}? Source choices are reset to the new edition's defaults.`, confirmLabel: 'Move campaign' }))) return;
     this.busy.set(true);
     try {
       const res = await firstValueFrom(this.http.post<MigrationResultDto>(`/api/campaigns/${this.store.id()}/migrate-edition`, { to: this.other().id, keep: [...this.keep()] }));

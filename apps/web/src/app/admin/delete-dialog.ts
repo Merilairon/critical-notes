@@ -40,14 +40,14 @@ const roleLabel = (role: string) => (role === 'codm' ? 'co-DM' : role === 'dm' ?
     </p>
     <p>
       Prefer to keep the account? Disabling it blocks sign-in and changes nothing else.
-      <button type="button" class="rounded border border-line px-2 py-0.5" (click)="disableInstead.emit()" [attr.aria-label]="'Disable ' + user().displayName + ' instead'">Disable instead</button>
+      <button type="button" class="rounded border border-line px-2 py-1.5 touch:min-h-[44px]" (click)="disableInstead.emit()" [attr.aria-label]="'Disable ' + user().displayName + ' instead'">Disable instead</button>
     </p>
 
     <div extras class="space-y-3">
       <div role="status">@if (loading()) {Checking which campaigns they own…}</div>
       @if (loadError()) {
         <div role="alert" class="text-accent">{{ loadError() }}</div>
-        <button type="button" class="rounded border border-line px-2 py-0.5" (click)="reload()">Try again</button>
+        <button type="button" class="rounded border border-line px-2 py-1.5 touch:min-h-[44px]" (click)="reload()">Try again</button>
       }
       @if (!loading() && !loadError()) {
         @if (campaigns().length) {
@@ -108,7 +108,7 @@ const roleLabel = (role: string) => (role === 'codm' ? 'co-DM' : role === 'dm' ?
         @if (planSummary(); as s) {<p class="text-xs text-muted">{{ s }}</p>}
       }
     </div>
-    <button reason-action type="button" class="mt-2 rounded border border-line px-2 py-0.5" (click)="disableInstead.emit()">Disable instead</button>
+    <button reason-action type="button" class="mt-2 rounded border border-line px-2 py-1.5 touch:min-h-[44px]" (click)="disableInstead.emit()">Disable instead</button>
   </cn-step-up-dialog>`,
 })
 export class DeleteDialog implements OnInit {

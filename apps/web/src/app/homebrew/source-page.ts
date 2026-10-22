@@ -10,6 +10,7 @@ import {
   type HomebrewSourceDto,
 } from '@cn/shared';
 import { AuthService } from '../core/auth.service';
+import { ConfirmService } from '../core/confirm.service';
 import { errorMessage } from '../core/http.interceptor';
 import { HomebrewApi } from './homebrew-api';
 import { SourceForm } from './source-form';
@@ -98,6 +99,7 @@ import { SourceForm } from './source-form';
 })
 export class HomebrewSourcePage {
   readonly sourceId = input.required<string>();
+  private readonly confirm = inject(ConfirmService);
   protected readonly auth = inject(AuthService);
   private readonly api = inject(HomebrewApi);
   private readonly router = inject(Router);
@@ -177,7 +179,7 @@ export class HomebrewSourcePage {
 
   protected async deleteSource() {
     const s = this.source();
-    if (!s || !confirm(`Delete "${s.fullName}" and its ${s.entityCount} entries? Campaigns using it lose access.`)) return;
+    if (!s || !(await this.confirm.ask({ title: 'Delete source?', message: `Delete "${s.fullName}" and its ${s.entityCount} entries? Campaigns using it lose access.`, confirmLabel: 'Delete source' }))) return;
     await this.api.deleteSource(s.id);
     await this.router.navigate(['/homebrew']);
   }

@@ -1,7 +1,7 @@
 /** Encounters and combat: difficulty, the tracker, the live player view, conditions, and loot. */
 import { expect, test, type Page } from '@playwright/test';
 import { expectNoSidewaysScroll, smallTargets } from './phone-checks';
-import { api, dmState, editor, isPhone, newPage, pickSuggestion, saved, sharedPage } from './support';
+import { api, confirmDialog, dmState, editor, isPhone, newPage, pickSuggestion, saved, sharedPage } from './support';
 
 const shared = sharedPage();
 const abilities = { str: 10, dex: 14, con: 12, int: 10, wis: 10, cha: 10 };
@@ -34,7 +34,7 @@ test('build an encounter and see its difficulty', async () => {
   await page.locator('input[aria-label="Encounter name"]').fill('Goblin ambush');
   await page.getByRole('button', { name: '+ Monster' }).click();
   await page.locator('cn-ref-picker input').fill('goblin');
-  await page.locator('[role=listbox] button', { hasText: /^Goblin\s*MM/ }).first().click();
+  await page.locator('[role=listbox] [role=option]', { hasText: /^Goblin\s*MM/ }).first().click();
   for (let i = 0; i < 3; i++) await page.locator('button[aria-label="One more Goblin"]').click();
   await page.getByRole('button', { name: '+ Custom' }).click();
   await page.locator('form input[required]').fill('Shadow');
@@ -120,6 +120,7 @@ test("ending combat saves the party's hit points", async () => {
   await box.press('Enter');
   await expect(page.locator('li', { hasText: 'Aria' }).locator('text=23').first()).toBeVisible();
   await page.getByRole('button', { name: 'End combat' }).click();
+  await confirmDialog(page, 'End combat');
   await expect(page.getByText('This combat has ended')).toBeVisible();
   const aria = await api<{ facet: { hpCurrent: number } }>(page, 'GET', `/api/campaigns/${campaignId}/pages/${ariaId}`);
   expect(aria.facet.hpCurrent).toBe(23);

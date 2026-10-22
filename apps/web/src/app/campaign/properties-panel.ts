@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 import { KINDS } from '@cn/fivetools';
 import { PROPERTY_TYPES, type PageType, type PropertyDefDto, type PropertyType } from '@cn/shared';
 import { ContextService } from '../core/context.service';
+import { ConfirmService } from '../core/confirm.service';
 import { errorMessage } from '../core/http.interceptor';
 import { kindLabel } from '../reference/kind-labels';
 import { CampaignStore } from './campaign.store';
@@ -127,6 +128,7 @@ export class PropertiesPanel {
   /** The reader cannot edit: empty values show an en dash. */
   readonly readOnly = input(false);
   readonly changed = output<Record<string, unknown>>();
+  private readonly confirm = inject(ConfirmService);
   protected readonly store = inject(CampaignStore);
   private readonly context = inject(ContextService);
 
@@ -190,7 +192,7 @@ export class PropertiesPanel {
   }
 
   protected async removeDef(def: PropertyDefDto) {
-    if (!confirm(`Delete the property "${def.label}" from every page in this campaign?`)) return;
+    if (!(await this.confirm.ask({ title: 'Delete property?', message: `Delete the property "${def.label}" from every page in this campaign?`, confirmLabel: 'Delete property' }))) return;
     await this.store.deleteProperty(def.id);
   }
 }

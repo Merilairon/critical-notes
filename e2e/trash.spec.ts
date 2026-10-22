@@ -9,7 +9,7 @@
  */
 import { randomBytes } from 'node:crypto';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { api, BASE_URL, editor, watch } from './support';
+import { api, confirmDialog, BASE_URL, editor, watch } from './support';
 
 test.use({ trace: 'off', screenshot: 'off', video: 'off' });
 
@@ -19,17 +19,14 @@ const text = (t: string) => ({ type: 'text', text: t });
 const doc = (...content: object[]) => ({ schemaVersion: 1, type: 'doc', content });
 
 const errors: string[] = [];
-const dialogs: string[] = [];
 const closers: (() => Promise<unknown>)[] = [];
 
 test.beforeEach(({ page }) => {
   watch(page, errors);
-  page.on('dialog', (d) => dialogs.push(d.message()));
 });
 test.afterEach(async () => {
   await Promise.all(closers.splice(0).map((close) => close().catch(() => undefined)));
   const seen = errors.splice(0);
-  dialogs.length = 0;
   expect(seen, 'errors in the browser').toEqual([]);
 });
 
@@ -87,7 +84,7 @@ async function deleteInEditor(page: Page, w: World) {
   await page.getByRole('button', { name: 'Delete', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: `Deleted "${w.title}" and 1 subpage` })).toBeVisible();
   await expect(page.getByRole('button', { name: `Undo delete of "${w.title}"` })).toBeVisible();
-  expect(dialogs, 'no confirm dialog').toEqual([]);
+  await expect(page.getByRole('alertdialog'), 'no confirm dialog').toHaveCount(0);
   await expect.poll(() => searchIds(page, w)).not.toContain(w.pageId);
 }
 
@@ -99,7 +96,7 @@ test('deleting a page offers Undo without a confirm, and Undo brings everything 
   await page.getByRole('button', { name: `Undo delete of "${w.title}"` }).click();
   await page.waitForURL(`**/c/${w.campaignId}/p/${w.pageId}`);
   await expectIntact(page, w);
-  expect(dialogs, 'no confirm dialog').toEqual([]);
+  await expect(page.getByRole('alertdialog'), 'no confirm dialog').toHaveCount(0);
 });
 
 test('Restore from the Trash view brings everything back', async ({ page }) => {
@@ -112,7 +109,7 @@ test('Restore from the Trash view brings everything back', async ({ page }) => {
   await row.getByRole('button', { name: `Restore: ${w.title}` }).click();
   await expect(page.getByRole('status').filter({ hasText: `Restored "${w.title}"` })).toBeVisible();
   await expect(row).toHaveCount(0);
-  expect(dialogs, 'restore asks nothing').toEqual([]);
+  await expect(page.getByRole('alertdialog'), 'restore asks nothing').toHaveCount(0);
   await expectIntact(page, w);
 });
 
@@ -122,10 +119,8 @@ test('Delete permanently (confirmed) removes the page and its subpage for good',
   await page.goto(`/c/${w.campaignId}/trash`);
   const row = trashRow(page, w.title);
   await row.getByRole('button', { name: `Delete permanently: ${w.title}` }).click();
+  await confirmDialog(page, 'Delete permanently', [w.title, '1 subpage']);
   await expect(page.getByRole('status').filter({ hasText: `Permanently deleted "${w.title}"` })).toBeVisible();
-  expect(dialogs.length, 'one confirm').toBe(1);
-  expect(dialogs[0]).toContain(w.title);
-  expect(dialogs[0]).toContain('1 subpage');
   await expect(row).toHaveCount(0);
 
   for (const id of [w.pageId, w.childId]) {

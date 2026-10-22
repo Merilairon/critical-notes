@@ -1,10 +1,10 @@
-import { A11yModule } from '@angular/cdk/a11y';
 import { DatePipe } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { afterNextRender, ChangeDetectionStrategy, Component, inject, Injector, signal, viewChild, type ElementRef } from '@angular/core';
 import { passwordSchema, updateMeInput, type ApiTokenDto, type CreatedApiTokenDto, type UserDto } from '@cn/shared';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../core/auth.service';
+import { ConfirmService } from '../core/confirm.service';
 import { errorMessage, requestError } from '../core/http.interceptor';
 
 /** Ready-to-paste setup for the common kinds of MCP clients. */
@@ -30,7 +30,7 @@ function setups(origin: string, token: string) {
 /** The signed-in user's account: display name, password, and API tokens for AI assistants (MCP). */
 @Component({
   selector: 'cn-account-page',
-  imports: [DatePipe, A11yModule],
+  imports: [DatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `<div class="mx-auto max-w-3xl p-4 sm:p-6">
     <h1 class="font-display text-3xl font-bold">Account</h1>
@@ -160,25 +160,13 @@ function setups(origin: string, token: string) {
       }
       @if (error()) {<p class="mt-2 text-sm text-accent" role="alert">{{ error() }}</p>}
     </section>
-    @if (revoking(); as t) {
-      <div class="fixed inset-0 z-60 flex items-start justify-center overflow-y-auto bg-black/40 p-3 sm:pt-[8vh]" (keydown.escape)="cancelRevoke()">
-        <div cdkTrapFocus cdkTrapFocusAutoCapture role="alertdialog" aria-modal="true" aria-labelledby="revoke-title" aria-describedby="revoke-desc"
-          class="w-full max-w-md rounded-xl border border-line bg-panel p-4 shadow-2xl">
-          <h2 id="revoke-title" class="font-display text-xl font-bold">Revoke “{{ t.name }}”?</h2>
-          <p id="revoke-desc" class="mt-2 text-sm">Assistants using this token stop working at once. This cannot be undone.</p>
-          <div class="mt-4 flex flex-wrap justify-end gap-2 text-sm">
-            <button type="button" class="rounded-md border border-line px-3 py-1.5 touch:min-h-[44px]" cdkFocusInitial (click)="cancelRevoke()">Cancel</button>
-            <button type="button" class="rounded-md bg-accent px-3 py-1.5 font-semibold text-accent-ink touch:min-h-[44px]" (click)="confirmRevoke()">Revoke token</button>
-          </div>
-        </div>
-      </div>
-    }
     @if (version()) {<p class="mt-6 text-xs text-muted">Critical Notes {{ version() }}</p>}
   </div>`,
 })
 export class AccountPage {
   protected readonly auth = inject(AuthService);
   private readonly http = inject(HttpClient);
+  private readonly confirm = inject(ConfirmService);
   private readonly injector = inject(Injector);
   protected readonly tokens = signal<ApiTokenDto[]>([]);
   protected readonly created = signal<CreatedApiTokenDto | null>(null);
@@ -190,9 +178,6 @@ export class AccountPage {
   protected readonly sessionsBusy = signal(false);
   protected readonly sessionsError = signal('');
   protected readonly sessionsDone = signal('');
-  /** The token waiting for the revoke confirmation, and the button that opened it (focus goes back there on cancel). */
-  protected readonly revoking = signal<ApiTokenDto | null>(null);
-  private revokeOpener: HTMLElement | null = null;
   protected readonly nameBusy = signal(false);
   protected readonly nameError = signal('');
   protected readonly nameDone = signal('');
@@ -304,20 +289,14 @@ export class AccountPage {
     this.copied.set(what);
   }
 
-  protected revoke(t: ApiTokenDto, event: Event) {
-    this.revokeOpener = event.target instanceof HTMLElement ? event.target : null;
-    this.revoking.set(t);
-  }
-
-  protected cancelRevoke() {
-    this.revoking.set(null);
-    this.revokeOpener?.focus();
-  }
-
-  protected async confirmRevoke() {
-    const t = this.revoking();
-    if (!t) return;
-    this.revoking.set(null);
+  protected async revoke(t: ApiTokenDto, event: Event) {
+    const opener = event.target instanceof HTMLElement ? event.target : null;
+    const sure = await this.confirm.ask({
+      title: `Revoke “${t.name}”?`,
+      message: 'Assistants using this token stop working at once. This cannot be undone.',
+      confirmLabel: 'Revoke token',
+    });
+    if (!sure) return;
     this.error.set('');
     try {
       await firstValueFrom(this.http.delete(`/api/auth/tokens/${t.id}`));
@@ -327,7 +306,7 @@ export class AccountPage {
       afterNextRender(() => this.tokensHeadingEl()?.nativeElement.focus(), { injector: this.injector });
     } catch (err) {
       this.error.set(errorMessage(err));
-      this.revokeOpener?.focus();
+      opener?.focus();
     }
   }
 
