@@ -44,7 +44,7 @@ Do not tag until every line is true. Run the commands in a clean checkout of the
 - [x] **Owner decision D7** ([PROJECT.md](PROJECT.md) section 8) is decided: M6 (phone width) lands before 1.0. The
       "not part of this release" paragraph is gone from the `CHANGELOG.md` entry and a "Phone-width screens for
       players" item says what was and was not tested. Re-read that item after `rc.1`.
-- [ ] `SECURITY.md` is finished (done 2026-10-22: private vulnerability reporting only, acknowledgement within 7 days, latest release only, "alpha" removed). **Before the tag:** enable private vulnerability reporting on the repository (Settings, Security, "Private vulnerability reporting"), because SECURITY.md now names no email address.
+- [x] `SECURITY.md` is finished (done 2026-10-22: private vulnerability reporting only, acknowledgement within 7 days, latest release only, "alpha" removed). **Before the tag:** enable private vulnerability reporting on the repository (Settings, Security, "Private vulnerability reporting"), because SECURITY.md now names no email address.
 - [ ] Stale README text is removed after the first publish: the "No published release yet, or the pull is denied..."
       lines under "Running it with Docker" and in "Image and versions" (build-from-checkout can stay as an option).
 - [ ] The GHCR package is public (see the one-time setup) **before** you announce the release; test with

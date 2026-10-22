@@ -470,8 +470,9 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 **Done:** 2026-10-22, QA Product Manager: PASS (1 retry). README, ARCHITECTURE, STATUS, PLAN, CHANGELOG and RELEASE describe 1.0; the D7 phone paragraph is removed. Phone claims say Chrome emulation only, with the 44 px exceptions listed. Before the tag: the arm64 sentence and "alpha" in SECURITY.md need resolving; STATUS lines for G1.1, G1.2 and G1.4 must be updated when they land.
 **Description**: README, ARCHITECTURE, STATUS and PLAN reflect 1.0.
 
-### [ ] Task G1.4: Release certification
+### [x] Task G1.4: Release certification
 **Owner**: Reality Checker · **QA**: **Owner (human)** approves the release
+**Done:** 2026-10-22, released by the owner (D3). Reality Checker verdict stayed NEEDS WORK until the end because evidence was missing, not because of defects: report `docs/RELEASE-CERTIFICATION-1.0.md`. Evidence at release: gate green, `pnpm e2e` 99 passed/8 skipped and phone 29/29, restore drill, Docker image built from the shipped Dockerfile and the browser suite against it (99 passed), `v1.0.0-rc.1` to `rc.3` published by the release workflow (amd64 and arm64 images), CI green. **Accepted by the owner as not verified:** the arm64 image on real hardware, browser tests on a CI runner (D4 skipped), real-device phone tests, an update on real data from a previous image, the pentest and accessibility limits listed in their reports. The owner approved the release.
 **Description**: Check every "Done when" in PRD §8 with evidence; run the full gate, `pnpm e2e`, the phone project and the Docker image.
 **Acceptance Criteria**: a signed-off report; default NEEDS WORK until all evidence is there
 **Depends on**: G1.1–G1.3

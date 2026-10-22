@@ -28,11 +28,11 @@ The plan, its milestone table and the list of deviations live in [PLAN.md](PLAN.
 
 ### Before the 1.0 tag
 
-1. G1.4 certification is open (NEEDS WORK until the items in [RELEASE-CERTIFICATION-1.0.md](RELEASE-CERTIFICATION-1.0.md) are closed); the owner approves the release (D3).
-2. Push `main` to GitHub, make it the default branch (the owner pushed it on 2026-10-19), and add a tag protection rule for `v*` ([RELEASE.md](RELEASE.md)).
-3. Cut `v1.0.0-rc.1` first. Only a real tag push proves the `linux/arm64` build, the push to GHCR, the attestations, the release creation and the smoke test in CI. Keep the `linux/arm64` claim in the changelog only if the candidate ran on an arm64 machine. Make the package public afterwards, and test an anonymous `docker pull`.
-4. `SECURITY.md` is finished (2026-10-22: GitHub private reporting only, no email, acknowledgement within 7 days, latest release only). Enable private vulnerability reporting on the repository before the tag, and remove the README's "No published release yet, or the pull is denied" lines once the image is published.
-5. Rename `## [Unreleased]` in `CHANGELOG.md` to `## [1.0.0] - <date>`, set the version in `package.json` (now `1.0.0-dev`), and re-read the changelog entry against what the candidate did, including its phone claim.
+1. ~~G1.4 certification~~ Released by the owner decision (D3) on 2026-10-22; the certification report keeps its NEEDS WORK verdict for the evidence that is still missing ([RELEASE-CERTIFICATION-1.0.md](RELEASE-CERTIFICATION-1.0.md)).
+2. ~~Push `main`, default branch, tag protection~~ Done by the owner.
+3. ~~Release candidates~~ `v1.0.0-rc.1` to `rc.3` were built and published by the release workflow (amd64 and arm64). The arm64 image has not been run on arm64 hardware.
+4. ~~`SECURITY.md`~~ Finished (GitHub private reporting only, enabled).
+5. ~~Version and changelog~~ `1.0.0`, with the `## [1.0.0] - 2026-10-22` entry.
 6. ~~Register a self-hosted runner for browser tests in CI (decision D4)~~ Skipped by the owner (2026-10-22): `pnpm e2e` is run locally before a release and `e2e.yml` stays inactive ([Browser tests in CI](#browser-tests-in-ci-task-m53-decision-d4)).
 
 ### Accepted by the owner (M6, 2026-10-22)

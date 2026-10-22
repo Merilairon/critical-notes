@@ -7,16 +7,9 @@ All notable changes to Critical Notes are listed here. The format follows
 Before you update, read the entries between your version and the new one, and
 [make a backup](README.md#updating). Database changes are applied when the server starts and cannot be undone.
 
-<!--
-  RELEASE NOTE (delete this comment when you cut the release; see docs/RELEASE.md):
-  The text below is the draft of the 1.0.0 entry. Its "### Upgrade notes" heading is the one the README "Updating"
-  section refers to: keep an "Upgrade notes" heading in every release that needs the reader to do something.
-  At release time rename the heading "## [Unreleased]" to
-  "## [1.0.0] - YYYY-MM-DD", and put a new empty "## [Unreleased]" above it. The release workflow only reads a
-  "## [X.Y.Z] - date" section, never "[Unreleased]".
--->
-
 ## [Unreleased]
+
+## [1.0.0] - 2026-10-22
 
 The first stable release. It adds account recovery, instance backups and restore, undo for deletions, a layout for
 phone-width screens, and a published Docker image to update from.
@@ -76,9 +69,9 @@ phone-width screens, and a published Docker image to update from.
   can still be cramped or overflow on a phone.
 - **Version in the app.** The Account page shows the version, `GET /api/health` returns it (`{"ok":true,"version":...}`),
   and every backup records it.
-- **Published Docker image.** `ghcr.io/merilairon/critical-notes` for `linux/amd64` and, once the first release
-  candidate has been confirmed to run on arm64, `linux/arm64`, tagged `X.Y.Z`,
-  `X.Y` and `latest`. `docker-compose.yml` uses it; pin a version with `CN_VERSION`. To build from a checkout instead,
+- **Published Docker image.** `ghcr.io/merilairon/critical-notes` for `linux/amd64` and `linux/arm64`, tagged `X.Y.Z`,
+  `X.Y` and `latest`. The amd64 image was tested; the arm64 image is built by the release workflow and has not been run
+  on arm64 hardware. `docker-compose.yml` uses it; pin a version with `CN_VERSION`. To build from a checkout instead,
   add `-f docker-compose.build.yml`.
 - **License and project files.** Critical Notes is licensed under the Apache License 2.0. The repository has a contributing
   guide (DCO sign-off, no CLA), a security policy, third-party notices, issue and pull request templates, and a CI check
@@ -135,7 +128,8 @@ What to test:
 The changes in 1.0.0 are listed in the draft above, under "Unreleased". A release candidate publishes only the tag
 `1.0.0-rc.1`; it does not move `1.0` or `latest`.
 
-[Unreleased]: https://github.com/Merilairon/critical-notes/commits/main
+[Unreleased]: https://github.com/Merilairon/critical-notes/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/Merilairon/critical-notes/releases/tag/v1.0.0
 [1.0.0-rc.3]: https://github.com/Merilairon/critical-notes/releases/tag/v1.0.0-rc.3
 [1.0.0-rc.2]: https://github.com/Merilairon/critical-notes/releases/tag/v1.0.0-rc.2
 [1.0.0-rc.1]: https://github.com/Merilairon/critical-notes/releases/tag/v1.0.0-rc.1

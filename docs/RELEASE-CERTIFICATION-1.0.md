@@ -172,3 +172,6 @@ Verdict is unchanged: **NEEDS WORK**. The Docker blocker named in this paragraph
 
 ## SECURITY.md (2026-10-22, owner)
 Rewritten: private vulnerability reporting through the repository's Security tab only (the email address is removed), acknowledgement within 7 days, latest release only, "alpha" removed. Open: the repository setting "Private vulnerability reporting" must be enabled before the tag; otherwise the policy points at a button that does not exist.
+
+## Release decision (2026-10-22)
+The owner approved the release (D3) and asked to continue with 1.0.0 after the release candidates `v1.0.0-rc.1` to `rc.3` had been built and published by the release workflow and the amd64 image had been run by the owner. This report's verdict stays **NEEDS WORK** by its own rule (evidence still missing); the release goes ahead as an owner decision. Accepted as not verified: the arm64 image on real hardware (the owner has none), browser tests on a CI runner (D4 skipped), real-device phone tests, an update from a previous image on real data (there is no previous release), and the limits stated in `docs/security/pentest-1.0.md` and `docs/qa/a11y-1.0.md`. The README and changelog now say that the arm64 image has not been run on arm64 hardware.
