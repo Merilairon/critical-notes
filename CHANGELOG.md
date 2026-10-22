@@ -9,6 +9,19 @@ Before you update, read the entries between your version and the new one, and
 
 ## [Unreleased]
 
+### Changed
+
+- Accessibility: tables in pages are named after the heading above them, in the editor and in the read-only view.
+- Accessibility: the editor's `/`, `[[` and `{@` menus tell screen-reader users how many results there are and which one is active.
+- Accessibility: heading levels in pages, the player preview and reference entries no longer skip a level under the page title (the look is unchanged).
+- Accessibility: the editor's block drag handle is at least 24 x 24 px (44 x 44 px on touch).
+- Accessibility: in forced-colours (high-contrast) mode the primary buttons have a border and the selected reference row, the current menu item and the active suggestion are outlined.
+- Accessibility: the reference list is a plain list of buttons (the current entry is marked) instead of a listbox with buttons inside.
+
+### Fixed
+
+- Ctrl+K no longer starts Firefox's own search while a confirmation dialog is open.
+
 ## [1.1.1] - 2026-10-22
 
 An accessibility release. There is nothing to do when updating; no database change is needed.
