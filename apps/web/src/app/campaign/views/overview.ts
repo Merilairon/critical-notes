@@ -1,7 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
+import { Title } from '@angular/platform-browser';
 import { Router, RouterLink } from '@angular/router';
 import { PAGE_TYPE_ICONS, PAGE_TYPE_LABELS, type PageType } from '@cn/shared';
 import { ContextService } from '../../core/context.service';
+import { pageTitle } from '../../core/page-title';
 import { CampaignStore } from '../campaign.store';
 
 @Component({
@@ -51,9 +53,15 @@ export class CampaignOverview {
   protected readonly store = inject(CampaignStore);
   protected readonly context = inject(ContextService);
   private readonly router = inject(Router);
+  private readonly title = inject(Title);
   protected readonly icons = PAGE_TYPE_ICONS;
   protected readonly labels = PAGE_TYPE_LABELS;
   protected readonly quickTypes: PageType[] = ['session', 'npc', 'location', 'quest'];
+
+  constructor() {
+    // The overview route has no static title: the campaign's name is the page name
+    effect(() => this.title.setTitle(pageTitle(this.store.campaign()?.name)));
+  }
 
   protected readonly counts = computed(() => {
     const id = this.store.id();

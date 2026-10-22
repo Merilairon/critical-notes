@@ -27,3 +27,6 @@ test-results/
 
 # vitest json reporter output
 .vitest/
+
+# agent worktrees
+.claude/worktrees/

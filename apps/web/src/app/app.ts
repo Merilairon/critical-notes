@@ -129,7 +129,7 @@ export class App {
       } else {
         main.focus();
         this.announcement.set('');
-        afterNextRender(() => this.announcement.set(document.title), { injector: this.injector });
+        afterNextRender(() => this.announcement.set(document.title.replace(/ — Critical Notes$/, '') || document.title), { injector: this.injector });
       }
     };
     // Lazy routes and data load after NavigationEnd: wait for an h1, but not longer than 1.5 s

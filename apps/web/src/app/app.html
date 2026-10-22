@@ -7,7 +7,7 @@
 >
 <header
   #appHeader
-  class="relative z-30 flex h-[calc(56px+env(safe-area-inset-top))] shrink-0 items-center gap-1 overflow-visible border-b border-line bg-panel pt-[env(safe-area-inset-top)] pr-[max(0.5rem,env(safe-area-inset-right))] pl-[max(0.5rem,env(safe-area-inset-left))] short:h-[calc(48px+env(safe-area-inset-top))] lg:h-auto lg:flex-wrap lg:gap-3 lg:px-3 lg:py-2"
+  class="relative z-30 flex h-[calc(56px+env(safe-area-inset-top))] shrink-0 items-center gap-1 overflow-visible border-b border-line bg-panel pt-[env(safe-area-inset-top)] pr-[max(0.5rem,env(safe-area-inset-right))] pl-[max(0.5rem,env(safe-area-inset-left))] short:h-[calc(48px+env(safe-area-inset-top))] lg:h-auto lg:short:h-auto lg:flex-wrap lg:gap-3 lg:px-3 lg:py-2"
   [attr.inert]="layout.drawerOpen() ? '' : null"
   (focusout)="onHeaderFocusOut($event)"
   (keydown.escape)="closePopovers(true)"

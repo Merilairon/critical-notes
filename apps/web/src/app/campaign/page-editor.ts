@@ -19,6 +19,7 @@ import { firstValueFrom } from 'rxjs';
 import { BlockView } from '../blocks/block-view';
 import { errorMessage } from '../core/http.interceptor';
 import { LayoutService } from '../core/layout.service';
+import { pageTitle } from '../core/page-title';
 import { BlockEditor } from '../editor/block-editor';
 import { AutosizeTitle, singleLine } from './autosize-title';
 import { pcDigest } from './facet-digest';
@@ -95,7 +96,7 @@ export class PageEditor implements OnDestroy {
     });
     effect(() => {
       const p = this.page();
-      if (p) this.title.setTitle(`${p.title} — ${this.store.campaign()?.name ?? 'Critical Notes'}`);
+      if (p) this.title.setTitle(pageTitle(p.title, this.store.campaign()?.name));
     });
     // Game masters choose who sees "selected" pages and who plays a character
     effect(() => {

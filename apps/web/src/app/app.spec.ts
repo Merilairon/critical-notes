@@ -353,6 +353,17 @@ describe('focus on route change', () => {
     el.remove();
   });
 
+  it('announces the page name without the app name suffix', async () => {
+    const { fixture, el, go } = await setup();
+    document.title = 'Trash — Critical Notes';
+    await go('/a');
+    await go('/c');
+    await new Promise((r) => setTimeout(r, 1600));
+    fixture.detectChanges();
+    expect(el.querySelector('[aria-live="polite"][aria-atomic]')?.textContent).toBe('Trash');
+    el.remove();
+  });
+
   it('never pulls focus out of a field the person is typing in', async () => {
     const { el, go } = await setup();
     await go('/a');
