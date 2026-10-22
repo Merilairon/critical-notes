@@ -37,8 +37,8 @@ import { CampaignStore } from '../campaign.store';
       @for (p of recent(); track p.id) {
         <li>
           <a class="flex items-center gap-2 px-3 py-2 hover:bg-panel-2 touch:min-h-[44px]" [routerLink]="['/c', store.id(), 'p', p.id]">
-            <span>{{ p.icon || icons[p.type] }}</span><span class="flex-1 truncate">{{ p.title }}</span>
-            <span class="text-xs text-muted">{{ labels[p.type] }}</span>
+            <span>{{ p.icon || icons[p.type] }}</span><span class="min-w-0 flex-1 [overflow-wrap:anywhere]">{{ p.title }}</span>
+            <span class="shrink-0 text-xs text-muted">{{ labels[p.type] }}</span>
           </a>
         </li>
       } @empty {

@@ -18,7 +18,7 @@ const MODES: { mode: InsertMode; label: string; hint: string }[] = [
   selector: 'cn-template-insert',
   imports: [TemplatePicker, TemplateValuesForm],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(document:keydown.escape)': 'closed.emit()' },
+  host: { '(document:keydown.escape)': '$event.defaultPrevented || closed.emit()' },
   template: `<div class="fixed inset-0 z-60 flex items-start justify-center bg-black/40 p-3 pt-[8vh]" (click)="closed.emit()">
     <div class="w-full max-w-2xl rounded-xl border border-line bg-panel p-4 shadow-2xl" role="dialog" aria-modal="true" aria-label="Insert template" (click)="$event.stopPropagation()">
       @if (template(); as t) {

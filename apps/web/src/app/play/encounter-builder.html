@@ -5,6 +5,7 @@
   <div class="mx-auto w-full max-w-5xl p-4 sm:p-6">
     <nav class="mb-1 text-xs text-muted"><a class="hover:text-accent" [routerLink]="['/c', store.id(), 'encounters']">Encounters</a> /</nav>
     <header class="flex flex-wrap items-center gap-2">
+      <h1 class="sr-only">Encounter: {{ e.name }}</h1>
       <span class="text-3xl">⚔️</span>
       <input class="min-w-0 flex-1 rounded-md bg-transparent font-display text-3xl font-bold outline-none hover:bg-panel-2/50 focus:bg-panel-2/50" [value]="e.name" aria-label="Encounter name" (input)="save({ name: $any($event.target).value || 'Encounter' })" />
       <span class="text-xs text-muted" aria-live="polite">{{ status() }}</span>
@@ -16,7 +17,7 @@
         <div class="overflow-x-auto rounded-xl border border-line bg-panel">
           <table class="w-full text-sm">
             <thead class="text-left text-xs text-muted">
-              <tr><th class="px-3 py-2">Creature</th><th class="px-2">CR</th><th class="px-2">XP each</th><th class="px-2">Count</th><th class="px-2" title="Starts hidden from the player view">Hidden</th><th></th></tr>
+              <tr><th class="px-3 py-2">Creature</th><th class="px-2">CR</th><th class="px-2">XP each</th><th class="px-2">Count</th><th class="px-2" title="Starts hidden from the player view">Hidden</th><th><span class="sr-only">Actions</span></th></tr>
             </thead>
             <tbody>
               @for (c of creatures(); track c.id) {

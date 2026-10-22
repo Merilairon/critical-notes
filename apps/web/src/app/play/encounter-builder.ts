@@ -8,6 +8,7 @@ import { CampaignStore } from '../campaign/campaign.store';
 import { PagePicker } from '../campaign/page-picker';
 import { RefPicker } from '../campaign/ref-picker';
 import { ContextService } from '../core/context.service';
+import { ConfirmService } from '../core/confirm.service';
 import { errorMessage } from '../core/http.interceptor';
 import { CRS } from '../homebrew/forms/specs';
 import { encounterDifficulty } from './combat-math';
@@ -25,6 +26,7 @@ const newLineId = () => Math.random().toString(36).slice(2, 10);
 })
 export class EncounterBuilder implements OnDestroy {
   readonly encounterId = input.required<string>();
+  private readonly confirm = inject(ConfirmService);
   private readonly api = inject(PlayApi);
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
@@ -178,7 +180,7 @@ export class EncounterBuilder implements OnDestroy {
 
   protected async remove() {
     const e = this.enc();
-    if (!e || !confirm(`Delete the encounter "${e.name}"?`)) return;
+    if (!e || !(await this.confirm.ask({ title: 'Delete encounter?', message: `Delete the encounter "${e.name}"?`, confirmLabel: 'Delete encounter' }))) return;
     clearTimeout(this.timer);
     this.pending = {};
     await this.api.deleteEncounter(this.store.id()!, e.id);

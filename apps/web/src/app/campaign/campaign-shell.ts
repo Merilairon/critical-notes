@@ -276,7 +276,7 @@ export class CampaignShell implements OnDestroy {
   @HostListener('document:keydown.escape', ['$event'])
   protected onEscape(event: Event) {
     // One Escape closes one thing: skip when something on top handled it or is open
-    if (event.defaultPrevented || document.querySelector('cn-command-palette, cn-sources-panel')) return;
+    if (event.defaultPrevented || document.querySelector('cn-command-palette, cn-sources-panel, cn-confirm-dialog')) return;
     if (this.layout.drawerOpen() && !this.fromTemplate()) this.layout.drawerOpen.set(false);
   }
 

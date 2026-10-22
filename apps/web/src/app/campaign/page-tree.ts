@@ -39,7 +39,7 @@ const expanded = signal<Record<string, boolean>>(readStored('cn.tree.expanded', 
             cdkDragHandle
           >
             <span aria-hidden="true">{{ page.icon || icons[page.type] }}</span>
-            <span class="truncate">{{ page.title }}</span>
+            <span class="min-w-0 [overflow-wrap:anywhere]">{{ page.title }}</span>
           </a>
           @if (store.isGm()) {
             <button

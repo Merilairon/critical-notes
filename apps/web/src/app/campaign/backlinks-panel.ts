@@ -17,7 +17,7 @@ const KIND_LABELS: Record<BacklinkDto['kinds'][number], string> = { mention: 'me
         <li>
           <a class="flex items-center gap-2 rounded px-2 py-1 hover:bg-panel-2" [routerLink]="['/c', store.id(), 'p', b.id]">
             <span>{{ b.icon || icons[b.type] }}</span>
-            <span class="truncate">{{ b.title }}</span>
+            <span class="min-w-0 [overflow-wrap:anywhere]">{{ b.title }}</span>
             <span class="ml-auto shrink-0 text-xs text-muted">{{ label(b) }}</span>
           </a>
         </li>

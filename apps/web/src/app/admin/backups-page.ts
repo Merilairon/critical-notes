@@ -36,7 +36,7 @@ const TRIGGERS: Record<BackupTrigger, string> = { api: 'Web page', cli: 'Command
     @if (loaded()) {<p id="backup-schedule" class="mt-2 text-sm text-muted">{{ scheduleText() }}</p>}
 
     <div class="mt-3 flex flex-wrap items-center gap-3">
-      <button type="button" id="backup-now" class="rounded-md bg-accent px-3 py-1.5 font-semibold text-accent-ink aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+      <button type="button" id="backup-now" class="rounded-md bg-accent px-3 py-1.5 touch:min-h-[44px] font-semibold text-accent-ink aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
         [attr.aria-disabled]="blocked() ? 'true' : null" [attr.aria-describedby]="blocked() ? 'backup-now-reason' : null" (click)="start()">Back up now</button>
       @if (blocked(); as why) {<span id="backup-now-reason" class="text-sm font-medium">{{ why }}</span>}
     </div>
@@ -64,9 +64,9 @@ const TRIGGERS: Record<BackupTrigger, string> = { api: 'Web page', cli: 'Command
         <p role="alert" class="text-sm text-accent">{{ e }}</p>
         <div class="mt-2 flex gap-2">
           @if (forbidden()) {
-            <a routerLink="/campaigns" class="rounded border border-line px-2 py-0.5 text-sm">Back to campaigns</a>
+            <a routerLink="/campaigns" class="inline-flex items-center rounded border border-line px-2 py-1.5 text-sm touch:min-h-[44px]">Back to campaigns</a>
           } @else {
-            <button type="button" class="rounded border border-line px-2 py-0.5 text-sm" (click)="load()">Try again</button>
+            <button type="button" class="rounded border border-line px-2 py-1.5 text-sm touch:min-h-[44px]" (click)="load()">Try again</button>
           }
         </div>
       </section>
@@ -101,7 +101,7 @@ const TRIGGERS: Record<BackupTrigger, string> = { api: 'Web page', cli: 'Command
               <td class="py-2 pr-2">{{ trigger(b) }}</td>
               <td class="py-2 pr-2">{{ details(b) }}@if (b.missingUploads) {<div class="font-medium">Warning: {{ missing(b) }}</div>}</td>
               <td class="py-2">
-                <button type="button" class="rounded border border-line px-2 py-0.5 text-sm aria-disabled:cursor-not-allowed aria-disabled:opacity-60" [attr.data-name]="b.name"
+                <button type="button" class="rounded border border-line px-2 py-1.5 text-sm touch:min-h-[44px] aria-disabled:cursor-not-allowed aria-disabled:opacity-60" [attr.data-name]="b.name"
                   [attr.aria-label]="'Download ' + b.name" aria-describedby="backup-warning backup-dl-hint" [attr.aria-disabled]="started() === b.name ? 'true' : null" (click)="ask(b)">{{ started() === b.name ? 'Starting…' : 'Download' }}</button>
               </td>
             </tr>
@@ -118,7 +118,7 @@ const TRIGGERS: Record<BackupTrigger, string> = { api: 'Web page', cli: 'Command
             <div class="mt-1">{{ size(b.size) }} · {{ trigger(b) }}</div>
             <div>{{ details(b) }}</div>
             @if (b.missingUploads) {<div class="font-medium">Warning: {{ missing(b) }}</div>}
-            <button type="button" class="mt-2 w-full rounded border border-line px-2 py-2 text-sm aria-disabled:cursor-not-allowed aria-disabled:opacity-60" [attr.data-name]="b.name"
+            <button type="button" class="mt-2 w-full rounded border border-line px-2 py-2 text-sm touch:min-h-[44px] aria-disabled:cursor-not-allowed aria-disabled:opacity-60" [attr.data-name]="b.name"
               [attr.aria-label]="'Download ' + b.name" aria-describedby="backup-warning backup-dl-hint" [attr.aria-disabled]="started() === b.name ? 'true' : null" (click)="ask(b)">{{ started() === b.name ? 'Starting…' : 'Download' }}</button>
           </li>
         }

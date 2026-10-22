@@ -38,9 +38,9 @@ type DialogState =
         <p class="text-sm text-accent">{{ e }}</p>
         <div class="mt-2 flex gap-2">
           @if (forbidden()) {
-            <a routerLink="/campaigns" class="rounded border border-line px-2 py-0.5 text-sm">Back to campaigns</a>
+            <a routerLink="/campaigns" class="inline-flex items-center rounded border border-line px-2 py-1.5 text-sm touch:min-h-[44px]">Back to campaigns</a>
           } @else {
-            <button type="button" class="rounded border border-line px-2 py-0.5 text-sm" (click)="load()">Try again</button>
+            <button type="button" class="rounded border border-line px-2 py-1.5 text-sm touch:min-h-[44px]" (click)="load()">Try again</button>
           }
         </div>
       </section>
@@ -49,7 +49,7 @@ type DialogState =
     } @else if (!users().length) {
       <section class="mt-3 rounded-xl border border-line bg-panel p-4">
         <p class="text-sm">No users found.</p>
-        <button type="button" class="mt-2 rounded border border-line px-2 py-0.5 text-sm" (click)="load()">Try again</button>
+        <button type="button" class="mt-2 rounded border border-line px-2 py-1.5 text-sm touch:min-h-[44px]" (click)="load()">Try again</button>
       </section>
     } @else {
       <table class="mt-3 hidden w-full text-left text-sm md:table">
@@ -101,7 +101,7 @@ type DialogState =
 
     <ng-template #actions let-u let-layout="layout">
       @let r = rules().get(u.id)!;
-      @let pad = layout === 'card' ? 'py-2' : 'py-0.5';
+      @let pad = layout === 'card' ? 'py-2 touch:min-h-[44px]' : 'py-1.5 touch:min-h-[44px]';
       <div class="flex flex-wrap gap-2" [class.grid]="layout === 'card'" [class.grid-cols-2]="layout === 'card'">
         <button type="button" [attr.data-key]="u.id + ':reset'" class="rounded border border-line px-2 text-sm aria-disabled:cursor-not-allowed aria-disabled:opacity-60" [class]="pad"
           [attr.aria-disabled]="r.canReset ? null : 'true'" [attr.aria-describedby]="r.canReset ? null : layout + '-' + u.id + '-reset'" [attr.aria-label]="'Reset link for ' + u.displayName"

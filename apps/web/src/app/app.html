@@ -278,6 +278,10 @@
 
 <div class="sr-only" aria-live="polite" aria-atomic="true">{{ announcement() }}</div>
 
+@if (confirm.request(); as req) {
+<cn-confirm-dialog [request]="req" />
+}
+
 @if (paletteOpen()) {
 <cn-command-palette (closed)="paletteOpen.set(false)" />
 } @if (sourcesOpen()) {

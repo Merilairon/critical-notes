@@ -70,10 +70,10 @@ const VisibilityShortcuts = Extension.create<{ enabled: () => boolean }>({
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [{ provide: EDITOR_CONTEXT, useFactory: () => ({ pageId: signal<string | null>(null) }) }],
   template: `@if (editable()) {
-      <div class="sticky top-0 z-10 mb-2 flex flex-wrap items-center gap-1 rounded-md border border-line bg-panel/95 p-1 text-sm backdrop-blur" role="toolbar" aria-label="Formatting">
+      <div class="sticky top-0 z-10 mb-2 flex flex-wrap items-center gap-1 touch:static rounded-md border border-line bg-panel/95 p-1 text-sm backdrop-blur" role="toolbar" aria-label="Formatting">
         @for (b of buttons; track b.label) {
           @if (!b.gm || gm()) {
-            <button type="button" class="rounded px-2 py-0.5 hover:bg-panel-2" [title]="b.title" (mousedown)="$event.preventDefault()" (click)="b.run()">{{ b.label }}</button>
+            <button type="button" class="inline-flex min-h-6 min-w-6 items-center justify-center rounded px-2 py-0.5 hover:bg-panel-2 touch:min-h-[44px] touch:min-w-[44px]" [title]="b.title" (mousedown)="$event.preventDefault()" (click)="b.run()">{{ b.label }}</button>
           }
         }
         <span class="ml-auto px-2 text-xs text-muted">Type <kbd>/</kbd> for blocks, <kbd>[[</kbd> to link a page, <kbd>{{ '{' }}&#64;</kbd> for rules</span>

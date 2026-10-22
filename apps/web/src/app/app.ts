@@ -22,12 +22,14 @@ import { DiceService } from './core/dice.service';
 import { LayoutService } from './core/layout.service';
 import { ThemeService } from './core/theme.service';
 import { HoverPreviewService } from './reference/render/hover-preview.service';
+import { ConfirmService } from './core/confirm.service';
 import { CommandPalette } from './shell/command-palette';
+import { ConfirmDialog } from './shell/confirm-dialog';
 import { SourcesPanel } from './shell/sources-panel';
 
 @Component({
   selector: 'cn-root',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, CommandPalette, SourcesPanel],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, CommandPalette, ConfirmDialog, SourcesPanel],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './app.html',
   host: { class: 'flex h-dvh flex-col' },
@@ -35,6 +37,7 @@ import { SourcesPanel } from './shell/sources-panel';
 export class App {
   protected readonly context = inject(ContextService);
   protected readonly auth = inject(AuthService);
+  protected readonly confirm = inject(ConfirmService);
   private readonly router = inject(Router);
   protected readonly theme = inject(ThemeService);
   protected readonly dice = inject(DiceService);
@@ -179,9 +182,10 @@ export class App {
   @HostListener('document:keydown', ['$event'])
   protected onKeydown(event: KeyboardEvent) {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k' && this.auth.user()) {
+      if (this.confirm.request()) return;
       event.preventDefault();
       this.paletteOpen.set(true);
-    } else if (event.key === 'Escape') {
+    } else if (event.key === 'Escape' && !event.defaultPrevented) {
       this.preview.close();
     }
   }

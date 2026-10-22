@@ -30,6 +30,7 @@
   --readaloud-rule: #5d7896;
   --inset-bg: #f4efe4;
   --secret-bg: #fff3e0;
+  --secret-ink: #c2410c; /* DM-secret badge and rule: 4.6:1 or more on every surface it sits on (light) */
   --roll: #8c2a1c;
   color-scheme: light;
 }
@@ -56,6 +57,7 @@
   --readaloud-rule: #7b9cc1;
   --inset-bg: #23201b;
   --secret-bg: #2b2117;
+  --secret-ink: #e8743b; /* 5.2:1 or more on the dark surfaces (the old #c2410c was 3.0:1) */
   --roll: #f0907c;
   color-scheme: dark;
 }
@@ -426,7 +428,7 @@ body {
 }
 .cn-editor [data-visibility='dm'] {
   background: color-mix(in srgb, var(--secret-bg) 70%, transparent);
-  box-shadow: inset 3px 0 0 #c2410c;
+  box-shadow: inset 3px 0 0 var(--secret-ink);
   border-radius: 4px;
   padding-left: 0.6em;
 }
@@ -436,10 +438,10 @@ body {
   top: 0.15em;
   right: 0.3em;
   font:
-    700 0.6rem ui-sans-serif,
+    700 0.75rem ui-sans-serif,
     system-ui,
     sans-serif;
-  color: #c2410c;
+  color: var(--secret-ink);
   letter-spacing: 0.05em;
 }
 .cn-editor [data-visibility='dm'][data-revealed='true']::after {
@@ -575,7 +577,7 @@ body {
   min-width: 0;
 }
 .cn-secret {
-  border: 1px dashed #c2410c;
+  border: 1px dashed var(--secret-ink);
   border-radius: 8px;
   padding: 0.4rem 0.8rem 0.6rem;
   margin: 0.6rem 0;
@@ -592,14 +594,21 @@ body {
     600 0.75rem ui-sans-serif,
     system-ui,
     sans-serif;
-  color: #c2410c;
+  color: var(--secret-ink);
   margin-bottom: 0.2rem;
 }
 .cn-secret-toggle {
   border: 1px solid currentColor;
   border-radius: 999px;
   padding: 0 0.5rem;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
+  min-height: 1.5rem; /* 24 px target (WCAG 2.5.8) */
+}
+@media (pointer: coarse), (max-width: 639.98px) {
+  .cn-secret-toggle {
+    min-height: 44px;
+    padding: 0 0.75rem;
+  }
 }
 .cn-secret-revealed .cn-secret-toggle {
   color: var(--badge-modern);
