@@ -4,7 +4,7 @@
  */
 import { randomBytes } from 'node:crypto';
 import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, statSync, unlinkSync, writeSync } from 'node:fs';
-import { link, open, readFile, rename, stat, unlink, utimes } from 'node:fs/promises';
+import { open, readFile, stat, unlink, utimes } from 'node:fs/promises';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import type { AppConfig } from '../config';
 
@@ -148,10 +148,10 @@ export interface LockOptions {
 
 /**
  * `backups/.lock`, created with `O_EXCL`, holding the start time and pid; the holder touches its mtime every 15 s. A lock
- * older than 2 minutes is stale (no pid check: pids mean nothing across containers). Takeover: the taker renames
- * the stale lock away (only one racing taker succeeds), checks that what it renamed really was stale (a live one is linked
- * back), and only then creates its own. A microsecond window remains between that rename and the put-back; within one
- * process the in-process flag covers it.
+ * older than 2 minutes is stale (no pid check: pids mean nothing across containers). Takeover is serialised by a second
+ * O_EXCL file, `.lock.takeover`: the taker re-checks inside it that the lock is still stale, unlinks it, drops the mutex and
+ * competes for the slot like everybody else. A taker that judged the lock stale long ago therefore never disturbs the fresh
+ * lock that another taker created meanwhile (the old rename-and-put-back left the slot free for a moment, so two could hold it).
  */
 export class BackupLock {
   private readonly path: string;
@@ -203,23 +203,43 @@ export class BackupLock {
       }
       if (Date.now() - mtime <= this.staleMs) throw new BackupError('busy', 'A backup is already running');
       await this.opts.beforeTakeover?.();
-      const aside = `${this.path}.stale-${randomBytes(6).toString('hex')}`;
-      try {
-        await rename(this.path, aside);
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code === 'ENOENT') continue; // another taker won the race
-        throw e;
-      }
-      // Between our stat and the rename someone may have replaced the stale lock with a live one
-      const renamed = await stat(aside).catch(() => null);
-      if (renamed && Date.now() - renamed.mtimeMs <= this.staleMs) {
-        await link(aside, this.path).catch(() => undefined); // put it back if the slot is still free
-        await unlink(aside).catch(() => undefined);
-        throw new BackupError('busy', 'A backup is already running');
-      }
-      await unlink(aside).catch(() => undefined);
+      if (await this.removeStale()) continue;
     }
     throw new BackupError('busy', 'A backup is already running');
+  }
+
+  /**
+   * Removes a stale lock under the `.lock.takeover` mutex (created with O_EXCL), so only one taker at a time can touch the
+   * lock file and the slot is never emptied by a rename that has to be undone. The staleness is re-checked inside the mutex:
+   * a taker that judged the lock stale a while ago (and lost the race to another taker, whose fresh lock is there now)
+   * finds it live and backs off without touching it. Returns true when the slot should be tried again.
+   */
+  private async removeStale(): Promise<boolean> {
+    const mutex = `${this.path}.takeover`;
+    try {
+      await (await open(mutex, 'wx', 0o600)).close();
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+      // Another taker is mid-takeover: back off, unless it died holding the mutex (a taker needs milliseconds)
+      const m = await stat(mutex).catch(() => null);
+      if (!m) return true;
+      if (Date.now() - m.mtimeMs > this.staleMs) {
+        await unlink(mutex).catch(() => undefined);
+        return true;
+      }
+      throw new BackupError('busy', 'A backup is already running');
+    }
+    try {
+      const cur = await stat(this.path).catch(() => null);
+      if (!cur) return true; // already gone
+      if (Date.now() - cur.mtimeMs <= this.staleMs) throw new BackupError('busy', 'A backup is already running');
+      await unlink(this.path).catch((e: NodeJS.ErrnoException) => {
+        if (e.code !== 'ENOENT') throw e;
+      });
+      return true;
+    } finally {
+      await unlink(mutex).catch(() => undefined);
+    }
   }
 
   /** Synchronous, never throws: for a process that is about to exit. Removes the lock only when it is still ours (same nonce check). */

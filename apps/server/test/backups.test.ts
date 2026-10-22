@@ -24,6 +24,7 @@ import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_BACKUP_KEEP, loadConfig, parseBackupKeep } from '../src/config';
 import { appVersion } from '../src/lib/version';
+import { BackupLock } from '../src/services/backup-fs';
 import {
   API_CREATE_CAP_FACTOR,
   backupNameFor,
@@ -462,6 +463,45 @@ describe('backup service: concurrency and locking', () => {
     await expect(svc.create({ actor: 'a', trigger: 'cli' })).rejects.toMatchObject({ code: 'busy' });
     expect(JSON.parse(readFileSync(lock, 'utf8'))).toEqual({ nonce: 'live' });
     expect(readdirSync(bdir()).filter((n) => n.startsWith('.lock.stale'))).toEqual([]);
+  });
+
+  it('a late taker that judged the lock stale before another taker replaced it leaves the fresh lock completely alone', async () => {
+    mkdirSync(bdir(), { recursive: true, mode: 0o700 });
+    const lockPath = join(bdir(), '.lock');
+    writeFileSync(lockPath, '{}');
+    const old = new Date(Date.now() - 10 * 60 * 1000);
+    utimesSync(lockPath, old, old);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let reached!: () => void;
+    const atHook = new Promise<void>((r) => (reached = r));
+    const late = new BackupLock(bdir(), { beforeTakeover: () => (reached(), gate) }); // B: saw the stale lock, paused
+    const lateRun = late.acquire().then(
+      () => 'won',
+      (e: BackupError) => e.code,
+    );
+    await atHook;
+    const a = new BackupLock(bdir()); // A takes over completely while B is paused
+    await a.acquire();
+    const before = statSync(lockPath);
+    await sleep(30); // longer than the kernel timestamp granularity, so any touch of the inode shows in ctime
+    // B resumes with its stale judgement; C arrives too
+    release();
+    const c = new BackupLock(bdir());
+    const cRun = c.acquire().then(
+      () => 'won',
+      (e: BackupError) => e.code,
+    );
+    expect(await lateRun).toBe('busy');
+    expect(await cRun).toBe('busy');
+    const after = statSync(lockPath);
+    // B must not have renamed, linked or unlinked A's lock, not even to put it back: that would open a window for a second holder
+    expect(after.ino).toBe(before.ino);
+    expect(after.ctimeMs).toBe(before.ctimeMs);
+    expect(after.nlink).toBe(1);
+    expect(readdirSync(bdir()).filter((n) => n.startsWith('.lock'))).toEqual(['.lock']);
+    await a.release();
+    expect(existsSync(lockPath)).toBe(false);
   });
 
   it('releases the lock when a backup fails, and a restore marker refuses backups', async () => {
