@@ -318,7 +318,7 @@ describe('URL fetcher', () => {
   afterAll(() => server.close());
 
   it('classifies addresses', () => {
-    for (const a of ['127.0.0.1', '10.1.2.3', '172.16.0.1', '192.168.1.1', '169.254.169.254', '100.64.0.1', '0.0.0.0', '::1', 'fe80::1', 'fd00::1', '::ffff:127.0.0.1', 'not-an-ip']) {
+    for (const a of ['127.0.0.1', '10.1.2.3', '172.16.0.1', '192.168.1.1', '169.254.169.254', '100.64.0.1', '0.0.0.0', '::1', 'fe80::1', 'fd00::1', '::ffff:127.0.0.1', '2002:7f00:1::', '64:ff9b:1::7f00:1', '::7f00:1', 'not-an-ip']) {
       expect([a, isBlockedAddress(a)]).toEqual([a, true]);
     }
     for (const a of ['93.184.216.34', '2606:2800:220:1:248:1893:25c8:1946']) expect([a, isBlockedAddress(a)]).toEqual([a, false]);

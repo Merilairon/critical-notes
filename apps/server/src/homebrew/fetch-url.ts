@@ -36,9 +36,11 @@ for (const [net, prefix] of [
   blocked.addSubnet(net, prefix, 'ipv4');
 }
 for (const [net, prefix] of [
-  ['::', 128],
+  ['::', 96],
   ['::1', 128],
   ['64:ff9b::', 96],
+  ['64:ff9b:1::', 48],
+  ['2002::', 16],
   ['100::', 64],
   ['2001:db8::', 32],
   ['fc00::', 7],
