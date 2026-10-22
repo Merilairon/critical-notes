@@ -59,14 +59,79 @@ describe('AccountPage', () => {
     const { fixture, el, http } = await mount([token('old', { expiresAt: 1, scope: 'read' }), token('new')]);
     expect(el.textContent).toContain('Expired');
     expect(el.textContent).toContain('Read only');
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const confirmSpy = vi.spyOn(window, 'confirm');
     el.querySelector<HTMLButtonElement>('button[aria-label="Revoke old"]')!.click();
+    fixture.detectChanges();
+    expect(confirmSpy).not.toHaveBeenCalled(); // the app's own dialog, not the browser's
+    const dialog = el.querySelector('[role="alertdialog"]')!;
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(dialog.textContent).toContain('Revoke “old”?');
+    http.expectNone({ method: 'DELETE', url: '/api/auth/tokens/old' });
+    [...dialog.querySelectorAll('button')].find((b) => b.textContent === 'Revoke token')!.click();
     http.expectOne({ method: 'DELETE', url: '/api/auth/tokens/old' }).flush(null);
     await settle();
     http.expectOne('/api/auth/tokens').flush({ tokens: [token('new')] });
     await settle();
     fixture.detectChanges();
+    expect(el.querySelector('[role="alertdialog"]')).toBeNull();
     expect(el.querySelector('button[aria-label="Revoke old"]')).toBeNull();
+  });
+
+  it('cancelling the revoke dialog (button or Escape) revokes nothing and returns focus to the Revoke button', async () => {
+    const { fixture, el, http } = await mount([token('keep')]);
+    const open = () => {
+      const button = el.querySelector<HTMLButtonElement>('button[aria-label="Revoke keep"]')!;
+      button.focus();
+      button.click();
+      fixture.detectChanges();
+      return button;
+    };
+    let button = open();
+    expect(el.querySelector('[role="alertdialog"]')).not.toBeNull();
+    [...el.querySelectorAll('[role="alertdialog"] button')].find((b) => b.textContent === 'Cancel')!.dispatchEvent(new Event('click'));
+    fixture.detectChanges();
+    expect(el.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(document.activeElement).toBe(button);
+    button = open();
+    el.querySelector('[role="alertdialog"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    fixture.detectChanges();
+    expect(el.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(document.activeElement).toBe(button);
+    http.expectNone({ method: 'DELETE', url: '/api/auth/tokens/keep' });
+  });
+
+  it('signs out the other sessions, announces the result and keeps focus on the button', async () => {
+    const { fixture, el, http } = await mount();
+    const section = el.querySelector('section[aria-labelledby="sessions-heading"]')!;
+    const button = section.querySelector('button')!;
+    button.focus();
+    button.click();
+    fixture.detectChanges();
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    http.expectOne({ method: 'POST', url: '/api/auth/sessions/end-others' }).flush({ ended: 2 });
+    await settle();
+    fixture.detectChanges();
+    expect(section.querySelector('[role="status"]')!.textContent).toContain('Signed out 2 other sessions');
+    expect(button.getAttribute('aria-disabled')).toBeNull();
+    expect(document.activeElement).toBe(button);
+    button.click();
+    http.expectOne('/api/auth/sessions/end-others').flush({ ended: 0 });
+    await settle();
+    fixture.detectChanges();
+    expect(section.querySelector('[role="status"]')!.textContent).toContain('No other sessions');
+  });
+
+  it('shows a failed sign-out of other sessions in an alert and keeps focus on the button', async () => {
+    const { fixture, el, http } = await mount();
+    const section = el.querySelector('section[aria-labelledby="sessions-heading"]')!;
+    const button = section.querySelector('button')!;
+    button.click();
+    http.expectOne('/api/auth/sessions/end-others').flush({ error: 'Nope' }, { status: 500, statusText: 'err' });
+    await settle();
+    fixture.detectChanges();
+    expect(section.querySelector('[role="alert"]')!.textContent!.trim()).not.toBe('');
+    expect(section.querySelector('[role="status"]')!.textContent!.trim()).toBe('');
+    expect(document.activeElement).toBe(button);
   });
 
   const fill = (el: HTMLElement, name: string, value: string) => (el.querySelector<HTMLInputElement>(`input[name="${name}"]`)!.value = value);

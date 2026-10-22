@@ -1,8 +1,8 @@
-import { count, eq } from 'drizzle-orm';
+import { and, count, eq, ne } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { changePasswordInput, loginInput, redeemResetInput, registerWithInviteInput, setupInput, updateMeInput, type MeDto, type ResetInfoDto } from '@cn/shared';
 import type { AppDb } from '../db';
-import { users } from '../db/schema';
+import { sessions, users } from '../db/schema';
 import { createSession, destroySession, endUserSessions, hashToken, rejectTokenScope, requireUser, SESSION_COOKIE, type AppEnv } from '../auth/session';
 import { getCookie } from 'hono/cookie';
 import { HttpError, badRequest, forbidden, unauthorized, validate } from '../lib/http';
@@ -107,6 +107,18 @@ export function authRoutes(db: AppDb, opts: { secureCookies: boolean; trustProxy
     endUserSessions(db, me.id, cookie ? hashToken(cookie) : undefined);
     passwordLimiter.clear(me.id);
     return c.json({ ok: true });
+  });
+
+  /** Signs out every other browser of the caller without a password change; the current session stays. Browser session only. */
+  app.post('/sessions/end-others', requireUser, rejectTokenScope, (c) => {
+    const me = c.get('user')!;
+    const cookie = getCookie(c, SESSION_COOKIE);
+    if (!cookie) throw unauthorized('Sign in again');
+    const current = hashToken(cookie);
+    const others = db.select({ n: count() }).from(sessions).where(and(eq(sessions.userId, me.id), ne(sessions.id, current))).get()?.n ?? 0;
+    endUserSessions(db, me.id, current);
+    audit('auth.sessions_ended', { actor: me.id, count: others });
+    return c.json({ ended: others });
   });
 
   // Password reset by link (Task M2.5, design 4.1). Outside any auth requirement; the token is the credential.

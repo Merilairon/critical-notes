@@ -52,6 +52,7 @@ test('a revoked token stops working', async () => {
   const { page } = shared;
   await page.goto('/account');
   await page.getByRole('button', { name: 'Revoke Claude in the browser test' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Revoke token' }).click();
   await expect(page.locator('tr', { hasText: 'Claude in the browser test' })).toHaveCount(0);
   await expect(connect(token)).rejects.toThrow();
 });

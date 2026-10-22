@@ -1,3 +1,4 @@
+import { A11yModule } from '@angular/cdk/a11y';
 import { DatePipe } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { afterNextRender, ChangeDetectionStrategy, Component, inject, Injector, signal, viewChild, type ElementRef } from '@angular/core';
@@ -29,7 +30,7 @@ function setups(origin: string, token: string) {
 /** The signed-in user's account: display name, password, and API tokens for AI assistants (MCP). */
 @Component({
   selector: 'cn-account-page',
-  imports: [DatePipe],
+  imports: [DatePipe, A11yModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `<div class="mx-auto max-w-3xl p-4 sm:p-6">
     <h1 class="font-display text-3xl font-bold">Account</h1>
@@ -74,6 +75,14 @@ function setups(origin: string, token: string) {
       </form>
       <div role="status" class="mt-2 text-sm">{{ pwDone() }}</div>
       <div role="alert" class="text-sm text-accent"><p id="pw-error">{{ pwError() }}</p></div>
+    </section>
+
+    <section class="mt-6 rounded-xl border border-line bg-panel p-4" aria-labelledby="sessions-heading">
+      <h2 id="sessions-heading" class="font-semibold">Sessions</h2>
+      <p class="mt-1 text-sm text-muted">Signed in somewhere you no longer use, or on a shared computer? Sign out everywhere else. This browser stays signed in, and your password and API tokens are not changed.</p>
+      <button #endOthers type="button" class="cn-btn mt-3 w-full px-3 py-1.5 text-sm font-semibold aria-disabled:opacity-60 sm:w-auto" [attr.aria-disabled]="sessionsBusy() ? 'true' : null" (click)="endOtherSessions()">Sign out other sessions</button>
+      <div role="status" class="mt-2 text-sm">{{ sessionsDone() }}</div>
+      <div role="alert" class="text-sm text-accent"><p>{{ sessionsError() }}</p></div>
     </section>
 
     <section class="mt-6 rounded-xl border border-line bg-panel p-4" aria-label="AI assistants">
@@ -141,7 +150,7 @@ function setups(origin: string, token: string) {
                 <td class="pr-2 text-muted">{{ t.createdAt | date: 'mediumDate' }}</td>
                 <td class="pr-2 text-muted">{{ t.lastUsedAt ? (t.lastUsedAt | date: 'short') : 'Never' }}</td>
                 <td class="pr-2" [class.text-accent]="expired(t)">{{ t.expiresAt ? (expired(t) ? 'Expired' : (t.expiresAt | date: 'mediumDate')) : 'Never' }}</td>
-                <td class="text-right"><button type="button" class="text-muted hover:text-accent touch:min-h-[44px] touch:px-2" (click)="revoke(t)" [attr.aria-label]="'Revoke ' + t.name">Revoke</button></td>
+                <td class="text-right"><button type="button" class="text-muted hover:text-accent touch:min-h-[44px] touch:px-2" (click)="revoke(t, $event)" [attr.aria-label]="'Revoke ' + t.name">Revoke</button></td>
               </tr>
             }
           </tbody>
@@ -151,6 +160,19 @@ function setups(origin: string, token: string) {
       }
       @if (error()) {<p class="mt-2 text-sm text-accent" role="alert">{{ error() }}</p>}
     </section>
+    @if (revoking(); as t) {
+      <div class="fixed inset-0 z-60 flex items-start justify-center overflow-y-auto bg-black/40 p-3 sm:pt-[8vh]" (keydown.escape)="cancelRevoke()">
+        <div cdkTrapFocus cdkTrapFocusAutoCapture role="alertdialog" aria-modal="true" aria-labelledby="revoke-title" aria-describedby="revoke-desc"
+          class="w-full max-w-md rounded-xl border border-line bg-panel p-4 shadow-2xl">
+          <h2 id="revoke-title" class="font-display text-xl font-bold">Revoke “{{ t.name }}”?</h2>
+          <p id="revoke-desc" class="mt-2 text-sm">Assistants using this token stop working at once. This cannot be undone.</p>
+          <div class="mt-4 flex flex-wrap justify-end gap-2 text-sm">
+            <button type="button" class="rounded-md border border-line px-3 py-1.5 touch:min-h-[44px]" cdkFocusInitial (click)="cancelRevoke()">Cancel</button>
+            <button type="button" class="rounded-md bg-accent px-3 py-1.5 font-semibold text-accent-ink touch:min-h-[44px]" (click)="confirmRevoke()">Revoke token</button>
+          </div>
+        </div>
+      </div>
+    }
     @if (version()) {<p class="mt-6 text-xs text-muted">Critical Notes {{ version() }}</p>}
   </div>`,
 })
@@ -165,6 +187,12 @@ export class AccountPage {
   protected readonly error = signal('');
   /** The server's version from `/api/health`; stays empty if that fails (the line is then hidden). */
   protected readonly version = signal('');
+  protected readonly sessionsBusy = signal(false);
+  protected readonly sessionsError = signal('');
+  protected readonly sessionsDone = signal('');
+  /** The token waiting for the revoke confirmation, and the button that opened it (focus goes back there on cancel). */
+  protected readonly revoking = signal<ApiTokenDto | null>(null);
+  private revokeOpener: HTMLElement | null = null;
   protected readonly nameBusy = signal(false);
   protected readonly nameError = signal('');
   protected readonly nameDone = signal('');
@@ -177,6 +205,7 @@ export class AccountPage {
   private readonly currentEl = viewChild.required<ElementRef<HTMLInputElement>>('current');
   private readonly nextEl = viewChild.required<ElementRef<HTMLInputElement>>('next');
   private readonly againEl = viewChild.required<ElementRef<HTMLInputElement>>('again');
+  private readonly endOthersEl = viewChild.required<ElementRef<HTMLButtonElement>>('endOthers');
   private readonly newTokenEl = viewChild<ElementRef<HTMLInputElement>>('newToken');
   private readonly tokensHeadingEl = viewChild<ElementRef<HTMLElement>>('tokensHeading');
   protected readonly endpoint = `${location.origin}/mcp`;
@@ -275,8 +304,21 @@ export class AccountPage {
     this.copied.set(what);
   }
 
-  protected async revoke(t: ApiTokenDto) {
-    if (!confirm(`Revoke "${t.name}"? Assistants using it stop working at once.`)) return;
+  protected revoke(t: ApiTokenDto, event: Event) {
+    this.revokeOpener = event.target instanceof HTMLElement ? event.target : null;
+    this.revoking.set(t);
+  }
+
+  protected cancelRevoke() {
+    this.revoking.set(null);
+    this.revokeOpener?.focus();
+  }
+
+  protected async confirmRevoke() {
+    const t = this.revoking();
+    if (!t) return;
+    this.revoking.set(null);
+    this.error.set('');
     try {
       await firstValueFrom(this.http.delete(`/api/auth/tokens/${t.id}`));
       if (this.created()?.id === t.id) this.created.set(null);
@@ -285,6 +327,25 @@ export class AccountPage {
       afterNextRender(() => this.tokensHeadingEl()?.nativeElement.focus(), { injector: this.injector });
     } catch (err) {
       this.error.set(errorMessage(err));
+      this.revokeOpener?.focus();
+    }
+  }
+
+  protected async endOtherSessions() {
+    if (this.sessionsBusy()) return;
+    this.sessionsDone.set('');
+    this.sessionsError.set('');
+    this.sessionsBusy.set(true);
+    try {
+      const res = await firstValueFrom(this.http.post<{ ended: number }>('/api/auth/sessions/end-others', {}));
+      this.sessionsDone.set(
+        res.ended === 0 ? 'No other sessions were signed in.' : `Signed out ${res.ended} other ${res.ended === 1 ? 'session' : 'sessions'}. This browser stays signed in.`,
+      );
+    } catch (err) {
+      this.sessionsError.set(requestError(err));
+    } finally {
+      this.sessionsBusy.set(false);
+      this.endOthersEl().nativeElement.focus();
     }
   }
 }

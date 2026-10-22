@@ -63,6 +63,48 @@ describe('PATCH /api/auth/me', () => {
   });
 });
 
+describe('sign out other sessions', () => {
+  it('ends the other sessions of the caller, keeps the current one and leaves other users alone', async () => {
+    await addUser('o1', 'ines');
+    await addUser('o2', 'jory');
+    const laptop = await signIn('ines');
+    const phone = await signIn('ines');
+    const tablet = await signIn('ines');
+    const jory = await signIn('jory');
+    expect(sessionCount('o1')).toBe(3);
+    const before = laptop.cookie;
+    const res = await laptop.post('/api/auth/sessions/end-others');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ended: 2 });
+    expect(laptop.cookie).toBe(before);
+    expect(sessionCount('o1')).toBe(1);
+    expect((await laptop.get('/api/auth/me')).body.user).toMatchObject({ username: 'ines' });
+    expect((await phone.get('/api/auth/me')).body.user).toBeNull();
+    expect((await tablet.get('/api/auth/me')).body.user).toBeNull();
+    expect(sessionCount('o2')).toBe(1);
+    expect((await jory.get('/api/auth/me')).body.user).toMatchObject({ username: 'jory' });
+    // with nothing else signed in it is a harmless no-op, and the password is untouched
+    expect((await laptop.post('/api/auth/sessions/end-others')).body).toEqual({ ended: 0 });
+    expect((await new TestClient(app).post('/api/auth/login', { username: 'ines', password: PW })).status).toBe(200);
+  });
+
+  it('needs a signed-in browser session: refused when signed out and to API tokens', async () => {
+    expect((await new TestClient(app).post('/api/auth/sessions/end-others')).status).toBe(401);
+    await addUser('o3', 'kira');
+    const kira = await signIn('kira');
+    await signIn('kira');
+    for (const scope of ['read', 'write'] as const) {
+      const res = await app.request('http://internal/api/auth/sessions/end-others', { method: 'POST' }, internalAuth({ userId: 'o3', scope }));
+      expect(res.status).toBe(403);
+    }
+    expect(sessionCount('o3')).toBe(2);
+    // a cross-site POST is refused like the other account actions
+    const cross = await app.request('http://localhost/api/auth/sessions/end-others', { method: 'POST', headers: { origin: 'http://evil.example', host: 'localhost', cookie: kira.cookie } });
+    expect(cross.status).toBe(403);
+    expect(sessionCount('o3')).toBe(2);
+  });
+});
+
 describe('password change', () => {
   it('signs out other browsers but not the current one', async () => {
     await addUser('p3', 'rhea');
