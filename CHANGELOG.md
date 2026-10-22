@@ -9,6 +9,11 @@ Before you update, read the entries between your version and the new one, and
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-10-22
+
+An accessibility and size release. There is nothing to do when updating; no database change is needed. The web app loads
+about a third less code on first open.
+
 ### Changed
 
 - Accessibility: tables in pages are named after the heading above them, in the editor and in the read-only view.
@@ -181,7 +186,8 @@ What to test:
 The changes in 1.0.0 are listed in the draft above, under "Unreleased". A release candidate publishes only the tag
 `1.0.0-rc.1`; it does not move `1.0` or `latest`.
 
-[Unreleased]: https://github.com/Merilairon/critical-notes/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/Merilairon/critical-notes/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/Merilairon/critical-notes/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/Merilairon/critical-notes/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/Merilairon/critical-notes/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Merilairon/critical-notes/releases/tag/v1.0.0
