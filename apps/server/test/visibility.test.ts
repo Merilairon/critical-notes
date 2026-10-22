@@ -243,6 +243,23 @@ describe('sentinel crawl: nothing DM-only reaches a player', () => {
     expect(view.combatants.map((c: { name: string }) => c.name)).toEqual(['Pat the Brave']);
   });
 
+  it('counts only the pages the viewer may see in the campaign list and in list_campaigns', async () => {
+    const countIn = (list: { id: string; pageCount: number }[]) => list.find((c) => c.id === campaignId)!.pageCount;
+    const visibleToPlayer = (await player.get(`${base()}/pages`)).body.pages.length as number;
+    const live = (await dm.get(`${base()}/pages`)).body.pages.length as number;
+    expect(live).toBeGreaterThan(visibleToPlayer); // the sentinel hidden pages exist
+    const playerList = (await player.get('/api/campaigns')).body.campaigns;
+    const dmList = (await dm.get('/api/campaigns')).body.campaigns;
+    expect(countIn(playerList)).toBe(visibleToPlayer);
+    expect(countIn(dmList)).toBe(live);
+    const pages = async (client: TestClient) => {
+      const res = await callTool(await mcpClient(app, await makeToken(client, 'read')), 'list_campaigns');
+      return (res.data as { id: string; pages: number }[]).find((c) => c.id === campaignId)!.pages;
+    };
+    expect(await pages(player)).toBe(visibleToPlayer);
+    expect(await pages(dm)).toBe(live);
+  });
+
   it('shows the DM everything (the projection is for players only)', async () => {
     const town = (await dm.get(`${base()}/pages/${ids['town']}`)).body;
     expect(JSON.stringify(town)).toContain('SENTINEL dm paragraph');

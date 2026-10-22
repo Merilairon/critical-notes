@@ -18,7 +18,7 @@ import {
 import type { AppDb } from '../db';
 import { campaignInvites, campaignMembers, campaigns, campaignSourceOverrides, characterFacets, homebrewSources, homebrewSourceShares, pages, users } from '../db/schema';
 import { badRequest, forbidden, notFound } from '../lib/http';
-import { viewerOf, type Viewer } from './visibility';
+import { viewerOf, VisibilityService, type Viewer } from './visibility';
 import { newId } from '../lib/ids';
 import type { HomebrewIndex } from '../reference/homebrew-index';
 
@@ -80,6 +80,7 @@ export class CampaignService {
         .all()
         .map((r) => [r.campaignId, r.n]),
     );
+    const visibility = new VisibilityService(this.db);
     return rows.map(({ campaign: c, role }) => ({
       id: c.id,
       name: c.name,
@@ -87,7 +88,8 @@ export class CampaignService {
       ruleset: c.ruleset as RulesetId,
       status: c.status as 'active' | 'archived',
       role: role as CampaignRole,
-      pageCount: counts.get(c.id) ?? 0,
+      // game masters: every live page; others only the pages they may see (no hint that hidden pages exist)
+      pageCount: isGameMaster(role as CampaignRole) ? (counts.get(c.id) ?? 0) : visibility.visiblePageIds(c.id, viewerOf(userId, role as CampaignRole)).size,
       updatedAt: c.updatedAt,
     }));
   }
