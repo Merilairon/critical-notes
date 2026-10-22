@@ -9,6 +9,11 @@ Before you update, read the entries between your version and the new one, and
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-22
+
+The editor's block options can now be used from the keyboard. There is nothing to do when updating; no database change is
+needed.
+
 ### Added
 
 - The editor's block options (turn into, wrap, move up and down, duplicate, delete, DM-only) can be opened without a mouse: press `Ctrl+.` with the caret in a block, or use the new "Block options" button in the formatting toolbar. The menu works with the arrow keys, Home, End, Esc and Tab, and a screen reader is told what an action did ("Block moved down").
@@ -201,7 +206,8 @@ What to test:
 The changes in 1.0.0 are listed in the draft above, under "Unreleased". A release candidate publishes only the tag
 `1.0.0-rc.1`; it does not move `1.0` or `latest`.
 
-[Unreleased]: https://github.com/Merilairon/critical-notes/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/Merilairon/critical-notes/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/Merilairon/critical-notes/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/Merilairon/critical-notes/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/Merilairon/critical-notes/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/Merilairon/critical-notes/compare/v1.0.0...v1.1.0
