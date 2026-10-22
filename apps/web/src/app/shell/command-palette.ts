@@ -31,28 +31,37 @@ interface PaletteItem {
       <input
         #input
         type="search"
+        role="combobox"
         class="w-full border-b border-control bg-transparent px-4 py-3 text-base outline-none"
         [placeholder]="context.campaign() ? 'Search pages, spells, monsters, items…' : 'Search spells, monsters, items, rules…'"
+        aria-label="Search"
         [value]="text()"
         (input)="onInput($any($event.target).value)"
         (keydown)="onKey($event)"
+        aria-autocomplete="list"
+        aria-haspopup="listbox"
         aria-controls="cn-palette-results"
+        [attr.aria-expanded]="items().length ? 'true' : 'false'"
+        [attr.aria-activedescendant]="items().length ? 'cn-palette-opt-' + active() : null"
       />
-      <ul id="cn-palette-results" class="max-h-[55vh] overflow-y-auto py-1" role="listbox">
-        @for (item of items(); track item.key; let i = $index) {
-          @if (item.heading) {
-            <li class="px-4 pt-2 pb-1 text-xs font-semibold tracking-wide text-muted uppercase" role="presentation">{{ item.heading }}</li>
-          }
-          <li role="option" [attr.aria-selected]="i === active()">
-            <button
-              type="button"
-              class="flex w-full items-baseline gap-2 px-4 py-2 text-left"
+      <div class="sr-only" role="status">{{ status() }}</div>
+      @if (items().length) {
+        <ul id="cn-palette-results" class="max-h-[55vh] overflow-y-auto py-1" role="listbox" aria-label="Search results">
+          @for (item of items(); track item.key; let i = $index) {
+            @if (item.heading) {
+              <li class="px-4 pt-2 pb-1 text-xs font-semibold tracking-wide text-muted uppercase" role="presentation">{{ item.heading }}</li>
+            }
+            <li
+              role="option"
+              [id]="'cn-palette-opt-' + i"
+              class="flex w-full cursor-pointer items-baseline gap-2 px-4 py-2 text-left touch:min-h-[44px] touch:items-center"
               [class.bg-panel-2]="i === active()"
+              [attr.aria-selected]="i === active()"
               (mouseenter)="active.set(i)"
               (click)="go(item)"
             >
               @if (item.page; as page) {
-                <span class="shrink-0">{{ page.icon || pageIcons[page.type] }}</span>
+                <span class="shrink-0" aria-hidden="true">{{ page.icon || pageIcons[page.type] }}</span>
                 <span class="truncate font-medium">{{ page.title }}</span>
                 <span class="shrink-0 text-xs text-muted">{{ pageLabels[page.type] }}</span>
                 @if (page.snippet) {
@@ -67,16 +76,14 @@ interface PaletteItem {
                   }}</span>
                 }
               }
-            </button>
-          </li>
-        } @empty {
-          @if (query()) {
-            <li class="px-4 py-3 text-sm text-muted">{{ results.isLoading() || pageResults.isLoading() ? 'Searching…' : 'No results' }}</li>
-          } @else {
-            <li class="px-4 py-3 text-sm text-muted">Type to search. ↑↓ to move, Enter to open, Esc to close.</li>
+            </li>
           }
-        }
-      </ul>
+        </ul>
+      } @else if (query()) {
+        <p class="px-4 py-3 text-sm text-muted">{{ searching() ? 'Searching…' : 'No results' }}</p>
+      } @else {
+        <p class="px-4 py-3 text-sm text-muted">Type to search. ↑↓ to move, Enter to open, Esc to close.</p>
+      }
     </div>
   </div>`,
 })
@@ -98,6 +105,7 @@ export class CommandPalette {
     const campaign = this.context.campaign();
     return campaign && this.query() ? { url: `/api/campaigns/${campaign.id}/search`, params: { q: this.query(), limit: 8 } } : undefined;
   });
+  protected readonly searching = () => this.results.isLoading() || this.pageResults.isLoading();
   protected readonly pageIcons = PAGE_TYPE_ICONS;
   protected readonly pageLabels = PAGE_TYPE_LABELS;
 
@@ -108,6 +116,13 @@ export class CommandPalette {
     const out: PaletteItem[] = pages.map((page, i) => ({ key: `p:${page.pageId}`, heading: i === 0 ? 'Campaign pages' : null, page }));
     refs.forEach((ref, i) => out.push({ key: `r:${ref.uid}`, heading: i === 0 && pages.length ? 'Reference' : null, ref }));
     return out;
+  });
+
+  /** Read out by screen readers when the results change (live region). */
+  protected readonly status = computed(() => {
+    if (!this.query() || this.searching()) return '';
+    const n = this.items().length;
+    return n ? `${n} ${n === 1 ? 'result' : 'results'}. Use the up and down arrow keys, Enter to open.` : 'No results';
   });
 
   constructor() {
@@ -125,6 +140,7 @@ export class CommandPalette {
   }
 
   protected onKey(event: KeyboardEvent) {
+    if (event.isComposing || event.keyCode === 229) return; // an IME is choosing a candidate: Enter and arrows are its own
     const hits = this.items();
     if (event.key === 'Escape') {
       event.preventDefault();

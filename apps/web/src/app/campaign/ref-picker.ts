@@ -5,6 +5,8 @@ import { api } from '../core/api';
 import { ContextService } from '../core/context.service';
 import { EntityLink } from '../reference/render/entity-link';
 
+let nextListId = 0;
+
 /** Picks a reference entity of one kind (autocomplete within the campaign's rules). */
 @Component({
   selector: 'cn-ref-picker',
@@ -25,7 +27,13 @@ import { EntityLink } from '../reference/render/entity-link';
     } @else {
       <input
         type="search"
+        role="combobox"
         class="cn-input px-2"
+        aria-autocomplete="list"
+        aria-haspopup="listbox"
+        [attr.aria-expanded]="hits().length ? 'true' : 'false'"
+        [attr.aria-controls]="hits().length ? listId : null"
+        [attr.aria-activedescendant]="hits().length ? listId + '-' + active() : null"
         [attr.aria-label]="placeholder()"
         [placeholder]="placeholder()"
         [value]="query()"
@@ -33,19 +41,20 @@ import { EntityLink } from '../reference/render/entity-link';
         (keydown)="onKey($event)"
         (blur)="onBlur()"
       />
+      <div class="sr-only" role="status">{{ status() }}</div>
       @if (hits().length) {
-        <ul class="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-md border border-line bg-panel py-1 shadow-lg" role="listbox">
+        <ul [id]="listId" class="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-md border border-line bg-panel py-1 shadow-lg" role="listbox" [attr.aria-label]="placeholder()">
           @for (hit of hits(); track hit.uid; let i = $index) {
-            <li role="option" [attr.aria-selected]="i === active()">
-              <button
-                type="button"
-                class="flex w-full items-baseline gap-2 px-3 py-1 text-left text-sm hover:bg-panel-2 touch:min-h-[44px] touch:items-center"
-                [class.bg-panel-2]="i === active()"
-                (mousedown)="$event.preventDefault()"
-                (click)="pick(hit)"
-              >
-                <span>{{ hit.name }}</span><span class="text-xs text-muted">{{ hit.source }}</span>
-              </button>
+            <li
+              role="option"
+              [id]="listId + '-' + i"
+              class="flex w-full cursor-pointer items-baseline gap-2 px-3 py-1 text-left text-sm hover:bg-panel-2 touch:min-h-[44px] touch:items-center"
+              [class.bg-panel-2]="i === active()"
+              [attr.aria-selected]="i === active()"
+              (mousedown)="$event.preventDefault()"
+              (click)="pick(hit)"
+            >
+              <span>{{ hit.name }}</span><span class="text-xs text-muted">{{ hit.source }}</span>
             </li>
           }
         </ul>
@@ -74,6 +83,13 @@ export class RefPicker {
     this.debounced() ? { url: api.autocomplete(this.kind()), params: { ...this.context.params(), q: this.debounced() } } : undefined,
   );
   protected readonly hits = computed(() => (this.debounced() && this.results.hasValue() ? this.results.value().hits : []));
+  protected readonly listId = `cn-ref-list-${nextListId++}`;
+  /** Read out by screen readers when the results change (live region). */
+  protected readonly status = computed(() => {
+    if (!this.debounced() || this.results.isLoading()) return '';
+    const n = this.hits().length;
+    return n ? `${n} ${n === 1 ? 'result' : 'results'}. Use the up and down arrow keys, Enter to choose.` : 'No results';
+  });
 
   protected onInput(v: string) {
     this.query.set(v);
@@ -83,6 +99,7 @@ export class RefPicker {
   }
 
   protected onKey(e: KeyboardEvent) {
+    if (e.isComposing || e.keyCode === 229) return; // an IME is choosing a candidate: Enter and arrows are its own
     const hits = this.hits();
     if (e.key === 'ArrowDown') {
       e.preventDefault();

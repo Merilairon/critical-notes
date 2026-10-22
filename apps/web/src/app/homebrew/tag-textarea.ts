@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import type { ElementRef} from '@angular/core';
-import { ChangeDetectionStrategy, Component, inject, input, output, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { kindForTag } from '@cn/fivetools';
 import type { SearchHitDto } from '@cn/shared';
 import { firstValueFrom } from 'rxjs';
@@ -33,6 +33,8 @@ export function entityCompletion(tag: string, hit: Pick<SearchHitDto, 'name' | '
   return `{@${tag} ${hit.name}|${hit.source}}`;
 }
 
+let nextListId = 0;
+
 /** A textarea for 5etools text with a formatting toolbar and `{@` autocomplete. */
 @Component({
   selector: 'cn-tag-textarea',
@@ -51,25 +53,30 @@ export function entityCompletion(tag: string, hit: Pick<SearchHitDto, 'name' | '
       [rows]="rows()"
       [value]="value()"
       [attr.aria-label]="label()"
+      aria-autocomplete="list"
+      aria-haspopup="listbox"
+      [attr.aria-controls]="items().length ? listId : null"
+      [attr.aria-activedescendant]="items().length ? listId + '-' + active() : null"
       [placeholder]="placeholder()"
       (input)="onInput()"
       (keydown)="onKey($event)"
       (blur)="close()"
       (click)="refresh()"
     ></textarea>
+    <div class="sr-only" role="status">{{ status() }}</div>
     @if (items().length) {
-      <ul class="absolute right-0 left-0 z-30 mt-1 max-h-64 overflow-y-auto rounded-md border border-line bg-panel py-1 shadow-xl" role="listbox">
+      <ul [id]="listId" class="absolute right-0 left-0 z-30 mt-1 max-h-64 overflow-y-auto rounded-md border border-line bg-panel py-1 shadow-xl" role="listbox" [attr.aria-label]="label() + ' suggestions'">
         @for (item of items(); track item.insert; let i = $index) {
-          <li role="option" [attr.aria-selected]="i === active()">
-            <button
-              type="button"
-              class="flex w-full items-baseline gap-2 px-3 py-1 text-left text-sm"
-              [class.bg-panel-2]="i === active()"
-              (mousedown)="$event.preventDefault(); choose(item)"
-              (mouseenter)="active.set(i)"
-            >
-              <span class="truncate">{{ item.label }}</span><span class="shrink-0 text-xs text-muted">{{ item.detail }}</span>
-            </button>
+          <li
+            role="option"
+            [id]="listId + '-' + i"
+            class="flex w-full cursor-pointer items-baseline gap-2 px-3 py-1 text-left text-sm touch:min-h-[44px] touch:items-center"
+            [class.bg-panel-2]="i === active()"
+            [attr.aria-selected]="i === active()"
+            (mousedown)="$event.preventDefault(); choose(item)"
+            (mouseenter)="active.set(i)"
+          >
+            <span class="truncate">{{ item.label }}</span><span class="shrink-0 text-xs text-muted">{{ item.detail }}</span>
           </li>
         }
       </ul>
@@ -88,6 +95,12 @@ export class TagTextarea {
   private readonly area = viewChild.required<ElementRef<HTMLTextAreaElement>>('area');
   protected readonly items = signal<Completion[]>([]);
   protected readonly active = signal(0);
+  protected readonly listId = `cn-tag-list-${nextListId++}`;
+  /** Read out by screen readers when the suggestions change (live region). */
+  protected readonly status = computed(() => {
+    const n = this.items().length;
+    return n ? `${n} ${n === 1 ? 'suggestion' : 'suggestions'}. Use the up and down arrow keys, Enter to insert.` : '';
+  });
   private context: TagContext = null;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private requestId = 0;
@@ -158,6 +171,7 @@ export class TagTextarea {
   }
 
   protected onKey(e: KeyboardEvent) {
+    if (e.isComposing || e.keyCode === 229) return; // an IME is choosing a candidate
     const items = this.items();
     if (!items.length) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
