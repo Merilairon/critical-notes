@@ -118,7 +118,7 @@ type DialogState =
             [attr.aria-disabled]="enabling() ? 'true' : null" [attr.aria-label]="'Enable ' + u.displayName" (click)="enable(u)">Enable</button>
         }
         <button type="button" [attr.data-key]="u.id + ':delete'" class="rounded border border-line px-2 text-sm text-accent aria-disabled:cursor-not-allowed aria-disabled:opacity-60" [class]="pad"
-          [attr.aria-disabled]="r.canDelete ? null : 'true'" [attr.aria-describedby]="r.canDelete ? layout + '-' + u.id + '-hint' : layout + '-' + u.id + '-delete'" [attr.aria-label]="'Delete ' + u.displayName"
+          [attr.aria-disabled]="r.canDelete ? null : 'true'" [attr.aria-describedby]="r.canDelete ? (r.deleteHint ? layout + '-' + u.id + '-hint' : null) : layout + '-' + u.id + '-delete'" [attr.aria-label]="'Delete ' + u.displayName"
           (click)="r.canDelete && open('delete', u)">Delete</button>
       </div>
       <div class="mt-1 space-y-0.5 text-xs text-muted">

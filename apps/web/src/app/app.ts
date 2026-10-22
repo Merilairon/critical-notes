@@ -64,6 +64,12 @@ export class App {
   );
 
   protected readonly paletteOpen = signal(false);
+  /** The skip link: move focus to <main> without touching the URL (a plain "#main" would be resolved against the router's base). */
+  protected skipToMain(event: Event) {
+    event.preventDefault();
+    document.getElementById('main')?.focus();
+  }
+
   /** Screens meant for the table (the tracker's player view) show no app chrome. */
   protected readonly bare = toSignal(
     this.router.events.pipe(

@@ -139,7 +139,7 @@ const TRIGGERS: Record<BackupTrigger, string> = { api: 'Web page', cli: 'Command
 {{ h.bareRestore }}</code></pre>
         <p class="mt-1 text-muted">Run it with the same data directory and settings as the server.</p>
         <p id="backup-cli" class="mt-2 font-medium">Make a backup from the command line</p>
-        <pre class="mt-1 whitespace-pre-wrap rounded bg-panel-2 p-2 text-xs [overflow-wrap:anywhere]" aria-labelledby="backup-cli"><code>{{ h.dockerBackup }}
+        <pre class="mt-1 whitespace-pre-wrap rounded bg-panel-2 p-2 text-xs [overflow-wrap:anywhere]" role="group" aria-labelledby="backup-cli"><code>{{ h.dockerBackup }}
 {{ h.bareBackup }}</code></pre>
       } @else {
         <p id="hints-missing" class="mt-1">This server did not report its backups folder or admin command. See the Backups section of the README for the exact commands.</p>

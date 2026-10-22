@@ -1,6 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, inject, signal, viewChild, type ElementRef } from '@angular/core';
+import { afterNextRender, ChangeDetectionStrategy, Component, inject, Injector, signal, viewChild, type ElementRef } from '@angular/core';
 import { passwordSchema, updateMeInput, type ApiTokenDto, type CreatedApiTokenDto, type UserDto } from '@cn/shared';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../core/auth.service';
@@ -111,7 +111,7 @@ function setups(origin: string, token: string) {
         <div class="mt-3 rounded-md border border-accent/50 bg-accent/5 p-3 text-sm" role="status">
           <p class="font-medium">Token “{{ c.name }}” created. Copy it now: it is shown only once.</p>
           <div class="mt-2 flex gap-2">
-            <input class="cn-prop-input min-w-0 flex-1 font-mono text-xs" [value]="c.token" readonly aria-label="New token" (focus)="$any($event.target).select()" />
+            <input #newToken class="cn-prop-input min-w-0 flex-1 font-mono text-xs" [value]="c.token" readonly aria-label="New token" (focus)="$any($event.target).select()" />
             <button type="button" class="cn-btn rounded px-2 py-0.5 font-normal" (click)="copy(c.token, 'token')">{{ copied() === 'token' ? 'Copied' : 'Copy' }}</button>
           </div>
           @for (s of setupFor(c.token); track s.label) {
@@ -120,18 +120,18 @@ function setups(origin: string, token: string) {
                 <span class="text-xs font-medium text-muted">{{ s.label }}</span>
                 <button type="button" class="cn-btn rounded px-2 py-0.5 text-xs font-normal" (click)="copy(s.text, s.label)">{{ copied() === s.label ? 'Copied' : 'Copy' }}</button>
               </div>
-              <pre class="mt-1 overflow-x-auto rounded bg-panel-2 p-2 font-mono text-xs" [attr.aria-label]="s.label">{{ s.text }}</pre>
+              <pre role="group" class="mt-1 overflow-x-auto rounded bg-panel-2 p-2 font-mono text-xs" [attr.aria-label]="s.label">{{ s.text }}</pre>
             </div>
           }
           <p class="mt-2 text-xs text-muted">The address is {{ endpoint }}. Anyone with the token can act as you: keep it like a password, and revoke it here if it leaks.</p>
         </div>
       }
 
-      <h3 class="mt-5 mb-1 text-sm font-semibold">Your tokens</h3>
+      <h3 #tokensHeading tabindex="-1" class="mt-5 mb-1 text-sm font-semibold outline-none">Your tokens</h3>
       @if (tokens().length) {
         <table class="w-full text-sm">
           <thead class="text-left text-xs text-muted">
-            <tr><th class="py-1">Name</th><th>Access</th><th>Created</th><th>Last used</th><th>Expires</th><th></th></tr>
+            <tr><th class="py-1">Name</th><th>Access</th><th>Created</th><th>Last used</th><th>Expires</th><th scope="col"><span class="sr-only">Actions</span></th></tr>
           </thead>
           <tbody>
             @for (t of tokens(); track t.id) {
@@ -157,6 +157,7 @@ function setups(origin: string, token: string) {
 export class AccountPage {
   protected readonly auth = inject(AuthService);
   private readonly http = inject(HttpClient);
+  private readonly injector = inject(Injector);
   protected readonly tokens = signal<ApiTokenDto[]>([]);
   protected readonly created = signal<CreatedApiTokenDto | null>(null);
   protected readonly copied = signal<string | null>(null);
@@ -176,6 +177,8 @@ export class AccountPage {
   private readonly currentEl = viewChild.required<ElementRef<HTMLInputElement>>('current');
   private readonly nextEl = viewChild.required<ElementRef<HTMLInputElement>>('next');
   private readonly againEl = viewChild.required<ElementRef<HTMLInputElement>>('again');
+  private readonly newTokenEl = viewChild<ElementRef<HTMLInputElement>>('newToken');
+  private readonly tokensHeadingEl = viewChild<ElementRef<HTMLElement>>('tokensHeading');
   protected readonly endpoint = `${location.origin}/mcp`;
   private readonly now = signal(Date.now());
   protected readonly expired = (t: ApiTokenDto) => t.expiresAt !== null && t.expiresAt <= this.now();
@@ -258,6 +261,8 @@ export class AccountPage {
       this.created.set(await firstValueFrom(this.http.post<CreatedApiTokenDto>('/api/auth/tokens', { name, scope, expiresInDays: days ? Number(days) : null })));
       this.copied.set(null);
       await this.reload();
+      // The new token appears below the form and is shown only once: move focus to it (it is selected, ready to copy)
+      afterNextRender(() => this.newTokenEl()?.nativeElement.focus(), { injector: this.injector });
     } catch (err) {
       this.error.set(errorMessage(err));
     } finally {
@@ -276,6 +281,8 @@ export class AccountPage {
       await firstValueFrom(this.http.delete(`/api/auth/tokens/${t.id}`));
       if (this.created()?.id === t.id) this.created.set(null);
       await this.reload();
+      // The revoked row is gone, and so was the focus: put it on the list's heading
+      afterNextRender(() => this.tokensHeadingEl()?.nativeElement.focus(), { injector: this.injector });
     } catch (err) {
       this.error.set(errorMessage(err));
     }

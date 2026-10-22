@@ -18,7 +18,6 @@ const expanded = signal<Record<string, boolean>>(readStored('cn.tree.expanded', 
     (cdkDropListDropped)="drop($event)"
     class="min-h-1"
     [class.pl-3]="depth() > 0"
-    role="group"
   >
     @for (page of children(); track page.id) {
       <li cdkDrag [cdkDragData]="page.id" [cdkDragDisabled]="!store.isGm()" class="group">

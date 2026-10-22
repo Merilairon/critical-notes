@@ -1,4 +1,10 @@
 @if (!bare()) {
+<a
+  href="#main"
+  class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-70 focus:rounded-md focus:border focus:border-line focus:bg-panel focus:px-3 focus:py-2 focus:text-ink"
+  (click)="skipToMain($event)"
+  >Skip to main content</a
+>
 <header
   #appHeader
   class="relative z-30 flex h-[calc(56px+env(safe-area-inset-top))] shrink-0 items-center gap-1 overflow-visible border-b border-line bg-panel pt-[env(safe-area-inset-top)] pr-[max(0.5rem,env(safe-area-inset-right))] pl-[max(0.5rem,env(safe-area-inset-left))] short:h-[calc(48px+env(safe-area-inset-top))] lg:h-auto lg:flex-wrap lg:gap-3 lg:px-3 lg:py-2"
@@ -44,10 +50,9 @@
       type="button"
       class="cn-hdr-btn lg:gap-2 lg:rounded-md lg:border lg:border-line lg:px-2.5 lg:py-1 lg:text-sm lg:hover:border-accent"
       (click)="paletteOpen.set(true)"
-      aria-label="Search (Ctrl K)"
     >
-      <span aria-hidden="true" class="lg:hidden">🔍</span><span class="max-lg:hidden">Search</span>
-      <kbd class="hidden rounded border border-line px-1 text-xs lg:inline">Ctrl K</kbd>
+      <span aria-hidden="true" class="lg:hidden">🔍</span><span class="max-lg:sr-only">Search</span>
+      <kbd class="rounded border border-line px-1 text-xs max-lg:sr-only">Ctrl K</kbd>
     </button>
 
     <div class="contents max-lg:hidden">
@@ -59,7 +64,7 @@
       <label class="flex items-center gap-1 text-sm" title="Rules edition used for reference lookups">
         <span class="sr-only">Rules edition</span>
         <select
-          class="rounded-md border border-line bg-panel px-2 py-1 text-sm"
+          class="rounded-md border border-control bg-panel px-2 py-1 text-sm"
           (change)="setRuleset($any($event.target).value)"
         >
           @for (id of rulesets; track id) {
@@ -70,6 +75,7 @@
       <label class="flex items-center gap-1.5 text-sm text-muted">
         <input
           type="checkbox"
+          class="h-6 w-6"
           [checked]="context.crossEdition()"
           (change)="context.crossEdition.set($any($event.target).checked)"
         />
@@ -266,7 +272,7 @@
 </header>
 }
 
-<main class="flex min-h-0 flex-1 flex-col overflow-y-auto scroll-pb-24">
+<main id="main" tabindex="-1" class="flex min-h-0 flex-1 flex-col overflow-y-auto scroll-pb-24 outline-none">
   <router-outlet />
 </main>
 

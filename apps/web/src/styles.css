@@ -15,6 +15,7 @@
   --ink: #221f1b;
   --muted: #6e665c;
   --line: #e2dbcd;
+  --control: #857c70; /* form field borders: 3:1 or more on every surface (WCAG 1.4.11); --line is for decoration */
   --accent: #8c2a1c;
   --accent-ink: #ffffff;
   --link: #8c2a1c;
@@ -40,6 +41,7 @@
   --ink: #ece6dc;
   --muted: #a39a8e;
   --line: #34302b;
+  --control: #77706a;
   --accent: #e2735f;
   --accent-ink: #1a0d0a;
   --link: #f0907c;
@@ -65,6 +67,7 @@
   --color-ink: var(--ink);
   --color-muted: var(--muted);
   --color-line: var(--line);
+  --color-control: var(--control);
   --color-accent: var(--accent);
   --color-accent-ink: var(--accent-ink);
   --color-link: var(--link);
@@ -857,7 +860,7 @@ body {
 /* Page property inputs */
 .cn-prop-input {
   border-radius: 0.375rem;
-  border: 1px solid var(--color-line);
+  border: 1px solid var(--color-control);
   background: var(--color-bg);
   padding: 0.25rem 0.5rem;
   font-size: 0.875rem;
@@ -942,7 +945,7 @@ body {
 @layer components {
   .cn-input {
     width: 100%;
-    border: 1px solid var(--line);
+    border: 1px solid var(--control);
     border-radius: 0.375rem;
     background: var(--bg);
     color: var(--ink);

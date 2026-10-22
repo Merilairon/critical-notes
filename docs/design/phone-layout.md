@@ -63,6 +63,8 @@ Rules that follow from this:
 
 Use `min-h-[44px] min-w-[44px]` (px) for targets, not `min-h-11` (rem, 2.75rem), because at 200 % text `min-h-11` becomes 88 px and four header buttons no longer fit in 320 px. Text, padding inside cards and gaps stay rem.
 
+> **Token note (G1.2):** field borders (inputs, selects, textareas) use `var(--control)` (`--color-control`, `border-control`), which is at least 3:1 on every surface (WCAG 1.4.11). `var(--line)` is for decoration only (cards, dividers, button outlines). The `border: ... var(--line)` in the snippets below is superseded by `--control` for `.cn-input` and `.cn-prop-input`.
+
 ### 2.2 Shared form and button classes
 
 Replace the per-file utility strings in `auth/*.ts`, `invites/invite-page.ts`, `account/account-page.ts`, `campaigns/campaign-list.ts`, `play/inventory-page.ts`, `campaign/facet-form.ts` with the classes below. Plain CSS like the rest of `styles.css` (no `@apply`), raw tokens (`var(--line)`, `var(--bg)`, `var(--ink)`, `var(--accent)`, `var(--accent-ink)`) as the existing rules use them.
@@ -266,7 +268,7 @@ One `<header>`; the desktop items and the compact items live in the same row, sw
 @media (min-width: 1024px) { .cn-hdr-btn { min-width: 0; min-height: 0; padding: 0.25rem 0.5rem; font-size: 1rem; } }
 ```
 
-Names the e2e suite and screen readers rely on: `Search (Ctrl K)`, `Dice log`, `Theme: <mode>`, links `Campaigns`, `Reference`, `Users` (admin only), button `Sign out`. Below `lg` they live in the menu, at `lg` inline. The app `<header>` must not contain an `<h1>`/`<h2>`, nor a button named Create or Delete, nor a `.cn-badge`: `e2e/homebrew.spec.ts` selects `header button` "Create"/"Delete" and `header .cn-badge`, and `e2e/campaign.spec.ts:64` looks for page headings. See section 8.
+Names the e2e suite and screen readers rely on: `Search`, `Dice log`, `Theme: <mode>`, links `Campaigns`, `Reference`, `Users` (admin only), button `Sign out`. Below `lg` they live in the menu, at `lg` inline. The app `<header>` must not contain an `<h1>`/`<h2>`, nor a button named Create or Delete, nor a `.cn-badge`: `e2e/homebrew.spec.ts` selects `header button` "Create"/"Delete" and `header .cn-badge`, and `e2e/campaign.spec.ts:64` looks for page headings. See section 8.
 
 ### 3.3 Width budget (the proof it fits)
 
@@ -535,7 +537,7 @@ All 16 audit issues plus the extra findings of the second run. "Owner" is the ta
 | DM views (encounters, tracker page, encounter builder, reference browser, templates, trash, settings) | They are desktop-first; the header change does not touch their `main` content. Sticky bars inside `main` (`tracker-page` `z-10`, `reference-list` `z-20`) scroll under the header only inside the scroller, header is outside it. | No change required. Their requirement is "no sideways page scroll at 360 and 320 once the header no longer causes it"; they are not re-laid-out. |
 | `e2e/*.spec.ts` | Run at 1440 x 1000 (`lg` tier). `admin.spec.ts` expects the `Users` link absent for non-admins; `campaign.spec.ts:77` clicks `Sign out`; `combat.spec.ts:63` expects no `header` containing "Sign out" on the table screen. | At 1440 the desktop tier is unchanged, so these pass. The app menu panel is rendered only when open, never as a hidden duplicate, so `getByRole` counts stay right. The combat back link must not be in a `<header>`. M6.5's phone project must open the menu before clicking "Sign out". |
 | `e2e/homebrew.spec.ts`, `e2e/campaign.spec.ts` | `homebrew.spec` selects `header button` "Create"/"Delete" and `header .cn-badge` (lines 41, 123, 129: that is the page-level `<header>` of the homebrew editor). `campaign.spec.ts:64` looks for headings. The dice log was an `aside`; `homebrew.spec` uses `aside` only for the entity preview (lines 39, 40, 70), so turning the log into a `<section>` breaks nothing. | The **app** `<header>` must never gain a button named Create/Delete, a `.cn-badge` or any `h1`/`h2` (menu group labels are `role="group"` + `<p>`, 3.4). Re-grep the specs for `aside` and `header` when implementing. |
-| Command palette (`Ctrl K`) | Search button changes from text to icon below `lg`. | Same handler (`paletteOpen.set(true)`), same accessible name `Search (Ctrl K)`. |
+| Command palette (`Ctrl K`) | Search button changes from text to icon below `lg`. | Same handler (`paletteOpen.set(true)`), same accessible name `Search` (named from its content). |
 | `bare()` routes (combat player view) | No header. | Unchanged; its own back link (6.7). |
 | Campaign shell `pb-32` under a toast | Header change does not alter it. | Keep; add the safe-area term. |
 | Unit tests (jsdom) | CSS is ignored, so `max-lg:hidden`/`lg:hidden` groups are all present. `app.spec.ts:16` queries `a[href="/admin/users"]`. | Menu panel only in the DOM when open (3.2): one match as today. |
