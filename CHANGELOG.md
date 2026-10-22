@@ -99,6 +99,16 @@ phone-width screens, and a published Docker image to update from.
 - If you ran a development build of Critical Notes, **make a backup first**. This release adds database migrations that
   cannot be undone, and you cannot go back to the older build with the migrated data.
 
+## [1.0.0-rc.2] - 2026-10-22
+
+Second release candidate. It fixes one bug found while testing rc.1.
+
+- **Backups:** two backups could, in a rare race, both think they held the backup lock after a crashed backup left a stale
+  lock behind. Taking over a stale lock is now serialised.
+
+What to test is the same as for rc.1: the image on `linux/arm64`, an update on a volume that holds data, and phone-width
+screens for players on a real phone. A release candidate publishes only its own tag; it does not move `1.0` or `latest`.
+
 ## [1.0.0-rc.1] - 2026-10-22
 
 First release candidate of 1.0.0. It exists to prove the release pipeline and the image, not to add anything.
@@ -114,4 +124,5 @@ The changes in 1.0.0 are listed in the draft above, under "Unreleased". A releas
 `1.0.0-rc.1`; it does not move `1.0` or `latest`.
 
 [Unreleased]: https://github.com/Merilairon/critical-notes/commits/main
+[1.0.0-rc.2]: https://github.com/Merilairon/critical-notes/releases/tag/v1.0.0-rc.2
 [1.0.0-rc.1]: https://github.com/Merilairon/critical-notes/releases/tag/v1.0.0-rc.1
