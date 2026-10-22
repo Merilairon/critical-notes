@@ -13,9 +13,25 @@ export interface SuggestionItem {
   run(props: SuggestionProps<SuggestionItem>): void;
 }
 
+let nextPopupId = 0;
+
+/** The words a screen reader hears for the result count. */
+export function resultsStatus(count: number): string {
+  return count ? `${count} ${count === 1 ? 'result' : 'results'}. Use the up and down arrow keys, Enter to choose.` : 'No results';
+}
+
 export function createPopupRenderer() {
   return () => {
+    const id = `cn-suggest-${++nextPopupId}`;
     let el: HTMLDivElement | null = null;
+    let status: HTMLDivElement | null = null;
+    /** The editing area while the popup is open, and the role it had before. */
+    let field: HTMLElement | null = null;
+    let fieldRole: string | null = null;
+    /** Escape closes the popup, but the suggestion stays active until the text changes: it must not eat keys meanwhile. */
+    let dismissed = false;
+    let announceTimer: ReturnType<typeof setTimeout> | undefined;
+
     let items: SuggestionItem[] = [];
     let active = 0;
     let props: SuggestionProps<SuggestionItem> | null = null;
@@ -25,20 +41,52 @@ export function createPopupRenderer() {
       if (item && props) item.run(props);
     };
 
+    const ARIA = ['aria-multiline', 'aria-expanded', 'aria-controls', 'aria-activedescendant', 'aria-autocomplete', 'aria-haspopup'];
+
+    /** A text field that owns a popup list is a combobox; the role is on only while the popup is open. */
+    const syncField = () => {
+      if (!field) return;
+      const open = !!el && items.length > 0;
+      if (!open) {
+        for (const a of ARIA) field.removeAttribute(a);
+        if (fieldRole === null) field.removeAttribute('role');
+        else field.setAttribute('role', fieldRole);
+        return;
+      }
+      field.setAttribute('role', 'combobox');
+      field.setAttribute('aria-multiline', 'true');
+      field.setAttribute('aria-expanded', 'true');
+      field.setAttribute('aria-controls', id);
+      field.setAttribute('aria-activedescendant', `${id}-${active}`);
+      field.setAttribute('aria-autocomplete', 'list');
+      field.setAttribute('aria-haspopup', 'listbox');
+    };
+
+    const announce = (text: string) => {
+      if (status && status.textContent !== text) status.textContent = text;
+    };
+
     const draw = () => {
       if (!el) return;
       el.replaceChildren();
+      el.id = id;
+      if (items.length) el.setAttribute('role', 'listbox');
+      else el.removeAttribute('role');
+      announce(resultsStatus(items.length));
+      syncField();
       if (!items.length) {
         const empty = document.createElement('div');
         empty.className = 'cn-suggest-empty';
-        empty.textContent = 'No matches';
+        empty.textContent = 'No results';
         el.append(empty);
         return;
       }
       items.forEach((item, i) => {
         const btn = document.createElement('button');
         btn.type = 'button';
+        btn.tabIndex = -1;
         btn.className = `cn-suggest-item${i === active ? ' is-active' : ''}`;
+        btn.id = `${id}-${i}`;
         btn.setAttribute('role', 'option');
         btn.setAttribute('aria-selected', String(i === active));
         if (item.icon) {
@@ -73,26 +121,50 @@ export function createPopupRenderer() {
       });
     };
 
+    const teardown = () => {
+      clearTimeout(announceTimer);
+      el?.remove();
+      el = null;
+      syncField();
+      status?.remove();
+      status = null;
+      field = null;
+    };
+
     return {
       onStart(p: SuggestionProps<SuggestionItem>) {
         props = p;
         items = p.items;
         active = 0;
+        dismissed = false;
         el = document.createElement('div');
         el.className = 'cn-suggest';
-        el.setAttribute('role', 'listbox');
-        document.body.append(el);
+        field = p.editor.view.dom as HTMLElement;
+        // Inside the page's landmark (it is positioned with `fixed`), so no content sits outside a landmark
+        const host = field.closest('main') ?? document.body;
+        host.append(el);
+        fieldRole = field.getAttribute('role');
+        // A live region has to exist before its text changes, or the first text is not announced.
+        status = document.createElement('div');
+        status.className = 'sr-only';
+        status.setAttribute('role', 'status');
+        host.append(status);
         draw();
+        status.textContent = '';
+        // The results may change before the timer fires (the first list often arrives a moment later): say the current count
+        announceTimer = setTimeout(() => announce(resultsStatus(items.length)), 50);
         place();
       },
       onUpdate(p: SuggestionProps<SuggestionItem>) {
         props = p;
         items = p.items;
+        if (dismissed) return;
         active = Math.min(active, Math.max(0, items.length - 1));
         draw();
         place();
       },
       onKeyDown({ event }: SuggestionKeyDownProps) {
+        if (dismissed) return false;
         if (event.key === 'ArrowDown') {
           active = (active + 1) % Math.max(1, items.length);
           draw();
@@ -109,15 +181,14 @@ export function createPopupRenderer() {
           return true;
         }
         if (event.key === 'Escape') {
-          el?.remove();
-          el = null;
+          dismissed = true;
+          teardown();
           return true;
         }
         return false;
       },
       onExit() {
-        el?.remove();
-        el = null;
+        teardown();
         props = null;
       },
     };

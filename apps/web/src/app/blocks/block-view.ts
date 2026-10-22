@@ -1,5 +1,5 @@
 import { httpResource } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, forwardRef, inject, input, signal } from '@angular/core';
+import { afterNextRender, ChangeDetectionStrategy, Component, computed, type ElementRef, forwardRef, inject, input, type OnDestroy, signal, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { PAGE_TYPE_ICONS, type EntityDto, type QueryRowDto } from '@cn/shared';
 import { CampaignStore } from '../campaign/campaign.store';
@@ -9,6 +9,8 @@ import { imageSrcUrl } from '../editor/views/atom-views';
 import { EntityView } from '../reference/entity-view';
 import { Inline } from '../reference/render/inline';
 import { Roll } from '../reference/render/roll';
+import { watchHeadingLevels } from './heading-levels';
+import { newTableNameScope, nameTablesInDom } from './table-names';
 
 export interface ViewNode {
   type: string;
@@ -185,9 +187,29 @@ export class BlockNodes {
   selector: 'cn-block-view',
   imports: [BlockNodes],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<div class="cn-prose cn-block-view"><cn-block-nodes [nodes]="doc()?.content ?? []" [pageId]="pageId()" /></div>`,
+  template: `<div #root class="cn-prose cn-block-view"><cn-block-nodes [nodes]="doc()?.content ?? []" [pageId]="pageId()" /></div>`,
 })
-export class BlockView {
+export class BlockView implements OnDestroy {
   readonly doc = input<{ content?: ViewNode[] } | null>(null);
   readonly pageId = input<string | null>(null);
+  private readonly root = viewChild.required<ElementRef<HTMLElement>>('root');
+  private readonly scope = newTableNameScope();
+  private observer: MutationObserver | null = null;
+  private stopLevels: (() => void) | null = null;
+
+  constructor() {
+    // Tables are named from the headings that are actually in this rendered view (see table-names.ts)
+    afterNextRender(() => {
+      const el = this.root().nativeElement;
+      nameTablesInDom(el, this.scope);
+      this.observer = new MutationObserver(() => nameTablesInDom(el, this.scope));
+      this.observer.observe(el, { childList: true, subtree: true, characterData: true });
+      this.stopLevels = watchHeadingLevels(el);
+    });
+  }
+
+  ngOnDestroy() {
+    this.observer?.disconnect();
+    this.stopLevels?.();
+  }
 }

@@ -63,3 +63,86 @@ describe('BlockView', () => {
     expect(el.querySelector('[role=tabpanel]')!.textContent).toContain('sunny');
   });
 });
+
+describe('table names', () => {
+  const cell = (t: string): ViewNode => ({ type: 'tableCell', content: [para(text(t))] });
+  const table = (): ViewNode => ({ type: 'table', content: [{ type: 'tableRow', content: [cell('a'), cell('b')] }] });
+  const h = (level: number, t: string): ViewNode => ({ type: 'heading', attrs: { level }, content: [text(t)] });
+  const nameOf = (t: Element) => {
+    const id = t.getAttribute('aria-labelledby');
+    return id ? document.getElementById(id)?.textContent?.trim() ?? null : null;
+  };
+  // The heading-level pass runs once per animation frame (setTimeout fallback of 16 ms): wait past it
+  const frame = () => new Promise<void>((r) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => r()) : setTimeout(r, 16)));
+  const settle = async () => {
+    await frame();
+    await frame();
+    await new Promise<void>((r) => setTimeout(r, 20));
+  };
+
+  it('names a table after the nearest heading above it, and leaves an unheaded table unnamed', async () => {
+    const el = render([table(), h(1, 'Loot'), table(), para(text('x')), h(2, 'Prices'), table()]);
+    document.body.append(el);
+    await settle();
+    const tables = [...el.querySelectorAll('table')];
+    expect(tables.map(nameOf)).toEqual([null, 'Loot', 'Prices']);
+    expect(tables[0]!.hasAttribute('aria-labelledby')).toBe(false);
+    el.remove();
+  });
+
+  it("uses only the headings of its own rendered document (the server leaves DM-only blocks out of a player's document)", async () => {
+    const player = render([h(1, 'Market'), table()]);
+    document.body.append(player);
+    await settle();
+    expect(nameOf(player.querySelector('table')!)).toBe('Market');
+    expect(player.textContent).not.toContain('Secret stock');
+    player.remove();
+  });
+
+  it('keeps ids unique across views on one page and ignores empty headings', async () => {
+    const a = render([h(1, 'One'), table()]);
+    document.body.append(a);
+    TestBed.resetTestingModule();
+    const b = render([h(1, 'Two'), table(), { type: 'heading', attrs: { level: 1 }, content: [] }, table()]);
+    document.body.append(b);
+    await settle();
+    const ids = [...document.querySelectorAll('h2')].map((x) => x.id).filter(Boolean);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect([...b.querySelectorAll('table')].map(nameOf)).toEqual(['Two', null]);
+    a.remove();
+    b.remove();
+  });
+
+  it('keeps ids unique and names right when a heading appears mid-view', async () => {
+    TestBed.configureTestingModule({ imports: [BlockView], providers: [provideRouter([]), provideHttpClient()] });
+    const fixture = TestBed.createComponent(BlockView);
+    fixture.componentRef.setInput('doc', { type: 'doc', content: [h(1, 'A'), table(), h(1, 'B'), table()] });
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    document.body.append(el);
+    await settle();
+    fixture.componentRef.setInput('doc', { type: 'doc', content: [h(1, 'A'), table(), h(1, 'X'), table(), h(1, 'B'), table()] });
+    fixture.detectChanges();
+    await settle();
+    const ids = [...el.querySelectorAll('h2')].map((x) => x.id);
+    expect(new Set(ids).size).toBe(3);
+    expect([...el.querySelectorAll('table')].map(nameOf)).toEqual(['A', 'X', 'B']);
+    el.remove();
+  });
+
+  it('keeps heading tags but exposes levels that do not skip after the page h1', async () => {
+    TestBed.configureTestingModule({ imports: [BlockView], providers: [provideRouter([]), provideHttpClient()] });
+    const host = document.createElement('div');
+    host.append(Object.assign(document.createElement('h1'), { textContent: 'Page' }));
+    document.body.append(host);
+    const fixture = TestBed.createComponent(BlockView);
+    host.append(fixture.nativeElement);
+    fixture.componentRef.setInput('doc', { type: 'doc', content: [h(2, 'Sub'), h(3, 'Subsub')] });
+    fixture.detectChanges();
+    await settle();
+    const hs = [...host.querySelectorAll('h3,h4')];
+    expect(hs.map((x) => x.tagName)).toEqual(['H3', 'H4']);
+    expect(hs.map((x) => x.getAttribute('aria-level'))).toEqual(['2', '3']);
+    host.remove();
+  });
+});

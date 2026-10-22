@@ -52,7 +52,7 @@ test("the campaign's reference uses its rules", async () => {
   await page.locator('nav[aria-label=Campaign] a', { hasText: 'Reference' }).click();
   await page.locator('a', { hasText: 'Spells' }).click();
   await page.locator('input[type=search]').fill('fireball');
-  const fireball = page.locator('button[role=option]', { hasText: 'Fireball' });
+  const fireball = page.locator('[role=list] [role=listitem] button', { hasText: 'Fireball' });
   await expect(fireball.locator('span').last()).toHaveText('PHB');
 });
 

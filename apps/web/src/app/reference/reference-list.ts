@@ -56,6 +56,8 @@ export class ReferenceList {
   protected readonly filterDefs = computed(() => filtersFor(this.kind()));
   protected readonly active = computed(() => parseFilterParams(this.queryParams(), this.filterDefs()));
   protected readonly query = signal('');
+  /** Spoken (polite) after an arrow-key selection in the search box; empty otherwise. */
+  protected readonly announcement = signal('');
   protected readonly sortKey = signal<SortKey>('name');
   protected readonly sortDir = signal<1 | -1>(1);
 
@@ -136,6 +138,8 @@ export class ReferenceList {
       event.preventDefault();
       const next = list[Math.max(0, Math.min(list.length - 1, ix + (event.key === 'ArrowDown' ? 1 : -1)))]!;
       this.setParam('e', next.uid);
+      // Focus stays in the search box, so aria-current is not spoken: say which entry is selected
+      this.announcement.set(`${next.name}, ${list.indexOf(next) + 1} of ${list.length}`);
     } else if (event.key === 'Enter' && ix >= 0) {
       this.router.navigate([...this.context.referenceBase(), this.kind(), list[ix]!.uid]);
     }

@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, type WritableSignal } from '@angular/core';
+import { afterNextRender, ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, input, signal, type WritableSignal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { isObject } from '@cn/fivetools';
 import type { EntityDto } from '@cn/shared';
+import { watchHeadingLevels } from '../blocks/heading-levels';
 import { ContextService } from '../core/context.service';
 import { imgUrl } from '../core/urls';
 import { Entries } from './render/entries';
@@ -36,6 +37,10 @@ export class EntityView {
 
   constructor() {
     effect(() => this.renderEdition.set(this.entity().edition));
+    // The statblock and entry headings never skip a level below the page heading (aria-level only)
+    const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+    const destroy = inject(DestroyRef);
+    afterNextRender(() => destroy.onDestroy(watchHeadingLevels(host)));
   }
 
   protected readonly block = computed(() => {

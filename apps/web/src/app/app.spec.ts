@@ -7,6 +7,7 @@ import { provideRouter, Router } from '@angular/router';
 import type { UserDto } from '@cn/shared';
 import { App } from './app';
 import { AuthService } from './core/auth.service';
+import { ConfirmService } from './core/confirm.service';
 import { ContextService } from './core/context.service';
 import { DiceService } from './core/dice.service';
 import { LayoutService } from './core/layout.service';
@@ -34,6 +35,22 @@ const button = (el: HTMLElement, name: string) => el.querySelector<HTMLButtonEle
 const menu = (el: HTMLElement) => el.querySelector('#app-menu');
 
 describe('header', () => {
+  it('swallows Ctrl+K while a confirm dialog is open (no browser search) and opens the palette otherwise', () => {
+    const fixture = mount(player);
+    const press = () => {
+      const e = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, cancelable: true });
+      document.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    const confirm = TestBed.inject(ConfirmService);
+    void confirm.ask({ title: 'Sure?', message: 'Sure?', confirmLabel: 'Yes' });
+    expect(press()).toBe(true);
+    expect((fixture.componentInstance as unknown as { paletteOpen: () => boolean }).paletteOpen()).toBe(false);
+    confirm.settle(false);
+    expect(press()).toBe(true);
+    expect((fixture.componentInstance as unknown as { paletteOpen: () => boolean }).paletteOpen()).toBe(true);
+  });
+
   it('shows the Users link to admins only', () => {
     expect(usersLink(header(admin))?.textContent?.trim()).toBe('Users');
     TestBed.resetTestingModule();

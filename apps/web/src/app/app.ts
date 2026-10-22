@@ -182,8 +182,9 @@ export class App {
   @HostListener('document:keydown', ['$event'])
   protected onKeydown(event: KeyboardEvent) {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k' && this.auth.user()) {
-      if (this.confirm.request()) return;
+      // Always swallow the shortcut (Firefox would focus its location-bar search), but only open the palette when no dialog is up.
       event.preventDefault();
+      if (this.confirm.request()) return;
       this.paletteOpen.set(true);
     } else if (event.key === 'Escape' && !event.defaultPrevented) {
       this.preview.close();

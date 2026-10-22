@@ -15,6 +15,7 @@
         (keydown)="onKey($event)"
         aria-label="Filter by name"
       />
+      <div class="sr-only" role="status">{{ announcement() }}</div>
       <div class="flex flex-wrap gap-1.5">
         @for (def of filterDefs(); track def.key) {
           <details class="relative">
@@ -60,31 +61,31 @@
       <p class="p-4 text-sm text-accent">Could not load this list.</p>
     }
 
-    <cdk-virtual-scroll-viewport itemSize="40" class="min-h-0 flex-1" role="listbox" [attr.aria-label]="label()">
-      <button
-        *cdkVirtualFor="let item of filtered(); trackBy: trackUid"
-        type="button"
-        role="option"
-        class="grid h-10 w-full items-center gap-2 border-b border-line/60 px-3 text-left text-sm hover:bg-panel-2"
-        [class.bg-panel-2]="item.uid === selectedUid()"
-        [attr.aria-selected]="item.uid === selectedUid()"
-        [style.grid-template-columns]="gridTemplate()"
-        (click)="open(item)"
-      >
-        <span class="flex min-w-0 items-center gap-1.5">
-          <span class="truncate font-medium">{{ item.name }}</span>
-          @if (badgeLabel(item.badge); as b) {
-            <span class="cn-badge" [class.cn-badge-legacy]="item.badge === 'legacy'" [class.cn-badge-modern]="item.badge === 'modern'">{{ b }}</span>
+    <cdk-virtual-scroll-viewport itemSize="40" class="min-h-0 flex-1" role="list" [attr.aria-label]="label()">
+      <div *cdkVirtualFor="let item of filtered(); trackBy: trackUid; let i = index; let count = count" role="listitem" class="h-10" [attr.aria-posinset]="i + 1" [attr.aria-setsize]="count">
+        <button
+          type="button"
+          class="grid h-10 w-full items-center gap-2 border-b border-line/60 px-3 text-left text-sm hover:bg-panel-2"
+          [class.bg-panel-2]="item.uid === selectedUid()"
+          [attr.aria-current]="item.uid === selectedUid() ? 'true' : null"
+          [style.grid-template-columns]="gridTemplate()"
+          (click)="open(item)"
+        >
+          <span class="flex min-w-0 items-center gap-1.5">
+            <span class="truncate font-medium">{{ item.name }}</span>
+            @if (badgeLabel(item.badge); as b) {
+              <span class="cn-badge" [class.cn-badge-legacy]="item.badge === 'legacy'" [class.cn-badge-modern]="item.badge === 'modern'">{{ b }}</span>
+            }
+            @if (item.origin === 'homebrew') {
+              <span class="cn-badge cn-badge-homebrew">HB</span>
+            }
+          </span>
+          @for (col of columns(); track col.label) {
+            <span class="truncate text-muted capitalize">{{ col.value(item) }}</span>
           }
-          @if (item.origin === 'homebrew') {
-            <span class="cn-badge cn-badge-homebrew">HB</span>
-          }
-        </span>
-        @for (col of columns(); track col.label) {
-          <span class="truncate text-muted capitalize">{{ col.value(item) }}</span>
-        }
-        <span class="truncate text-xs text-muted">{{ item.source }}</span>
-      </button>
+          <span class="truncate text-xs text-muted">{{ item.source }}</span>
+        </button>
+      </div>
     </cdk-virtual-scroll-viewport>
   </section>
 

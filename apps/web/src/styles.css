@@ -457,6 +457,18 @@ body {
   background: none;
   border: none;
   font-size: 1rem;
+  /* Target size (2.5.8): 24 px on desktop, 44 px on touch */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  min-height: 1.5rem;
+}
+@media (pointer: coarse), (max-width: 639.98px) {
+  .cn-drag-handle {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 .cn-drag-handle:hover {
   background: var(--panel-2);
@@ -1156,4 +1168,17 @@ details[open] > summary > .cn-chevron {
 .cn-editor ul[data-type='taskList'] input[type='checkbox'] {
   width: 1.5rem;
   height: 1.5rem;
+}
+
+/* Forced colours (Windows High Contrast): background-only cues vanish, so give them an outline or a border */
+@media (forced-colors: active) {
+  .cn-btn-primary {
+    border: 1px solid ButtonText;
+  }
+  [aria-current='true'],
+  .cn-suggest-item.is-active,
+  [role='option'][aria-selected='true'] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
 }

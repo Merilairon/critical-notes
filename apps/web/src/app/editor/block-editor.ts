@@ -22,6 +22,7 @@ import { EDITOR_CONTEXT } from './editor-context';
 import { createSuggestions } from './suggestion/extensions';
 import { TemplateInsert } from '../templates/template-insert';
 import type { BlockNode } from '@cn/blocks';
+import { newTableNameScope, TableNames } from '../blocks/table-names';
 
 const SAFE_URL = (url: string) => /^(https?:|mailto:)/i.test(url);
 const newBlockId = () => `b${Math.random().toString(36).slice(2, 10)}`;
@@ -153,6 +154,7 @@ export class BlockEditor implements OnDestroy {
       TableHeader,
       TableCell,
       Highlight,
+      TableNames.configure({ scope: newTableNameScope() }),
       Details.configure({ persist: true }),
       DetailsSummary,
       DetailsContent,
