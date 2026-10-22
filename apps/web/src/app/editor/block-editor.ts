@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, effect, inject, Injector, input, output, signal, untracked, type OnDestroy, type WritableSignal } from '@angular/core';
+import { afterNextRender, ChangeDetectionStrategy, Component, effect, ElementRef, inject, Injector, input, output, signal, untracked, viewChild, type OnDestroy, type WritableSignal } from '@angular/core';
 import { Editor, Extension, type JSONContent } from '@tiptap/core';
 import { Details, DetailsContent, DetailsSummary } from '@tiptap/extension-details';
 import { DragHandle } from '@tiptap/extension-drag-handle';
@@ -9,6 +9,7 @@ import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table
 import { UniqueID } from '@tiptap/extension-unique-id';
 import { Placeholder } from '@tiptap/extensions';
 import type { Node as PMNode } from '@tiptap/pm/model';
+import { NodeSelection, Selection, TextSelection, type Transaction } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 import { TiptapEditorDirective } from 'ngx-tiptap';
 import { firstValueFrom } from 'rxjs';
@@ -25,6 +26,16 @@ import type { BlockNode } from '@cn/blocks';
 import { newTableNameScope, TableNames } from '../blocks/table-names';
 
 const SAFE_URL = (url: string) => /^(https?:|mailto:)/i.test(url);
+/**
+ * A table, callout, embed or rule as the last block leaves no place for a caret below it. A menu action that can
+ * leave one there adds an empty paragraph in the same transaction (undo removes both). Opening a page never does:
+ * that would count as an edit.
+ */
+function keepTrailingParagraph(tr: Transaction) {
+  const last = tr.doc.lastChild;
+  if (last && last.type.name !== 'paragraph' && last.type.name !== 'heading') tr.insert(tr.doc.content.size, tr.doc.type.schema.nodes['paragraph']!.create());
+}
+
 const newBlockId = () => `b${Math.random().toString(36).slice(2, 10)}`;
 
 interface MenuState {
@@ -32,6 +43,9 @@ interface MenuState {
   node: PMNode;
   x: number;
   y: number;
+  /** The control that opened the menu; Esc and Tab give focus back to it (the editor when there is none). */
+  opener: HTMLElement | null;
+  fromToolbar: boolean;
 }
 
 /** Keyboard shortcuts for DM-only visibility (game masters only). */
@@ -61,6 +75,17 @@ const VisibilityShortcuts = Extension.create<{ enabled: () => boolean }>({
   },
 });
 
+/** Ctrl+. opens the block options menu for the block holding the caret (Ctrl, also on a Mac: Cmd+. stops loading in Safari). */
+const BlockMenuShortcut = Extension.create<{ open: () => boolean }>({
+  name: 'blockMenuShortcut',
+  addOptions() {
+    return { open: () => false };
+  },
+  addKeyboardShortcuts() {
+    return { 'Ctrl-.': () => this.options.open() };
+  },
+});
+
 /**
  * Notion-style block editor on TipTap/ProseMirror. Emits Block Document JSON; the server sanitizes and
  * projects it. Custom blocks render through Angular node views.
@@ -77,38 +102,58 @@ const VisibilityShortcuts = Extension.create<{ enabled: () => boolean }>({
             <button type="button" class="inline-flex min-h-6 min-w-6 items-center justify-center rounded px-2 py-0.5 hover:bg-panel-2 touch:min-h-[44px] touch:min-w-[44px]" [title]="b.title" (mousedown)="$event.preventDefault()" (click)="b.run()">{{ b.label }}</button>
           }
         }
-        <span class="ml-auto px-2 text-xs text-muted">Type <kbd>/</kbd> for blocks, <kbd>[[</kbd> to link a page, <kbd>{{ '{' }}&#64;</kbd> for rules</span>
+        <button
+          type="button"
+          class="inline-flex min-h-6 min-w-6 items-center justify-center rounded px-2 py-0.5 hover:bg-panel-2 touch:min-h-[44px] touch:min-w-[44px]"
+          aria-label="Block options"
+          title="Block options (Ctrl+.)"
+          aria-haspopup="menu"
+          aria-keyshortcuts="Control+Period"
+          [attr.aria-expanded]="menu()?.fromToolbar ? 'true' : 'false'"
+          (mousedown)="$event.preventDefault()"
+          (click)="openFromToolbar($event)"
+        >
+          <span aria-hidden="true">⋯</span>
+        </button>
+        <span class="ml-auto px-2 text-xs text-muted">Type <kbd>/</kbd> for blocks, <kbd>[[</kbd> to link a page, <kbd>{{ '{' }}&#64;</kbd> for rules, <kbd>Ctrl+.</kbd> for block options</span>
       </div>
     }
     <tiptap-editor [editor]="editor" class="cn-editor cn-prose block" />
+    <div class="sr-only" role="status">{{ status() }}</div>
     @if (templateAt() !== null && store?.id(); as campaignId) {
       <cn-template-insert [campaignId]="campaignId" (inserted)="insertTemplate($event)" (closed)="templateAt.set(null)" />
     }
     @if (menu(); as m) {
       <div class="fixed inset-0 z-40" (click)="menu.set(null)"></div>
-      <div class="cn-block-menu" role="menu" [style.left.px]="m.x" [style.top.px]="m.y">
-        <div class="cn-block-menu-label">{{ m.node.type.name }}</div>
+      <div #blockMenu class="cn-block-menu" role="menu" tabindex="0" [attr.aria-label]="'Block options: ' + m.node.type.name" [style.left.px]="m.x" [style.top.px]="m.y" (keydown)="onMenuKey($event)">
+        <div class="cn-block-menu-label" aria-hidden="true">{{ m.node.type.name }}</div>
         @if (gm()) {
-          <button type="button" role="menuitemcheckbox" [attr.aria-checked]="m.node.attrs['visibility'] === 'dm'" (click)="toggleAttr(m, 'visibility')">
-            @if (m.node.attrs['visibility'] === 'dm') {<span aria-hidden="true">✓ </span>}DM only <kbd>Ctrl⇧D</kbd>
+          <button type="button" tabindex="-1" role="menuitemcheckbox" [attr.aria-checked]="m.node.attrs['visibility'] === 'dm'" (click)="toggleAttr(m, 'visibility')">
+            @if (m.node.attrs['visibility'] === 'dm') {<span aria-hidden="true">✓ </span>}DM only <kbd aria-hidden="true">Ctrl⇧D</kbd>
           </button>
           @if (m.node.attrs['visibility'] === 'dm' || m.node.type.name === 'secret') {
-            <button type="button" role="menuitemcheckbox" [attr.aria-checked]="!!m.node.attrs['revealed']" (click)="toggleAttr(m, 'revealed')">
-              @if (m.node.attrs['revealed']) {<span aria-hidden="true">✓ </span>}Revealed to players <kbd>Ctrl⇧R</kbd>
+            <button type="button" tabindex="-1" role="menuitemcheckbox" [attr.aria-checked]="!!m.node.attrs['revealed']" (click)="toggleAttr(m, 'revealed')">
+              @if (m.node.attrs['revealed']) {<span aria-hidden="true">✓ </span>}Revealed to players <kbd aria-hidden="true">Ctrl⇧R</kbd>
             </button>
           }
           <hr />
         }
-        <button type="button" role="menuitem" (click)="turnInto(m, 'paragraph')">Turn into text</button>
-        <button type="button" role="menuitem" (click)="turnInto(m, 'heading')">Turn into heading</button>
+        <button type="button" tabindex="-1" role="menuitem" (click)="turnInto(m, 'paragraph')">Turn into text</button>
+        <button type="button" tabindex="-1" role="menuitem" (click)="turnInto(m, 'heading')">Turn into heading</button>
         @if (gm()) {
-          <button type="button" role="menuitem" (click)="wrap(m, 'secret')">Wrap in DM secret</button>
+          <button type="button" tabindex="-1" role="menuitem" (click)="wrap(m, 'secret')">Wrap in DM secret</button>
         }
-        <button type="button" role="menuitem" (click)="wrap(m, 'callout')">Wrap in callout</button>
-        <button type="button" role="menuitem" (click)="wrap(m, 'readAloud')">Wrap in read-aloud</button>
+        <button type="button" tabindex="-1" role="menuitem" (click)="wrap(m, 'callout')">Wrap in callout</button>
+        <button type="button" tabindex="-1" role="menuitem" (click)="wrap(m, 'readAloud')">Wrap in read-aloud</button>
         <hr />
-        <button type="button" role="menuitem" (click)="duplicate(m)">Duplicate</button>
-        <button type="button" role="menuitem" class="text-accent" (click)="remove(m)">Delete</button>
+        @if (canMove(m, -1)) {
+          <button type="button" tabindex="-1" role="menuitem" (click)="move(m, -1)">Move up</button>
+        }
+        @if (canMove(m, 1)) {
+          <button type="button" tabindex="-1" role="menuitem" (click)="move(m, 1)">Move down</button>
+        }
+        <button type="button" tabindex="-1" role="menuitem" (click)="duplicate(m)">Duplicate</button>
+        <button type="button" tabindex="-1" role="menuitem" class="text-accent" (click)="remove(m)">Delete</button>
       </div>
     }`,
 })
@@ -124,6 +169,8 @@ export class BlockEditor implements OnDestroy {
   private readonly editorContext = inject(EDITOR_CONTEXT) as { pageId: WritableSignal<string | null> };
   readonly pageIdSignal = this.editorContext.pageId;
   protected readonly menu = signal<MenuState | null>(null);
+  /** Polite status line: what a block menu action did. */
+  protected readonly status = signal('');
   /** Where a chosen template goes (set by the "/" menu's Template… item). */
   protected readonly templateAt = signal<number | null>(null);
 
@@ -131,6 +178,8 @@ export class BlockEditor implements OnDestroy {
   protected readonly store = inject(CampaignStore, { optional: true });
   private readonly context = inject(ContextService);
   private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly menuEl = viewChild<ElementRef<HTMLElement>>('blockMenu');
   /** Players edit only their own character: no DM-only controls. Outside a campaign, everything is offered. */
   protected readonly gm = () => this.store?.isGm() ?? true;
   private hovered: PMNode | null = null;
@@ -193,6 +242,7 @@ export class BlockEditor implements OnDestroy {
         onNodeChange: ({ node }) => (this.hovered = node),
       }),
       VisibilityShortcuts.configure({ enabled: this.gm }),
+      BlockMenuShortcut.configure({ open: () => this.openAtCaret(null) }),
       Placeholder.configure({ placeholder: () => this.placeholder(), includeChildren: false }),
     ],
     editorProps: { attributes: { class: 'min-h-48 outline-none pl-6', spellcheck: 'true' } },
@@ -203,6 +253,18 @@ export class BlockEditor implements OnDestroy {
 
   constructor() {
     effect(() => this.pageIdSignal.set(this.pageId()));
+    // A menu that appears takes focus (its first item)
+    effect(() => {
+      const el = this.menuEl()?.nativeElement;
+      if (!el) return;
+      untracked(() => {
+        // Keep the whole menu in the viewport (it scrolls when taller than the window)
+        const m = this.menu();
+        const y = m ? Math.max(8, Math.min(m.y, window.innerHeight - el.offsetHeight - 8)) : 0;
+        if (m && y !== m.y) this.menu.set({ ...m, y });
+        this.items()[0]?.focus();
+      });
+    });
     effect(() => {
       const doc = this.doc();
       untracked(() => {
@@ -228,7 +290,7 @@ export class BlockEditor implements OnDestroy {
     el.className = 'cn-drag-handle';
     el.textContent = '⠿';
     el.title = 'Drag to move · click for options';
-    el.setAttribute('aria-label', 'Block options');
+    el.setAttribute('aria-label', 'Drag or open block options');
     // Hidden until the extension shows it next to a block (it would sit in the page's top-left corner)
     el.style.visibility = 'hidden';
     el.addEventListener('click', (e) => {
@@ -238,9 +300,117 @@ export class BlockEditor implements OnDestroy {
       const node = this.editor.state.doc.nodeAt(pos);
       if (!node) return;
       const rect = el.getBoundingClientRect();
-      this.menu.set({ pos, node, x: Math.max(8, rect.left), y: rect.bottom + 4 });
+      this.openMenu({ pos, node, x: rect.left, y: rect.bottom + 4, opener: el, fromToolbar: false });
     });
     return el;
+  }
+
+  /** Opens the menu for the top-level block that holds the caret; false when there is none. */
+  private openAtCaret(opener: HTMLElement | null): boolean {
+    if (!this.editable()) return false;
+    const { state, view } = this.editor;
+    // The "/", "[[" and "{@" popup owns the keys while it is open
+    if (view.dom.getAttribute('aria-expanded') === 'true') return false;
+    const { $from, head } = state.selection;
+    const pos = $from.depth > 0 ? $from.before(1) : $from.pos;
+    const node = state.doc.nodeAt(pos);
+    if (!node) return false;
+    let x: number;
+    let y: number;
+    if (opener) {
+      const rect = opener.getBoundingClientRect();
+      x = rect.left;
+      y = rect.bottom + 4;
+    } else {
+      const caret = view.coordsAtPos(Math.min(head, state.doc.content.size));
+      x = caret.left;
+      y = caret.bottom + 4;
+    }
+    this.openMenu({ pos, node, x, y, opener, fromToolbar: !!opener });
+    return true;
+  }
+
+  protected openFromToolbar(event: Event) {
+    this.openAtCaret(event.currentTarget as HTMLElement);
+  }
+
+  private openMenu(m: MenuState) {
+    // Keep the 15rem menu inside the viewport
+    const x = Math.max(8, Math.min(m.x, window.innerWidth - 248));
+    this.menu.set({ ...m, x, y: Math.max(8, m.y) });
+  }
+
+  private items(): HTMLElement[] {
+    return Array.from(this.host.nativeElement.querySelectorAll<HTMLElement>('.cn-block-menu [role^="menuitem"]'));
+  }
+
+  /** Menu keyboard pattern: arrows (wrapping), Home/End, Esc closes and returns focus, Tab closes. */
+  protected onMenuKey(event: KeyboardEvent) {
+    const items = this.items();
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    const go = (i: number) => {
+      event.preventDefault();
+      items[(i + items.length) % items.length]?.focus();
+    };
+    switch (event.key) {
+      case 'ArrowDown':
+        return go(at + 1);
+      case 'ArrowUp':
+        return go(at < 0 ? -1 : at - 1);
+      case 'Home':
+        return go(0);
+      case 'End':
+        return go(-1);
+      case 'Escape':
+        event.preventDefault();
+        event.stopPropagation();
+        return this.closeMenu();
+      case 'Tab':
+        // Focus returns to the opener first, so Tab then moves on from there
+        return this.closeMenu();
+    }
+  }
+
+  private closeMenu() {
+    const opener = this.menu()?.opener;
+    this.menu.set(null);
+    if (opener?.isConnected) opener.focus();
+    if (!opener?.isConnected || document.activeElement !== opener) this.editor.view.focus();
+  }
+
+  private announce(message: string) {
+    clearTimeout(this.statusTimer);
+    this.status.set('');
+    afterNextRender(() => this.status.set(message), { injector: this.injector });
+    // Not left in the page for a screen reader's reading cursor to find later
+    this.statusTimer = setTimeout(() => this.status.set(''), 3000);
+  }
+  private statusTimer: ReturnType<typeof setTimeout> | undefined;
+
+  protected canMove(m: MenuState, dir: -1 | 1): boolean {
+    return dir < 0 ? m.pos > 0 : m.pos + m.node.nodeSize < this.editor.state.doc.content.size;
+  }
+
+  protected move(m: MenuState, dir: -1 | 1) {
+    const { doc } = this.editor.state;
+    const node = doc.nodeAt(m.pos);
+    const sibling = dir < 0 ? doc.resolve(m.pos).nodeBefore : doc.resolve(m.pos + (node?.nodeSize ?? 0)).nodeAfter;
+    if (!node || !sibling) return this.menu.set(null);
+    const target = dir < 0 ? m.pos - sibling.nodeSize : m.pos + sibling.nodeSize;
+    this.editor.view.focus();
+    this.editor
+      .chain()
+      .command(({ tr }) => {
+        tr.delete(m.pos, m.pos + node.nodeSize).insert(target, node);
+        keepTrailingParagraph(tr);
+        // An atom or leaf block (rule, embed) has no text to hold a caret: select the block itself
+        tr.setSelection(node.isAtom || node.isLeaf ? NodeSelection.create(tr.doc, target) : TextSelection.near(tr.doc.resolve(target + 1))).scrollIntoView();
+        return true;
+      })
+      .run();
+    this.menu.set(null);
+    const index = this.editor.state.doc.resolve(target).index(0) + 1;
+    this.announce(`Block moved ${dir < 0 ? 'up' : 'down'}, now ${index} of ${this.editor.state.doc.childCount}`);
   }
 
   /** Top-level block next to the drag handle. */
@@ -258,28 +428,37 @@ export class BlockEditor implements OnDestroy {
     const node = this.editor.state.doc.nodeAt(m.pos);
     if (!node) return;
     const value = attr === 'visibility' ? (node.attrs['visibility'] === 'dm' ? 'inherit' : 'dm') : !node.attrs['revealed'];
-    this.editor.chain().focus().command(({ tr }) => {
+    this.editor.view.focus();
+    this.editor.chain().command(({ tr }) => {
       tr.setNodeMarkup(m.pos, undefined, { ...node.attrs, [attr]: value });
       return true;
     }).run();
     this.menu.set(null);
+    const on = attr === 'visibility' ? value === 'dm' : !!value;
+    this.announce(attr === 'visibility' ? (on ? 'Block marked DM only' : 'Block no longer DM only') : on ? 'Block revealed to players' : 'Block hidden from players');
   }
 
   protected turnInto(m: MenuState, type: 'paragraph' | 'heading') {
     this.editor.chain().focus().setTextSelection(m.pos + 1)[type === 'heading' ? 'setHeading' : 'setParagraph']({ level: 2 } as never).run();
     this.menu.set(null);
+    this.announce(type === 'heading' ? 'Turned into heading' : 'Turned into text');
   }
 
   protected wrap(m: MenuState, type: 'secret' | 'callout' | 'readAloud') {
     const node = this.editor.state.doc.nodeAt(m.pos);
     if (!node) return;
     const json = node.toJSON();
+    this.editor.view.focus();
     this.editor
       .chain()
-      .focus()
       .insertContentAt({ from: m.pos, to: m.pos + node.nodeSize }, { type, content: [json] })
+      .command(({ tr }) => {
+        keepTrailingParagraph(tr);
+        return true;
+      })
       .run();
     this.menu.set(null);
+    this.announce(`Block wrapped in ${{ secret: 'DM secret', callout: 'callout', readAloud: 'read-aloud' }[type]}`);
   }
 
   protected duplicate(m: MenuState) {
@@ -287,14 +466,35 @@ export class BlockEditor implements OnDestroy {
     if (!node) return;
     const json = node.toJSON() as { attrs?: Record<string, unknown> };
     if (json.attrs) json.attrs = { ...json.attrs, id: null };
-    this.editor.chain().focus().insertContentAt(m.pos + node.nodeSize, json).run();
+    this.editor.view.focus();
+    this.editor
+      .chain()
+      .insertContentAt(m.pos + node.nodeSize, json)
+      .command(({ tr }) => {
+        keepTrailingParagraph(tr);
+        return true;
+      })
+      .run();
     this.menu.set(null);
+    this.announce('Block duplicated');
   }
 
   protected remove(m: MenuState) {
     const node = this.editor.state.doc.nodeAt(m.pos);
-    if (node) this.editor.chain().focus().deleteRange({ from: m.pos, to: m.pos + node.nodeSize }).run();
+    this.editor.view.focus();
+    if (node) {
+      this.editor
+        .chain()
+        .command(({ tr }) => {
+          tr.delete(m.pos, m.pos + node.nodeSize);
+          // The caret goes to the end of the block before (or the start of the one after)
+          tr.setSelection(Selection.near(tr.doc.resolve(Math.min(m.pos, tr.doc.content.size)), -1)).scrollIntoView();
+          return true;
+        })
+        .run();
+    }
     this.menu.set(null);
+    if (node) this.announce('Block deleted');
   }
 
   protected readonly buttons = [
@@ -322,6 +522,7 @@ export class BlockEditor implements OnDestroy {
   }
 
   ngOnDestroy() {
+    clearTimeout(this.statusTimer);
     this.editor.destroy();
     this.handle.remove();
   }

@@ -484,6 +484,8 @@ body {
   box-shadow: 0 10px 30px rgb(0 0 0 / 0.2);
   padding: 0.3rem;
   font-size: 0.875rem;
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
 }
 .cn-block-menu button {
   display: flex;
@@ -493,7 +495,8 @@ body {
   padding: 0.25rem 0.5rem;
   text-align: left;
 }
-.cn-block-menu button:hover {
+.cn-block-menu button:hover,
+.cn-block-menu button:focus-visible {
   background: var(--panel-2);
 }
 .cn-block-menu kbd {
