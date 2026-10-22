@@ -9,6 +9,11 @@ Before you update, read the entries between your version and the new one, and
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-22
+
+Follow-up to 1.0.0: one new account feature, an accessibility pass, and a fix for the page count players see.
+There is nothing to do when updating; no database change is needed.
+
 ### Added
 
 - **Sign out other sessions** on the Account page: ends every other browser session of your account without changing
@@ -151,7 +156,8 @@ What to test:
 The changes in 1.0.0 are listed in the draft above, under "Unreleased". A release candidate publishes only the tag
 `1.0.0-rc.1`; it does not move `1.0` or `latest`.
 
-[Unreleased]: https://github.com/Merilairon/critical-notes/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Merilairon/critical-notes/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Merilairon/critical-notes/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Merilairon/critical-notes/releases/tag/v1.0.0
 [1.0.0-rc.3]: https://github.com/Merilairon/critical-notes/releases/tag/v1.0.0-rc.3
 [1.0.0-rc.2]: https://github.com/Merilairon/critical-notes/releases/tag/v1.0.0-rc.2
