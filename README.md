@@ -793,7 +793,7 @@ one-off creatures in a campaign's own homebrew.
 
 **Accounts and users.** Under **Account** (click your name at the top) you change your display name and your
 password; changing the password signs out your other sessions, and **Sign out other sessions** does the same without
-changing the password (this browser stays signed in). Revoking an AI token asks for confirmation first. The account page also shows the app version and your
+changing the password (this browser stays signed in). Revoking an AI token asks for confirmation first, in the app's own dialog (as does every other delete or discard in the app). The account page also shows the app version and your
 AI tokens. Admins get **Admin > Users**: disable and enable accounts (a disabled user cannot sign in and their tokens
 stop working), grant or revoke the admin role, create a one-time password reset link, and delete a user. For each
 campaign the user owns, you choose whether to transfer it to a member or archive it, so campaign content is never
@@ -809,7 +809,7 @@ trash and restore a page, but cannot delete permanently.
 **On a phone.** Below 1024 px wide the header is one row with a menu, and the campaign navigation opens as a drawer.
 Players can join by invite, read shared pages, edit their own character, use the inventory and the dice log, and
 follow the combat screen at 320 to 430 px, with 44 px tap targets and 16 px form text (so iOS does not zoom into
-fields). Exceptions: inline dice rolls in text (about 29 px high), the editor's formatting toolbar (21 to 34 px) and the
+fields). Exceptions: inline dice rolls in text (about 29 px high) and the
 inline "Sign in" link on the invite page. The DM's prep screens (settings, encounters, the tracker controls, the admin pages) stay desktop-first. The
 phone layout was tested in Chrome's phone emulation, not yet on real devices.
 

@@ -9,6 +9,14 @@ Before you update, read the entries between your version and the new one, and
 
 ## [Unreleased]
 
+### Changed
+
+- Every confirmation (deleting, leaving, discarding changes, ending combat) now asks in the app's own dialog instead of the browser's confirm box: keyboard and screen-reader friendly, and it follows the dark theme.
+- Accessibility: the search box and the reference pickers are proper comboboxes: arrow keys, the active result is announced, and the number of results is read out.
+- Accessibility: the editor's formatting toolbar buttons are at least 24 x 24 px (44 x 44 px on touch), and the admin screens' row buttons are taller (about 34 px, 44 px on touch).
+- Accessibility: the "DM" badge on secret blocks is larger (12 px) and readable in the dark theme.
+- Long page titles on the campaign overview, in "Linked from" and in the sidebar wrap instead of being cut off.
+
 ## [1.1.0] - 2026-10-22
 
 Follow-up to 1.0.0: one new account feature, an accessibility pass, and a fix for the page count players see.
