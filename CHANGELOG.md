@@ -18,11 +18,8 @@ Before you update, read the entries between your version and the new one, and
 
 ## [Unreleased]
 
-The first stable release. It adds account recovery, instance backups and restore, undo for deletions, and a published
-Docker image to update from.
-
-Phone-width layouts are **not** part of this release. The app has not been tested at phone width; for example the top
-navigation overflows by about 35 px at 390 px.
+The first stable release. It adds account recovery, instance backups and restore, undo for deletions, a layout for
+phone-width screens, and a published Docker image to update from.
 
 ### Before you start
 
@@ -69,6 +66,14 @@ navigation overflows by about 35 px at 390 px.
     Delete permanently, and automatic removal after 30 days.
   - AI assistants can list the trash (`list_trash`) and restore a deleted page (`restore_page`). Permanent deletion
     (purge) is not available to them.
+- **Phone-width screens for players.** Below 1024 px the header is one compact row with a menu, and the campaign
+  navigation opens as a drawer. Joining by invite, reading shared pages, your own character, the inventory, the dice
+  log and the combat screen for players are laid out for widths from 320 to 430 px, with 44 px tap targets and 16 px
+  form text, except inline dice rolls (about 29 px high), the editor's formatting toolbar (21 to 34 px) and the inline
+  "Sign in" link on the invite page. A browser test runs these player flows in an emulated phone (390 x 844, touch). This was checked in
+  Chrome's phone emulation only: iOS Safari, a real on-screen keyboard and notched screens have not been tried on real
+  devices. The DM's prep screens (settings, encounters, the tracker controls, the admin pages) stay desktop-first and
+  can still be cramped or overflow on a phone.
 - **Version in the app.** The Account page shows the version, `GET /api/health` returns it (`{"ok":true,"version":...}`),
   and every backup records it.
 - **Published Docker image.** `ghcr.io/merilairon/critical-notes` for `linux/amd64` and, once the first release
@@ -81,6 +86,10 @@ navigation overflows by about 35 px at 390 px.
 
 ### Changed
 
+- Some screens look slightly different on a desktop as well, because the phone layout shares their code: a page title
+  you can read is a heading that wraps, and an editable title wraps over several lines instead of being cut off;
+  read-only fields show plain text with a dash for an empty value; the inventory is a list of cards at every width;
+  placeholder text is darker for contrast.
 - Deleting a page no longer asks for confirmation. Use Undo, or restore it from the Trash within 30 days.
 - Changing your password signs out your other sessions (the current one stays).
 

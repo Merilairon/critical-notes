@@ -453,18 +453,21 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 
 ### 5.7 Release gate and waves
 
-### [ ] Task G1.1: Penetration test of the 1.0 candidate
+### [x] Task G1.1: Penetration test of the 1.0 candidate
 **Owner**: Penetration Tester · **QA**: Security Architect
+**Done:** 2026-10-22, QA Security Architect: PASS (2 rounds). Report: `docs/security/pentest-1.0.md`. F1-F21 live by the Penetration Tester; the live addendum A6-A9 (MCP crawl, REST/SSE as player, last-admin guard, reset-link Host, session cookies, SSRF) was run by the Orchestrator on an owner-run throwaway instance after the Penetration Tester's agent was halted twice by the tooling safety classifier and declined a relayed approval. No open High or Critical finding in F1-F25 (F22-F24 informational, F25 Low). F25 (SSRF block list missed 6to4, NAT64 local-use and `::a.b.c.d`) fixed in `fetch-url.ts` with tests, uncommitted and not re-run live. **Not covered:** loot award and inventory under hidden items, reference routes and homebrew file import as a player, redirect-to-private and DNS rebinding live (code review only, no redirect unit test), MCP write tools. **Backlog:** F22 (campaign list counts hidden pages), F23 (tracker name shown to players), F24 (no "sign out other sessions"), a redirect unit test.
 **Description**: Authorized test of a local instance only: sign-in and reset, invites, admin routes, visibility (players vs secrets), uploads, MCP tokens and tools, backups download.
 **Acceptance Criteria**: report in `docs/security/pentest-1.0.md`; no open High or Critical findings
 **Depends on**: all M-tasks
 
-### [ ] Task G1.2: Accessibility pass on new screens
+### [x] Task G1.2: Accessibility pass on new screens
 **Owner**: Accessibility Auditor · **QA**: UI Designer
+**Done:** 2026-10-22, QA UI Designer: PASS (after Code Reviewer PASS). Report: `docs/qa/a11y-1.0.md`. Account, Admin Users, Admin Backups, Reset and Trash pass in light and dark (axe-core 0 violations at 1280/390/320 px, keyboard-only flows). None passed as found; 9 defects fixed (field-border token `--control`, skip link, 24 px header checkbox, Search button name, Account focus, table header, aria fixes, page-tree list semantics). Field-border fix is partial (other `border-line` fields are backlog). **Not tested:** screen readers, real devices, forced-colors, reduced-motion. **For G1.4:** `pnpm e2e` was not run against these changes; confirm the trash and page-tree specs.
 **Description**: Account, Admin (users, backups), Reset, Trash: keyboard, focus, labels, contrast in both themes.
 
-### [ ] Task G1.3: Documentation sweep
+### [x] Task G1.3: Documentation sweep
 **Owner**: Technical Writer · **QA**: Product Manager
+**Done:** 2026-10-22, QA Product Manager: PASS (1 retry). README, ARCHITECTURE, STATUS, PLAN, CHANGELOG and RELEASE describe 1.0; the D7 phone paragraph is removed. Phone claims say Chrome emulation only, with the 44 px exceptions listed. Before the tag: the arm64 sentence and "alpha" in SECURITY.md need resolving; STATUS lines for G1.1, G1.2 and G1.4 must be updated when they land.
 **Description**: README, ARCHITECTURE, STATUS and PLAN reflect 1.0.
 
 ### [ ] Task G1.4: Release certification
@@ -668,7 +671,7 @@ The Senior Project Manager breaks these into tasks at the start of their release
 | D1 | The project license | M1.3, M5.1 | Product Manager, Legal Compliance Checker | Decided 2026-10-16: Apache-2.0; DCO sign-off, no CLA; copyright `Copyright (c) 2026 Merilairon` |
 | D2 | Where the repository lives (e.g. GitHub, public or private) and its name | M5.1–M5.5 | Git Workflow Master | Decided 2026-10-19: GitHub `Merilairon/critical-notes`, default branch `main` (pushed); history kept |
 | D3 | Approval of the first commit and of each release | M5.1, G1.4, G2.1 | Reality Checker | Open |
-| D4 | A self-hosted CI runner with a 5etools clone for browser tests | M5.3 | DevOps Automator | Open |
+| D4 | A self-hosted CI runner with a 5etools clone for browser tests | M5.3 | DevOps Automator | Skipped by the owner 2026-10-22: `pnpm e2e` stays a local gate; `e2e.yml` stays inactive |
 | D5 | What happens to a deleted user's campaigns (transfer or archive) | M2.4 | Identity & Access Engineer | Decided 2026-10-16: option C (admin chooses per owned campaign, transfer pre-selected; archive only with a co-DM; solo campaign can't be orphaned). Also decided: reset link is `/reset#<token>` (deviation from `/reset/:token`, log in PLAN.md at M2.9); `TRUST_PROXY` stays off in the shipped compose; on user delete, shared homebrew sources go to the acting admin, private ones and user templates stay ownerless |
 | B1 | Backup design decisions (backup.md D1-D10): keep 7, API backups protected 7 days and capped at 3x keep, `BACKUP_DIR`, `checksums.json` entry, durable `restore-log.jsonl`; restore revokes tokens/invites and carries over live restrictions; download needs a password ticket; restore is CLI-only; index rebuilt after restore; no encryption in 1.0; scheduler built as M3.5 | M3.2-M3.6 | Database Reliability Engineer, Security Architect | Decided 2026-10-17: all approved as recommended |
 | B2 | Should the shipped `docker-compose.yml` turn scheduled backups on by default (`BACKUP_EVERY_HOURS` default 24)? Recommended yes: the audience are not database people, disk use is bounded by keep 7, and the scheduler is what protects older backups from being rotated out. Bare installs stay off either way | M3.7 | Database Reliability Engineer | Decided 2026-10-18: yes, 24 (the owner said "do M3.7" after the recommendation; reversible by changing one default in `docker-compose.yml`) |

@@ -1,6 +1,6 @@
 # Status and next steps
 
-Snapshot: **2026-10-13**. **Every milestone of the plan, (a) to (i), is done**, and since then an **MCP server for AI assistants** (see [What the MCP server added](#what-the-mcp-server-added)). What could come next is in [After the plan](#after-the-plan). Task M5.6 (changelog, release guide, README "Updating") is written, see [Changelog and upgrade notes](#changelog-and-upgrade-notes-m56); the release itself waits for the owner decisions (D7: phone width) and the release candidate.
+Snapshot: **2026-10-22**. **Release 1.0 is feature complete and waiting for its gate.** Every milestone of the original plan, (a) to (i), is done, the MCP server for AI assistants is done, and so is the 1.0 work in [PROJECT.md](PROJECT.md): license (M1), account recovery and user administration (M2), instance backup and restore (M3), trash (M4), release process (M5) and phone-width player flows (M6). What is left before the `v1.0.0` tag is the release gate: the penetration test (G1.1), the accessibility pass (G1.2), release certification with the owner's approval (G1.4) and a release candidate (`v1.0.0-rc.1`), see [Before the 1.0 tag](#before-the-10-tag). What could come next is in [After the plan](#after-the-plan).
 The plan, its milestone table and the list of deviations live in [PLAN.md](PLAN.md). This file is for picking the work back up: what state the code is in and what to do next, in order.
 
 ## Where things stand
@@ -18,22 +18,44 @@ The plan, its milestone table and the list of deviations live in [PLAN.md](PLAN.
 | (h) Roles, invites, visibility everywhere, export/import, edition migration | ✅ done (2026-10-13) |
 | (i) Docker, docs, Postgres, Playwright | ✅ done (2026-10-13) |
 | After the plan: MCP server for AI assistants (tokens, `/mcp`, Markdown) | ✅ done (2026-10-13) |
+| 1.0 M1: license (Apache-2.0, DCO, no CLA), contributing guide, security policy, notices | ✅ done (2026-10-16) |
+| 1.0 M2: account page, user administration, reset links and command, rate limits | ✅ done, certified (2026-10-16) |
+| 1.0 M3: instance backup, scheduled backups, restore command, guide | ✅ done (2026-10-17 to 2026-10-18) |
+| 1.0 M4: trash for pages and templates, Undo, purge after 30 days, MCP `list_trash` and `restore_page` | ✅ done, certified with caveats (2026-10-18) |
+| 1.0 M5: CI, release workflow, app version, changelog and release guide | ✅ done; the release workflow has never run on GitHub |
+| 1.0 M6: phone-width player flows, `phone` browser project | ✅ done, certified as scoped (2026-10-21); emulation only |
+| 1.0 gate: G1.1 penetration test, G1.2 accessibility pass, G1.3 documentation sweep, G1.4 certification | G1.1, G1.2 and G1.3 done (2026-10-22); G1.4 certification: NEEDS WORK, see [RELEASE-CERTIFICATION-1.0.md](RELEASE-CERTIFICATION-1.0.md) |
 
-### Health checks (after the MCP server)
+### Before the 1.0 tag
+
+1. G1.4 certification is open (NEEDS WORK until the items in [RELEASE-CERTIFICATION-1.0.md](RELEASE-CERTIFICATION-1.0.md) are closed); the owner approves the release (D3).
+2. Push `main` to GitHub, make it the default branch (the owner pushed it on 2026-10-19), and add a tag protection rule for `v*` ([RELEASE.md](RELEASE.md)).
+3. Cut `v1.0.0-rc.1` first. Only a real tag push proves the `linux/arm64` build, the push to GHCR, the attestations, the release creation and the smoke test in CI. Keep the `linux/arm64` claim in the changelog only if the candidate ran on an arm64 machine. Make the package public afterwards, and test an anonymous `docker pull`.
+4. `SECURITY.md` is finished (2026-10-22: GitHub private reporting only, no email, acknowledgement within 7 days, latest release only). Enable private vulnerability reporting on the repository before the tag, and remove the README's "No published release yet, or the pull is denied" lines once the image is published.
+5. Rename `## [Unreleased]` in `CHANGELOG.md` to `## [1.0.0] - <date>`, set the version in `package.json` (now `1.0.0-dev`), and re-read the changelog entry against what the candidate did, including its phone claim.
+6. ~~Register a self-hosted runner for browser tests in CI (decision D4)~~ Skipped by the owner (2026-10-22): `pnpm e2e` is run locally before a release and `e2e.yml` stays inactive ([Browser tests in CI](#browser-tests-in-ci-task-m53-decision-d4)).
+
+### Accepted by the owner (M6, 2026-10-22)
+
+Accepted: the desktop differences below, phone coverage by Chrome emulation only (real devices stay untried), and the 29 px inline dice target.
+
+The phone work changed some things on desktop too ([Desktop differences](#player-content-views-on-a-phone-task-m64)): a reader's title is a wrapping heading and an editable title wraps over several lines, read-only fields show plain text, the inventory is a card list at every width, and placeholders are darker. The inline dice roll target is 29 px high, not 44 (a design decision, accepted), and real devices have not been tried (iOS Safari input zoom, notch and safe areas, a real on-screen keyboard).
+
+### Health checks (2026-10-22)
 
 | Check | Result |
 |---|---|
-| `pnpm -s typecheck` | ✅ all 6 projects and `e2e/` |
-| `pnpm -s lint` (ESLint and the raw-HTML guard) | ✅ |
-| `pnpm -s test` | ✅ 322 tests (packages and server), 42 tests (web) |
+| `pnpm -s typecheck` | ✅ (run 2026-10-22) |
+| `pnpm -s lint` (ESLint and the raw-HTML guard) | ✅ (run 2026-10-22) |
+| `pnpm -s test` | ✅ (run 2026-10-22) 792 tests in 46 files (packages and server), 241 tests in 28 files (web) |
 | `pnpm build` | ✅ server bundle (with the MCP SDK and the Markdown libraries); web initial bundle unchanged |
-| `pnpm e2e` (Playwright, fresh server from the bundle) | ✅ 64/64 (about 41 s), no browser errors |
-| Docker image (`docker compose up`, fresh volume) | ✅ rebuilt with the MCP server; Playwright 55/55 against it |
+| `pnpm e2e` (Playwright, fresh server from the bundle) | ✅ 99 passed, 8 skipped (the phone-only checks in the desktop project), about 60 s, with the `phone` project (last run by the Reality Checker for M6.5, 2026-10-21; not re-run for this sweep) |
+| Docker image (`docker compose up`, fresh volume) | last checked for M5.5 (local build, update and rollback with local images); the published image does not exist yet |
 
 ### Repository
-- The default branch is `main` (renamed from `master`, locally; nothing has been pushed to `origin` yet, so the remote still has only `master` until the owner pushes). The history is 20 commits; the audit found no `5etools-data/`, `var/`, rules text, art, traces, `.auth`, secrets or `Co-Authored-By` lines in any commit.
+- The default branch is `main`, pushed to `https://github.com/Merilairon/critical-notes` by the owner (decision D2, 2026-10-19). The history was audited then: no `5etools-data/`, `var/`, rules text, art, traces, `.auth`, secrets or `Co-Authored-By` lines in any commit. No release tag exists yet.
 - `5etools-data/` (the 5etools clones) and `var/` (databases and uploads) are gitignored and must stay out of git.
-- Commit messages must never carry `Co-Authored-By` lines; every commit carries a DCO `Signed-off-by` line.
+- Commit messages never carry `Co-Authored-By` lines; every commit carries a DCO `Signed-off-by` line ([CONTRIBUTING.md](../CONTRIBUTING.md)).
 
 ## How to resume
 
@@ -229,7 +251,7 @@ pnpm dev                 # server on :3000 (tsx watch); web on :4200 (proxies /a
 - **`BACKUP_DIR` writability**: `assertBackupDirWritable(dir)` (backup-fs.ts) runs after `validateBackupDir` in `main.ts` (after the restore marker check) and in the `BackupService` constructor, so the CLI `backup` gets it too: creates the folder with 0700 when missing, then creates, writes and unlinks a temp file. Refusal: `BackupError('dir-not-writable')`; the server prints `Refusing to start: The backup folder <dir> is not writable by this user (uid N). Fix the owner: chown 1000:1000 <dir> (Docker: docker compose run --rm --user root app chown 1000:1000 <dir>; the folder must be a volume or bind mount of the app service), or on a bare install make it writable for this user (chown $(id -u):$(id -g) <dir>), or point BACKUP_DIR at another folder` and exits 1 with nothing created; `admin backup` prints the same sentence and exits **73** (new, `EXIT.dirNotWritable`). `restore` never writes in `BACKUP_DIR`, so it is not checked there. EACCES/EPERM/EROFS on a path inside the backup folder during `create` becomes `dir-not-writable` (`lastErrorCode`), shown on the list as the fixed sentence `The last backup failed: the server may not write in the backup folder (BACKUP_DIR). Fix the folder owner (Docker: chown 1000:1000 on the folder); the server log has its path.`
 - **Restore hints** (`src/lib/admin-hints.ts`, the one place with the program path): bare = `node apps/server/dist/admin.mjs ...` from the repository folder, Docker = `docker compose run --rm app node admin.mjs ...`. `restoreBlockedMessage` now prints both as two lines (`Docker:       ...` / `Bare install: ...`), keeps `To FINISH it: stop the server (docker compose stop app...`, `run the same command again` and `To ABORT by hand`, and ends with `Then start the server again. Docker: docker compose up -d (works whether or not the container exists). Bare install: start the server again the way you normally do.` The restore report uses the same start sentence and gives `reset-link` as `Docker: ... reset-link <username>; bare install: ... reset-link <username>`. Unchanged on purpose: the 409 text for the API backup cap still says `node dist/admin.mjs backup` (the web page matches that substring; the Frontend Developer owns the change).
 - **API (additive, admin-only)**: `GET /api/admin/backups` (`BackupListDto`) gained `directory: string` (the absolute backups directory the server uses; inside Docker the path in the container) and `adminPrograms: { docker: "docker compose run --rm app node admin.mjs", bare: "node apps/server/dist/admin.mjs" }`. The page builds `<program> restore <directory>/<file> --check` from them.
-- **Page hint (Frontend half, `apps/web/src/app/admin/backups-page.ts`)**: the help panel builds every command from `directory` and `adminPrograms` of the list (no program path in the component): Docker = `docker compose stop app`, then `<docker> restore <directory>/<newest file or <file>> --check`, then `--yes`; bare = the same two with `<bare>` ("from the repository folder"); a third block shows `<docker> backup` and `<bare> backup`. The folder line says it is the folder the server reports and that a bare install should use the host path of DATA_DIR/backups or BACKUP_DIR. A server that sends neither field gets a README pointer and no commands. `directory` and `adminPrograms` are now required in `BackupListDto`. The 409 cap sentence from the server now ends `Use the command line instead (see the help on the Backups page).`; the page shows its own sentence (`...Use the command line instead (see the help below).`) when the 409 text starts with `Too many recent backups` (the only text match left; the count is dropped). Seen in a real browser (1280 and 390 px, light and dark): pre blocks wrap, none scrolls; axe 0 violations (closed and dialog open); the printed bare `restore <file> --check` run from the repo root exits 0. Known, not from this change: at 390 px the page is 35 px wider than the viewport (right edge 425) because of the header's MAIN nav (Campaigns, Reference, Homebrew, Templates, Users); the Users | Backups sub-nav (`cn-admin-nav`) fits.
+- **Page hint (Frontend half, `apps/web/src/app/admin/backups-page.ts`)**: the help panel builds every command from `directory` and `adminPrograms` of the list (no program path in the component): Docker = `docker compose stop app`, then `<docker> restore <directory>/<newest file or <file>> --check`, then `--yes`; bare = the same two with `<bare>` ("from the repository folder"); a third block shows `<docker> backup` and `<bare> backup`. The folder line says it is the folder the server reports and that a bare install should use the host path of DATA_DIR/backups or BACKUP_DIR. A server that sends neither field gets a README pointer and no commands. `directory` and `adminPrograms` are now required in `BackupListDto`. The 409 cap sentence from the server now ends `Use the command line instead (see the help on the Backups page).`; the page shows its own sentence (`...Use the command line instead (see the help below).`) when the 409 text starts with `Too many recent backups` (the only text match left; the count is dropped). Seen in a real browser (1280 and 390 px, light and dark): pre blocks wrap, none scrolls; axe 0 violations (closed and dialog open); the printed bare `restore <file> --check` run from the repo root exits 0. Known, not from this change: at 390 px the page was 35 px wider than the viewport (right edge 425) because of the header's MAIN nav (Campaigns, Reference, Homebrew, Templates, Users); the Users | Backups sub-nav (`cn-admin-nav`) fits (fixed in M6.3).
 - **README** (`## Backups`, config table, Docker bullet): scheduling on by default with Compose and `.env` reaching the container (override recipe for the variables removed; the `BACKUP_DIR` bind mount still needs a `volumes:` entry, kept as an override file with only that); one paragraph for the shutdown contract (8 s, nothing published, second signal); the `--init` workaround and every `docker stop takes 10 seconds` note removed; the shorter-hint paragraph removed; exit code 73 in the table; the `EACCES` entry replaced by the startup refusal entry and the page's `dir-not-writable` sentence. Verified in a real container (temporary image and compose project, removed): `printenv` of the three variables, stop in 0.4 s with the scheduler on, plain `docker run` without `--init` (node is PID 1) stops in 0.4 s with exit 0 and `docker kill -s INT` exits 0, root-owned bind mount: server refuses to start (container restarts in a loop under `restart: unless-stopped`), `admin backup` exits 73.
 - **Tests**: `shutdown.test.ts` (unit with fakes, real `BackupService` gated mid-backup, and spawned `main.ts`: SIGTERM and SIGINT idle with the scheduler off and on, SIGTERM and second-signal during a manual web backup), `backup-dir-writable.test.ts` (read-only and no-permission directories, read-only parent, service constructor, EACCES mapping, CLI exit 73, spawned server refusal creating nothing, marker message first), `config.test.ts` (empty = unset), `backup-routes.test.ts` (new fields), `restore-review.test.ts` (both command forms, `up -d`).
 
@@ -476,14 +498,17 @@ Design: [design/phone-layout.md](design/phone-layout.md) section 6; audit: [qa/p
 
 ## After the plan
 
-Everything in PLAN.md is built. Candidates for what comes next, roughly by value:
-1. **Make the first commit** (nothing is committed yet; see above), and choose a license for the project (the README says it is not chosen).
-2. **CI:** the gate (`pnpm -s typecheck && pnpm -s lint && pnpm -s test`) runs anywhere. The browser tests (and the optional real-data checks) need a 5etools clone, which a public CI must not download and keep: run them on a self-hosted runner, or keep them local.
-3. **Postgres at run time:** the schema is ready, but the services use better-sqlite3's synchronous API. Moving them to an async data layer is the real work.
-4. **OAuth for the MCP endpoint**, so it can be added as a custom connector on claude.ai (which signs in with OAuth instead of a pasted token).
+The plan and release 1.0 are built. The scope after 1.0 is in [PRD.md](PRD.md) sections 9 and 10 and in [PROJECT.md](PROJECT.md) sections 6 and 7 (release 1.1: keep links a player can't see, page history, reveal to players, tracker additions, query block views). Candidates, roughly by value:
+1. **Page history** and **reveal to players** (PRD N1, N3), the next releases' headline features.
+2. **Postgres at run time:** the schema is ready, but the services use better-sqlite3's synchronous API. Moving them to an async data layer is the real work.
+3. **OAuth for the MCP endpoint**, so it can be added as a custom connector on claude.ai (which signs in with OAuth instead of a pasted token).
+4. A phone pass on real devices, and phone layouts for the DM's prep screens.
 5. The gaps below.
 
 ## Known gaps and technical debt
+- **Phone (M6):** tested in Chrome's phone emulation only; the DM's prep screens (settings, encounters, tracker controls, admin pages) are not laid out for phones and still have targets under 44 px and, at 200 % text, a little overflow; the inline dice target is 29 px high; the editor's formatting toolbar (21-34 x 24 px) is outside the browser test's target sweep (`KNOWN_SMALL` in `players.spec.ts`); the phone project does not cover widths 320/360/430, landscape, text zoom, dark mode or axe. The accessibility backlog from M6.4 went to G1.2 (editor `.tiptap` input name, sidebar list markup, DM-secret badge contrast in dark, editors have no `h1`, and others, see PROJECT.md M6.4).
+- **Backups:** not encrypted (the guide says how to encrypt copies); no lock-out guard when a restore's carry-over leaves no enabled admin; an unreadable live `app.sqlite` gives a vague message; the Backups page detects the backup cap from the server's 409 text. More in the follow-up lists of the backup sections below.
+- **Trash:** purging a very large trash is one synchronous pass; a clock that jumps far forward is not detected; a child template restored after its parent was purged only gets a sentence in the restore status; there is no browser test of the co-DM Trash view; players never see campaign templates (pre-existing).
 - MCP: editing a paragraph through Markdown drops its underline and highlight (Markdown has neither); unchanged paragraphs keep them. Tables with merged cells, hidden list items and blocks inside table cells are shown as placeholder lines.
 - A player's save turns links to pages they can't see into plain text (their projection has the text only). This is the same in the web editor and through MCP.
 - Upload thumbnails are made and served (`?size=thumb`), but the web app does not use them yet (galleries, the campaign cover).
@@ -577,7 +602,7 @@ Everything in PLAN.md is built. Candidates for what comes next, roughly by value
 
 ## Changelog and upgrade notes (M5.6)
 
-- **`CHANGELOG.md`** (Keep a Changelog). The 1.0.0 entry is drafted under `## [Unreleased]` because the release date is not known; the release workflow reads only `## [X.Y.Z] - date`. At release time rename the heading and add a new empty `[Unreleased]` (steps in `docs/RELEASE.md`). Checked: with the heading renamed to `## [1.0.0] - 2026-11-01` in a scratch copy, `node scripts/changelog-section.mjs 1.0.0 <copy>` prints the notes; on the committed file it exits 1 (no `[1.0.0]` section) on purpose. The phone work (Epic M6) is not done and the entry says so.
+- **`CHANGELOG.md`** (Keep a Changelog). The 1.0.0 entry is drafted under `## [Unreleased]` because the release date is not known; the release workflow reads only `## [X.Y.Z] - date`. At release time rename the heading and add a new empty `[Unreleased]` (steps in `docs/RELEASE.md`). Checked: with the heading renamed to `## [1.0.0] - 2026-11-01` in a scratch copy, `node scripts/changelog-section.mjs 1.0.0 <copy>` prints the notes; on the committed file it exits 1 (no `[1.0.0]` section) on purpose. The entry used to say phone layouts were not part of the release; with Epic M6 done (decision D7) that paragraph is gone and a "Phone-width screens for players" item says what was tested (emulation only).
 - **`docs/RELEASE.md`**: one-time GitHub setup, gate checklist, release steps (bump version, changelog heading, merge, tag), rc tag first, what the workflow does, failure and yanking, the `latest` caveat.
 - **README "Updating"**: changelog, backup first, `CN_VERSION`, `docker compose pull && docker compose up -d`, migrations on start, no downgrade (restore the pre-update backup), bare-install steps.
 - **Not verified**: the rollback recipe (restoring a pre-update backup with the older image over a database a newer version migrated) was not run; the release workflow has still never run on GitHub; the `v1.0.0` links at the bottom of the changelog are added at release time.

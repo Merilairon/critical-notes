@@ -21,6 +21,13 @@ The rules (spells, monsters, items, …) come from your own local copy of the 5e
 - **Players.** Invite links, a co-DM role, players editing their own character. What the DM hides is never
   sent to a player's browser: the server leaves it out of every response.
 - **Campaign export and import** as a zip file.
+- **Accounts and administration.** Everyone changes their own name and password on the Account page; the admin
+  manages users, resets passwords with one-time links and can always recover a locked-out account from the command
+  line ([Locked out?](#locked-out-recover-an-account)).
+- **Backups and trash.** One-click or scheduled instance backups with a tested restore ([Backups](#backups)), and a
+  30-day trash for deleted pages and templates with Undo and Restore.
+- **Phone-friendly for players** (tested in Chrome's phone emulation). Reading, your own character, the inventory, dice and the combat screen work on
+  phone-width screens ([Using it](#using-it)).
 - **AI assistants (MCP).** Connect Claude or another MCP client with a personal token: it can read and write
   pages, encounters, the inventory, homebrew and templates, with exactly your rights.
 
@@ -59,7 +66,7 @@ in the campaign's settings (there is no open sign-up).
   that handles TLS). With an `https://` address, session cookies are marked Secure.
 
 **Image and versions.** Compose uses the published image `ghcr.io/merilairon/critical-notes` (linux/amd64 and
-linux/arm64). `docker compose pull && docker compose up -d` moves to the newest release; database migrations run when the
+linux/arm64; the arm64 build is made by the release workflow and is untested until the first release candidate has run on an arm64 machine). `docker compose pull && docker compose up -d` moves to the newest release; database migrations run when the
 server starts, so [back up first](#updating) (the Updating section has the steps). Pin a version with `CN_VERSION=1.2.0` in `.env` (the default is `latest`).
 To build from a checkout instead (before the first release, if the pull is denied, or while developing):
 `docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`.
@@ -784,6 +791,27 @@ on any reference entry starts a variant that stores only your changes. Import 5e
 URL); export a source as a 5etools homebrew file. Share a source with chosen campaigns, or keep quick
 one-off creatures in a campaign's own homebrew.
 
+**Accounts and users.** Under **Account** (click your name at the top) you change your display name and your
+password; changing the password signs out your other sessions. The account page also shows the app version and your
+AI tokens. Admins get **Admin > Users**: disable and enable accounts (a disabled user cannot sign in and their tokens
+stop working), grant or revoke the admin role, create a one-time password reset link, and delete a user. For each
+campaign the user owns, you choose whether to transfer it to a member or archive it, so campaign content is never
+lost with the account. These actions ask for the admin's own password again. **Admin > Backups** is described under
+[Backups](#backups).
+
+**Trash.** Deleting a page moves it, with its subpages, to the campaign's Trash; the editor shows **Deleted · Undo**
+instead of asking first. DMs and co-DMs open **Trash** in the campaign menu to restore a page (links, backlinks and
+search come back with it) or delete it permanently. Deleted templates are listed at the bottom of the template
+library with the same two choices. Both kinds are removed for good after 30 days. AI assistants can list the page
+trash and restore a page, but cannot delete permanently.
+
+**On a phone.** Below 1024 px wide the header is one row with a menu, and the campaign navigation opens as a drawer.
+Players can join by invite, read shared pages, edit their own character, use the inventory and the dice log, and
+follow the combat screen at 320 to 430 px, with 44 px tap targets and 16 px form text (so iOS does not zoom into
+fields). Exceptions: inline dice rolls in text (about 29 px high), the editor's formatting toolbar (21 to 34 px) and the
+inline "Sign in" link on the invite page. The DM's prep screens (settings, encounters, the tracker controls, the admin pages) stay desktop-first. The
+phone layout was tested in Chrome's phone emulation, not yet on real devices.
+
 **Templates.** Write placeholders in a template's text: `{{name}}`, `{{dc: number = 13}}`,
 `{{creature: reference<monster>}}`, `{{mood: select(calm|angry)}}`; `{{rules.race}}` becomes "Race" or
 "Species" by the campaign's edition. Insert a template with `/` → Template…, as a copy or linked (linked
@@ -831,7 +859,9 @@ blocks a player can't see, stays exactly as it was. Revoke a token on the Accoun
 ```sh
 pnpm dev                   # server on :3000 (tsx watch), web on :4200 (proxies /api and /img)
 pnpm -s typecheck && pnpm -s lint && pnpm -s test     # the gate before every change goes in
-pnpm e2e                   # builds, starts the server on a fresh data folder, runs the browser tests
+pnpm e2e                   # builds, starts the server on a fresh data folder, runs the browser tests (desktop and phone)
+pnpm e2e:phone             # only the phone project (390 x 844, touch) for the player flows
+pnpm drill                 # builds the server and rehearses a backup and restore
 pnpm index [--force]       # rebuild the reference index by hand
 pnpm --filter @cn/server db:generate                   # migrations after a schema change (both dialects)
 ```
@@ -845,14 +875,14 @@ pnpm --filter @cn/server db:generate                   # migrations after a sche
   the synchronous SQLite driver, so running on Postgres needs a port of the data layer first.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) explains how the pieces fit together, with the data model.
   [docs/PLAN.md](docs/PLAN.md) is the original plan with its deviations; [docs/STATUS.md](docs/STATUS.md)
-  the current state; [DATA_NOTES.md](DATA_NOTES.md) what the 5etools data looks like.
+  the current state; [docs/RELEASE.md](docs/RELEASE.md) how a release is cut; [DATA_NOTES.md](DATA_NOTES.md) what the 5etools data looks like.
 
 ## Licensing
 
 - **This project's code.** Critical Notes is licensed under the [Apache License 2.0](LICENSE)
   (Copyright (c) 2026 Merilairon). The license covers only this repository's own code and documents. It does
   not cover or grant any right in the game content below. Contributions are accepted under the same license,
-  with a DCO sign-off (`git commit -s`) and no CLA; the details come with CONTRIBUTING.md.
+  with a DCO sign-off (`git commit -s`) and no CLA; the details are in [CONTRIBUTING.md](CONTRIBUTING.md).
 - **Game content and art.** The rules text, statblocks and other content in 5etools, and the art in
   5etools-img, belong to Wizards of the Coast, the credited artists or their rights holders. Only the text of
   the System Reference Documents 5.1 and 5.2 is available under

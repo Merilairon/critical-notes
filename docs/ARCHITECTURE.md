@@ -11,13 +11,15 @@ flowchart LR
     web["apps/web<br/>Angular app"]
   end
   subgraph Server["apps/server (Hono on Node)"]
-    routes["routes/<br/>auth, campaigns, play,<br/>reference, homebrew,<br/>templates, uploads, img"]
-    services["services/<br/>pages, visibility, campaigns,<br/>homebrew, templates, encounters,<br/>trackers, inventory, transfer, migration"]
+    routes["routes/<br/>auth, admin, backups, campaigns,<br/>play, reference, homebrew,<br/>templates, uploads, img, mcp"]
+    services["services/<br/>pages, visibility, campaigns, users,<br/>homebrew, templates, encounters,<br/>trackers, inventory, transfer, migration,<br/>backups, backup-scheduler, trash-purger"]
     indexer["reference/<br/>indexer + ReferenceService"]
+    cli["dist/admin.mjs<br/>reset-link, backup, restore"]
   end
   appdb[("DATA_DIR/app.sqlite<br/>campaigns, pages, users, …")]
   indexdb[("DATA_DIR/index.sqlite<br/>reference index (rebuildable)")]
   uploads[("DATA_DIR/uploads/")]
+  backups[("BACKUP_DIR (default DATA_DIR/backups)<br/>backup zips")]
   src[["5etools-src<br/>(read-only)"]]
   img[["5etools-img<br/>(read-only)"]]
 
@@ -30,6 +32,9 @@ flowchart LR
   indexer --> indexdb
   indexer -. "reads at startup" .-> src
   routes -. "serves files" .-> img
+  services --> backups
+  cli --> appdb
+  cli --> backups
 ```
 
 The shared packages hold everything that does not depend on a framework, so the server and the web app use
@@ -41,14 +46,14 @@ the same code:
 | `packages/blocks` | The block document: the registry of block types (zod attribute schemas, content rules), `sanitizeDoc`, the player projection `projectDoc`, `mergePlayerEdit`, text and link extraction, the query DSL. |
 | `packages/templates` | Template placeholders (`{{dc: number = 13}}`), typed values, substitution, page template inheritance, the built-in templates. |
 | `packages/shared` | The API's types and zod input schemas (used by the server's validators and the web app), page types and facets, the initiative tracker reducer, inventory projections. |
-| `apps/server` | The HTTP API on [Hono](https://hono.dev), Drizzle on better-sqlite3, the indexer, image and upload routes, the tracker's event stream. |
-| `apps/web` | The Angular app (standalone components, signals, zoneless): the TipTap block editor with Angular node views, the reference browser and renderer, the campaign views. |
+| `apps/server` | The HTTP API on [Hono](https://hono.dev), Drizzle on better-sqlite3, the indexer, image and upload routes, the tracker's event stream, the backup and trash services, and the `admin.mjs` command line. |
+| `apps/web` | The Angular app (standalone components, signals, zoneless): the TipTap block editor with Angular node views, the reference browser and renderer, the campaign views, the admin pages. |
 
 ## Two databases
 
-- **`app.sqlite`** holds what users create: users and sessions, campaigns and members, pages and their facets
+- **`app.sqlite`** holds what users create: users and sessions, password reset links, campaigns and members, pages and their facets
   and properties, homebrew, templates, encounters, trackers, inventory. It is the only thing to back up (with
-  `uploads/`). Migrations are in `apps/server/drizzle/`; they run at startup.
+  `uploads/`; the [backup service](#backups-and-restore) does exactly that). Migrations are in `apps/server/drizzle/`; they run at startup.
 - **`index.sqlite`** is derived and can be deleted at any time. It holds the reference: every 5etools entity
   after inheritance is resolved, homebrew entities indexed the same way, full-text search (FTS5) over both, and
   the campaign page search with separate DM and player text. The indexer fingerprints the data files and
@@ -72,6 +77,54 @@ reference index stays SQLite either way.
 5. **Validation** of inputs with the zod schemas from `@cn/shared`.
 6. **Service** logic, then **projection** for players (below), then JSON. Event streams (the tracker) are
    not compressed, so updates arrive at once.
+
+## Accounts and administration
+
+- **Users** have `is_admin` and `disabled_at`. A disabled user cannot sign in, their sessions end and their API
+  tokens stop working. The last enabled admin cannot be disabled, demoted or deleted.
+- **Password reset links** (`password_resets`): the link is `/reset#<token>`. The token is in the URL fragment, so
+  it never reaches an access log or a `Referer` header; only its SHA-256 is stored. A link works once, expires after
+  24 hours, and a newer link for the same user replaces the older one. Admins make links on the Users page;
+  `node admin.mjs reset-link <username>` makes one from the shell when the only admin is locked out.
+- **Deleting a user** never deletes campaign content. For each campaign the user owns, the admin transfers it to a
+  member or archives it (archiving needs a co-DM; a solo campaign cannot be orphaned).
+- **Step-up:** protected admin actions (changing a user, except enabling a non-admin; deleting a user; reset links; backup
+  downloads) ask for the admin's own password again. Sign-in, registration, reset and step-up attempts are rate limited in memory
+  (`lib/rate-limit.ts`); `TRUST_PROXY=1` makes the limits use `X-Forwarded-For`, and is only safe behind a proxy
+  that overwrites it.
+- **Audit:** security-relevant events (user deletion, password resets and reset links, backups and their downloads, page
+  and template purges and template restores) are one JSON line each on the server's standard output (`lib/audit.ts`). Never a token, link or password.
+
+## Backups and restore
+
+The design is in [design/backup.md](design/backup.md); this is the short version.
+
+- **One zip** holds `manifest.json` (app version, migration level, counts, who started it), a consistent copy of
+  `app.sqlite` made with SQLite's online backup while the app runs, `uploads/`, and `checksums.json`. A backup is
+  read back and verified before it counts. It is **not encrypted**: it holds password hashes and DM secrets.
+- **Who makes one:** an admin on **Admin > Backups** (`/api/admin/backups`, downloads need a one-time ticket
+  bought with the admin's password), the shell (`node admin.mjs backup`), or the scheduler
+  (`BACKUP_EVERY_HOURS`, off for a bare install, 24 in the shipped `docker-compose.yml`). All three go through
+  `BackupService.create`, which holds one lock, so only one backup runs at a time. Retention keeps the newest
+  `BACKUP_KEEP` (default 7); backups made from the web page are protected for 7 days.
+- **Restore is command line only** (`node admin.mjs restore <file> [--check|--yes]`). It stops if the server is
+  running, checks the zip, upgrades an older database, moves the live data to `pre-restore-<time>/`, installs the
+  backup, and rolls back on failure. A `.restore-in-progress` marker in `DATA_DIR` makes a crashed restore
+  resumable and keeps the server from starting on half-swapped files. A backup from a newer version is refused.
+  It signs everyone out and revokes API tokens and invites. The search index is rebuilt on the next start.
+- **Tested in CI:** `pnpm drill` (`apps/server/scripts/restore-drill.mjs`) backs up a running server, wipes the data,
+  restores, starts the server again and checks users, campaign, page, image and login over HTTP; `schema-allowlist.test.ts` fails when a new migration uses something a restore has not
+  been reviewed for.
+- **Shutdown:** the server always handles SIGTERM and SIGINT and waits up to 8 seconds for a running backup; the
+  shipped compose file sets `init: true` and `stop_grace_period: 15s` for this.
+
+## Trash
+
+Deleting a page sets `deleted_at` on it and its subpages. Deleted pages disappear from the tree, search, queries
+and backlinks (the page index drops them), and Restore rebuilds the derived rows, so links, backlinks and search come
+back. Templates and homebrew use the same soft delete. `trash-purger` removes pages and templates deleted more than
+30 days ago (`TRASH_RETENTION_DAYS`, first about a minute after start and then daily); it waits while a backup or restore
+runs. **Delete permanently** is `DELETE .../purge`; it is never on the MCP allowlist.
 
 ## What players can see
 
@@ -115,6 +168,17 @@ SHA-256 stored), read only or read and write, made and revoked on the Account pa
   hidden blocks back in place.
 - The sentinel crawl calls every read tool as a player too.
 
+## The web app on a phone
+
+Below Tailwind's `lg` breakpoint (1024 px) the app shell switches to a compact 56 px header (48 px in short landscape)
+with a menu and a campaign drawer; from `lg` the original inline header is unchanged. The shell is the same
+markup, switched with `max-lg:` and `lg:` utilities. Touch devices get 44 px targets and 16 px form text through the
+`touch:` variant and the shared `.cn-input` and `.cn-btn` classes in `styles.css`; `LayoutService` holds the drawer
+state and whether the window counts as a phone. The design is [design/phone-layout.md](design/phone-layout.md), the
+audit that led to it [qa/phone-audit.md](qa/phone-audit.md). Only player flows were re-laid-out; the DM's prep
+screens stay desktop-first. The Playwright project `phone` (Chrome emulation of 390 x 844 with touch, not a real device; its own server on port 3211) runs the
+player specs and checks for sideways scroll, header height and target sizes.
+
 ## Editions
 
 A campaign's policy is `{ruleset, crossEdition, sourceOverrides}`. The edition of a source comes from the
@@ -141,10 +205,15 @@ only).
 
 ## Deployment
 
-`pnpm build` bundles the server with esbuild into `apps/server/dist/main.mjs`. Native modules (better-sqlite3,
+`pnpm build` bundles the server with esbuild into `apps/server/dist/main.mjs` and the command line into
+`dist/admin.mjs`; the bundle bakes in the root `package.json` version, which `/api/health` (public, returns only `ok`
+and the version) and every backup report. Native modules (better-sqlite3,
 argon2, sharp) and `5etools-utils` stay external; `dist/package.json` lists them. The Docker image builds the
 bundle and the web app, installs only those packages, and runs as the `node` user with the 5etools clones
-mounted read-only.
+mounted read-only. A pushed tag `vX.Y.Z` runs `.github/workflows/release.yml`, which gates the commit, builds the
+image for `linux/amd64` and `linux/arm64`, pushes it to `ghcr.io/merilairon/critical-notes` and creates the GitHub
+Release ([RELEASE.md](RELEASE.md)); `.github/workflows/ci.yml` runs the gate and the restore drill on every pull
+request and push to `main`. Database migrations run when the server starts and only go forward.
 
 ## Data model
 
@@ -199,6 +268,7 @@ erDiagram
   campaigns ||--o{ currencies : "coins per owner"
   pages ||--o{ loot_awards : "loot handed out"
   users ||--o{ api_tokens : "AI assistant tokens"
+  users ||--o{ password_resets : "reset links"
 
   users {
     text id PK
@@ -206,6 +276,15 @@ erDiagram
     text display_name
     text password_hash "argon2id"
     bool is_admin
+    int disabled_at "null = enabled"
+  }
+  password_resets {
+    text id PK
+    text user_id FK
+    text token_hash UK "sha256"
+    text created_by FK "null from the CLI"
+    int expires_at
+    int used_at
   }
   campaigns {
     text id PK
@@ -275,6 +354,7 @@ erDiagram
     text builtin_key UK
     int version
     json definition
+    int deleted_at "trash, purged after 30 days"
   }
   encounters {
     text id PK

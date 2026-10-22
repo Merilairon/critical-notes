@@ -4,20 +4,19 @@
 
 Please report security problems privately. Do not open a public issue, pull request or discussion for them.
 
-- Use the private vulnerability reporting of the host where this repository lives (for example a "Report a
-  vulnerability" button under the Security tab), or
-- contact the maintainer directly: baetens-jan@hotmail.com.
+Use the private vulnerability reporting of the host where this repository lives: the "Report a vulnerability"
+button under the repository's Security tab.
 
 Include what you found, the version or commit, how you installed it (Docker or from source), and the steps to
 reproduce it. Do not include rules content (5etools text or art) or other people's data.
 
-You can expect an acknowledgement within a few days. We will keep you informed, fix the problem, and credit
+You can expect an acknowledgement within 7 days. We will keep you informed, fix the problem, and credit
 you in the release notes if you wish.
 
 ## Supported versions
 
-Critical Notes is alpha. Only the latest release (or the latest commit on the main branch, until the
-first release) receives security fixes.
+Only the latest release receives security fixes. If you run an older version, upgrade to the latest release
+first and check whether the problem is still there.
 
 ## What counts
 
