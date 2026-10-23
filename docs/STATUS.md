@@ -1,6 +1,8 @@
 # Status and next steps
 
-Snapshot: **2026-10-22**. **Release 1.0 is feature complete and waiting for its gate.** Every milestone of the original plan, (a) to (i), is done, the MCP server for AI assistants is done, and so is the 1.0 work in [PROJECT.md](PROJECT.md): license (M1), account recovery and user administration (M2), instance backup and restore (M3), trash (M4), release process (M5) and phone-width player flows (M6). What is left before the `v1.0.0` tag is the release gate: the penetration test (G1.1), the accessibility pass (G1.2), release certification with the owner's approval (G1.4) and a release candidate (`v1.0.0-rc.1`), see [Before the 1.0 tag](#before-the-10-tag). What could come next is in [After the plan](#after-the-plan).
+Snapshot: **2026-10-23**. **Release 1.0 shipped (`v1.0.0`, 2026-10-22); 1.1.0, 1.1.1, 1.1.2 and 1.2.0 followed the same day as accessibility and follow-up releases (see [CHANGELOG.md](../CHANGELOG.md)). Release 1.3 (prep and play loop) is next; its first epic, I1, is done and uncommitted.** The text from here to "After the plan" was written before the 1.0 tag and is kept as history.
+
+Before the 1.0 tag: release 1.0 was feature complete and waiting for its gate. Every milestone of the original plan, (a) to (i), is done, the MCP server for AI assistants is done, and so is the 1.0 work in [PROJECT.md](PROJECT.md): license (M1), account recovery and user administration (M2), instance backup and restore (M3), trash (M4), release process (M5) and phone-width player flows (M6). What is left before the `v1.0.0` tag is the release gate: the penetration test (G1.1), the accessibility pass (G1.2), release certification with the owner's approval (G1.4) and a release candidate (`v1.0.0-rc.1`), see [Before the 1.0 tag](#before-the-10-tag). What could come next is in [After the plan](#after-the-plan).
 The plan, its milestone table and the list of deviations live in [PLAN.md](PLAN.md). This file is for picking the work back up: what state the code is in and what to do next, in order.
 
 ## Where things stand
@@ -22,9 +24,10 @@ The plan, its milestone table and the list of deviations live in [PLAN.md](PLAN.
 | 1.0 M2: account page, user administration, reset links and command, rate limits | ✅ done, certified (2026-10-16) |
 | 1.0 M3: instance backup, scheduled backups, restore command, guide | ✅ done (2026-10-17 to 2026-10-18) |
 | 1.0 M4: trash for pages and templates, Undo, purge after 30 days, MCP `list_trash` and `restore_page` | ✅ done, certified with caveats (2026-10-18) |
-| 1.0 M5: CI, release workflow, app version, changelog and release guide | ✅ done; the release workflow has never run on GitHub |
+| 1.0 M5: CI, release workflow, app version, changelog and release guide | ✅ done; the release workflow published `v1.0.0-rc.1` to `rc.3` and the stable tags (amd64 and arm64) |
 | 1.0 M6: phone-width player flows, `phone` browser project | ✅ done, certified as scoped (2026-10-21); emulation only |
 | 1.0 gate: G1.1 penetration test, G1.2 accessibility pass, G1.3 documentation sweep, G1.4 certification | G1.1, G1.2 and G1.3 done (2026-10-22); G1.4 certification: NEEDS WORK, see [RELEASE-CERTIFICATION-1.0.md](RELEASE-CERTIFICATION-1.0.md) |
+| 1.3 I1: a player's edit keeps the DM's links to pages the player can't see (`mergePlayerEdit`) | ✅ done (2026-10-23), uncommitted; follow-ups in PROJECT.md I1.2 |
 
 ### Before the 1.0 tag
 
@@ -41,19 +44,19 @@ Accepted: the desktop differences below, phone coverage by Chrome emulation only
 
 The phone work changed some things on desktop too ([Desktop differences](#player-content-views-on-a-phone-task-m64)): a reader's title is a wrapping heading and an editable title wraps over several lines, read-only fields show plain text, the inventory is a card list at every width, and placeholders are darker. The inline dice roll target is 29 px high, not 44 (a design decision, accepted), and real devices have not been tried (iOS Safari input zoom, notch and safe areas, a real on-screen keyboard).
 
-### Health checks (2026-10-22)
+### Health checks (2026-10-23; rows not re-run keep their date)
 
 | Check | Result |
 |---|---|
 | `pnpm -s typecheck` | ✅ (run 2026-10-22) |
 | `pnpm -s lint` (ESLint and the raw-HTML guard) | ✅ (run 2026-10-22) |
-| `pnpm -s test` | ✅ (run 2026-10-22) 792 tests in 46 files (packages and server), 241 tests in 28 files (web) |
+| `pnpm -s test` | ✅ (run 2026-10-23, after I1.2) 809 tests in 47 files (packages and server), 317 tests in 37 files (web) |
 | `pnpm build` | ✅ server bundle (with the MCP SDK and the Markdown libraries); web initial bundle 719 kB raw (184 kB transferred), under the 800 kB budget (was 1.05 MB; zod is now imported as a namespace so its unused locales are tree-shaken) |
 | `pnpm e2e` (Playwright, fresh server from the bundle) | ✅ 99 passed, 8 skipped (the phone-only checks in the desktop project), about 60 s, with the `phone` project (last run by the Reality Checker for M6.5, 2026-10-21; not re-run for this sweep) |
-| Docker image (`docker compose up`, fresh volume) | last checked for M5.5 (local build, update and rollback with local images); the published image does not exist yet |
+| Docker image (`docker compose up`, fresh volume) | last checked for M5.5 (local build, update and rollback with local images); images are published to GHCR by the release workflow (arm64 not run on real hardware) |
 
 ### Repository
-- The default branch is `main`, pushed to `https://github.com/Merilairon/critical-notes` by the owner (decision D2, 2026-10-19). The history was audited then: no `5etools-data/`, `var/`, rules text, art, traces, `.auth`, secrets or `Co-Authored-By` lines in any commit. No release tag exists yet.
+- The default branch is `main`, pushed to `https://github.com/Merilairon/critical-notes` by the owner (decision D2, 2026-10-19). The history was audited then: no `5etools-data/`, `var/`, rules text, art, traces, `.auth`, secrets or `Co-Authored-By` lines in any commit. Tags `v1.0.0` (with `rc.1` to `rc.3`), `v1.1.0`, `v1.1.1`, `v1.1.2` and `v1.2.0` exist.
 - `5etools-data/` (the 5etools clones) and `var/` (databases and uploads) are gitignored and must stay out of git.
 - Commit messages never carry `Co-Authored-By` lines; every commit carries a DCO `Signed-off-by` line ([CONTRIBUTING.md](../CONTRIBUTING.md)).
 
@@ -491,28 +494,28 @@ Design: [design/phone-layout.md](design/phone-layout.md) section 6; audit: [qa/p
 - **What runs:** `players.spec.ts` and `combat.spec.ts` again, 29 tests incl. setup, about 22 s. The player (and the combat table screen) sit in an emulated phone: 390 x 844, `isMobile`, `hasTouch`, device scale factor 2, a mobile user agent (`PHONE_DEVICE` in `e2e/env.ts`; Chrome emulation, not a device). The DM stays at 1440 x 1000: DM tools are desktop-first and not re-laid-out (design section 8), and the DM's steps are mostly API calls.
 - **Own server, no extra sign-ups on the desktop one:** sign-up is limited to 8 per minute per address and the desktop run already uses all 8. The phone project therefore starts a second bundled server (port 3211, its own temporary data folder, its own admin from `phone-setup`, state in `e2e/.auth/dm-phone.json`) whose limiter and data are separate. It registers 2 people there (admin, Pia). The spec files stay shared: `support.ts` reads the base URL, the admin state and "am I the phone" from the project (`baseUrl()`, `dmState()`, `isPhone()`), nothing else changed for the desktop project. Against an existing instance (`E2E_BASE`) the phone project exists only with a second fresh instance in `E2E_PHONE_BASE`.
 - **Phone checks** (`e2e/phone-checks.ts`, design section 9; the describe "as a player on a phone" at the end of `players.spec.ts`, skipped in the desktop project, 8 skips): as the registered player on campaigns, campaign overview, a shared page, the own character, inventory, members and rules, account: document and `main` `scrollWidth == clientWidth`, nothing past the right edge, app header at most 56 px, at most 15 % of the viewport and one row; no visible link, button or field smaller than 44 x 44 px; no field under 16 px or 44 px tall (the sweep must find fields, or it fails); the campaign drawer and the app menu open with all targets at least 44 px; Sign out is not in the header, the player opens the menu first and taps Sign out. The combat table screen: no sideways scroll, "← Campaign" link at least 44 px, first in tab order, correct href, no target under 44 px.
-- **Formerly excluded by name (fixed after 1.1.0, unreleased):** the editor's formatting toolbar is 24 x 24 px or more on desktop and 44 x 44 px on touch and below `sm`; `KNOWN_SMALL` is gone from `players.spec.ts`, so the phone sweep covers it.
+- **Formerly excluded by name (fixed in 1.1.1):** the editor's formatting toolbar is 24 x 24 px or more on desktop and 44 x 44 px on touch and below `sm`; `KNOWN_SMALL` is gone from `players.spec.ts`, so the phone sweep covers it.
 - **CI:** `E2E_NO_ARTIFACTS=1` works for the new project (checked: only titles, statuses and durations printed, no `playwright-report`, no server log). Failure messages of the new checks name elements but the CI reporter withholds them. The workflow is unchanged (`pnpm e2e` covers both; the `cn-e2e-*` cleanup and `e2e/.auth` removal cover the second data folder and state). The two servers start in parallel; the full run needs ports 3210 and 3211 free.
 - **Runs:** `pnpm e2e:phone` 3 times in a row: 29/29 each, 21.4 to 22.2 s of tests (28 to 30 s with the build). Full `pnpm e2e` 3 times in a row: 99 passed, 8 skipped, 57.5 to 59.8 s (65 to 68 s with the build); the desktop project alone was about 41 s before.
 - **Not verified:** real devices. iOS Safari zoom on focus below 16 px (we assert the computed size only), the notch and safe-area insets (0 here), the on-screen keyboard and `interactive-widget`, Android Chrome, landscape and 320/360/430 widths and text zoom (the design's wider matrix was measured by hand in M6.3/M6.4, not automated), axe, dark mode, DM screens on a phone, the 29 px inline-dice target.
 
-## After 1.0.0 (unreleased, for 1.0.1)
+## After 1.0.0 (released in 1.1.0)
 
-Follow-ups from the penetration test, done after the 1.0.0 tag and not released yet (see CHANGELOG `[Unreleased]`):
+Follow-ups from the penetration test, done after the 1.0.0 tag and released in 1.1.0 (see CHANGELOG):
 - **F22:** the campaign list and MCP `list_campaigns` count only the pages the caller may see (game masters: all live pages). Test: `visibility.test.ts`.
 - **F24:** `POST /api/auth/sessions/end-others` (browser session only, same-origin check; ends the caller's other sessions) and a **Sign out other sessions** button on the Account page. Token revoke there now uses an in-page `alertdialog` instead of `confirm()`. Tests: `account.test.ts`, `account-page.spec.ts`, `e2e/account.spec.ts` (not re-run).
 - **Tests:** `fetch-url-redirects.test.ts` covers the per-hop address check and the 3-redirect limit with a mocked request layer; the stalled-reader download test no longer depends on a 200 ms timer racing the test's setup.
 
 ## After the plan
 
-The plan and release 1.0 are built. The scope after 1.0 is in [PRD.md](PRD.md) sections 9 and 10 and in [PROJECT.md](PROJECT.md) sections 6 and 7 (release 1.1: keep links a player can't see, page history, reveal to players, tracker additions, query block views). Candidates, roughly by value:
+The plan and release 1.0 are built and shipped, as are the follow-ups 1.1.0 to 1.2.0. The scope after 1.0 is in [PRD.md](PRD.md) sections 9 and 10 and in [PROJECT.md](PROJECT.md) sections 6 and 7 (release 1.3, the planned "1.1" renumbered: keep links a player can't see, page history, reveal to players, tracker additions, query block views). Candidates, roughly by value:
 1. **Page history** and **reveal to players** (PRD N1, N3), the next releases' headline features.
 2. **Postgres at run time:** the schema is ready, but the services use better-sqlite3's synchronous API. Moving them to an async data layer is the real work.
 3. **OAuth for the MCP endpoint**, so it can be added as a custom connector on claude.ai (which signs in with OAuth instead of a pasted token).
 4. A phone pass on real devices, and phone layouts for the DM's prep screens.
 5. The gaps below.
 
-## Accessibility backlog follow-up after 1.1.0 (unreleased, uncommitted)
+## Accessibility backlog follow-up after 1.1.0 (released in 1.1.1, 1.1.2 and 1.2.0)
 - **One confirm dialog**: `ConfirmService.ask({ title, message, confirmLabel?, cancelLabel? })` returns a promise of true/false; `cn-confirm-dialog` (rendered once in `app.html`) is a modal `alertdialog` with a cdk focus trap, Cancel focused first, Esc cancels, the page behind `inert` (shared `core/inert.ts`, also used by the step-up dialog) and focus back on the opener. It replaced every native `confirm()` in `apps/web/src` (Account token revoke, Trash and template Trash purge, property, source, entry, template, encounter and tracker deletes, end combat, member remove and leave, edition change, linked-template save, discard-revision, and the two "unsaved changes" route guards, which now return a promise). There is no native `alert()`. Esc is handled in the capture phase with `stopPropagation`, so one Esc closes only the confirm (the drawer, preview and template dialogs also ignore a `defaultPrevented` Esc); a question that replaces a pending one keeps the original opener and refocuses Cancel; Ctrl+K does not open the palette over it. Tests: `shell/confirm-dialog.spec.ts`, `shell/confirm-guards.spec.ts` (Cancel keeps the item at each call site, `canLeave` of both editors), e2e leave test in `templates.spec.ts`. In the e2e suite a native dialog is now an error (`watch()` in `support.ts`); specs answer the app's dialog with `confirmDialog(page, button)`.
 - **Pickers are comboboxes**: the command palette and the reference picker use `input role=combobox` (`aria-expanded`, `aria-controls`, `aria-activedescendant`, `aria-autocomplete=list`) over a `role=listbox` of plain `role=option` items (no buttons inside; mouse click and hover still work), with a polite status line ("8 results. Use the up and down arrow keys...") for the count. The homebrew `{@` textarea keeps its textarea role (not allowed to be a combobox) but gets `aria-controls`, `aria-activedescendant`, `aria-autocomplete` and the same status line. The editor popup and the reference list are done too (see below).
 - **Targets**: editor toolbar buttons `min-h-6 min-w-6` and `touch:` 44 px (the toolbar is not sticky on touch, where it wraps to two rows); the secret-block toggle 24 px (44 px on touch); admin row buttons (Users, Backups, Delete dialog, Try again, Back to campaigns) `py-1.5` (about 34 px) and `touch:min-h-[44px]`.

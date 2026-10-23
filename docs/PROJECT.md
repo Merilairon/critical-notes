@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Status | Ready to run: Release 1.0 tasks are broken down; 1.1 is broken down; 1.2 and later are assigned but not yet broken down |
-| Date | 2026-10-13 |
+| Status | Release 1.0 shipped (v1.0.0, 2026-10-22); 1.1.0 to 1.2.0 shipped as post-1.0 follow-ups (not in this file); release 1.3 is broken down and in progress (Epic I1 done); 1.4 and later are assigned but not yet broken down |
+| Date | 2026-10-13, updated 2026-10-23 |
 | Specification | [PRD.md](PRD.md) (what and why). This file is the task list (who and how). |
 | Engineering state | [STATUS.md](STATUS.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [PLAN.md](PLAN.md) |
 | Agents | From [msitarzewski/agency-agents](https://github.com/msitarzewski/agency-agents) (see §2 and §9) |
@@ -15,8 +15,9 @@
 | Release | Theme | PRD items | In this file |
 |---|---|---|---|
 | **1.0** | Trustworthy to self-host | M1 License, M2 Accounts, M3 Backup, M4 Trash, M5 Release process, M6 Phone-width | 43 tasks, 10 waves (§5) |
-| **1.1** | Prep and play loop | N1 Page history, N3 Reveal to players, I1 Keep hidden links, I3 Tracker additions, I2 Query views | 21 tasks, 5 waves (§6) |
-| **1.2** | Stay in sync | N2, N4, I4, I5, I10 | Assigned, broken down when scheduled (§7) |
+| **1.1.0 to 1.2.0** | Post-1.0 follow-ups (shipped 2026-10-22) | Sign out other sessions, player-visible page count, accessibility backlog, keyboard block menu, page titles | Not planned here; see [CHANGELOG.md](../CHANGELOG.md) |
+| **1.3** | Prep and play loop | N1 Page history, N3 Reveal to players, I1 Keep hidden links, I3 Tracker additions, I2 Query views | 24 tasks, 5 waves (§6) |
+| **1.4** | Stay in sync | N2, N4, I4, I5, I10 | Assigned, broken down when scheduled (§7) |
 | **Later** | Grow | N5–N17, I6–I18 | Assigned, broken down when scheduled (§7) |
 
 **Technical stack (exact):** pnpm 11 monorepo, TypeScript 6.0.3, Node 24. Server: Hono, Drizzle ORM on better-sqlite3 (Postgres mirror schema), zod 4, `@modelcontextprotocol/server` 2.3.1. Web: Angular 22 (standalone, signals, zoneless, `httpResource`), Tailwind v4, TipTap v3. Tests: Vitest (unit/API), Playwright (`e2e/`, system Chrome, real 5etools data). Delivery: esbuild server bundle, Docker (non-root), docker-compose.
@@ -493,25 +494,53 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 | 9 | G1.1, G1.2, G1.3 |
 | 10 | G1.4 |
 
-## 6. Release 1.1: Prep and play loop
+## 6. Release 1.3: Prep and play loop
+
+Renumbered on 2026-10-23: the tags `v1.1.0` to `v1.2.0` were used by post-1.0 follow-ups (see [CHANGELOG.md](../CHANGELOG.md)), so the planned 1.1 became 1.3 and the planned 1.2 became 1.4. Task ids (I1.x, N1.x, G2.1) are unchanged.
 
 ### 6.1 Epic I1: Keep links a player can't see (data-loss fix, first)
 
-### [ ] Task I1.1: Reproduce in a failing test
+### [x] Task I1.1: Reproduce in a failing test
 **Owner**: Minimal Change Engineer · **QA**: Code Reviewer
+**Done:** 2026-10-23, QA Code Reviewer: PASS. Tests only: 2 in `packages/blocks/test/blocks.test.ts` (one fails: link flattened to text; one guards the hidden id) and 1 in `apps/server/test/visibility.test.ts` (fails on the DM's link). The "changed block keeps hidden links" case was added in I1.2.
 **Description**: A test in `packages/blocks/test/` and `apps/server/test/visibility.test.ts`: the DM links a hidden page inside a visible paragraph of a PC page; the player edits another paragraph; the DM's link must survive.
 **Reference**: PRD §10 I1
 
-### [ ] Task I1.2: Fix the merge
+### [x] Task I1.2: Fix the merge
 **Owner**: Minimal Change Engineer · **QA**: Application Security Engineer
+**Done:** 2026-10-23, Code Reviewer PASS, QA Application Security Engineer: PASS (adversarial script, no leak, no access gained). Gate green (809 server/package tests, 317 web). Fix in `packages/blocks/src/project.ts` (`mergeLevel`, new `restoreHiddenLinks`): an unchanged visible block keeps its stored version; a changed inline block gets hidden links back where the label text is still plain text. Uncommitted. **Epic I1 is complete.** **Follow-ups (not built, not caused by this diff; for the Product Manager to schedule):** (1) a visible container submitted without its `content` key deletes its DM-only children; fix with `n.content ?? []` plus a test. (2) A repeated block id duplicates DM-only children, and a new block can take a hidden block's id; ignore repeated ids and treat dropped blocks' ids as unknown. (3) A player-submitted `pageLink` to any page id survives `sanitizeDoc` (shown as text, id unknown to players). (4) Label matching is by substring on unmarked text: a bolded label loses the DM's link, and an earlier occurrence of the label can get the link.
 **Description**: In `mergePlayerEdit` (`packages/blocks/src/project.ts`): a visible block the player did not change keeps its stored version (with the links); a changed block keeps hidden page links whose label text is unchanged. The player must still never receive the hidden page's id.
 **Acceptance Criteria**: I1.1 passes; the sentinel crawl stays green; no other test changes
 **Depends on**: I1.1
 
+### 6.1b Epic I1b: Harden the player merge (scheduled by the Product Manager, 2026-10-23)
+
+Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `packages/blocks/src/project.ts`), so one owner does them in order, each with its own tests. **Priority:** I1.3 is a data-loss bug (PRD §11: "a data-loss or secret-leak bug interrupts any release"), so it ships in the next patch release (1.3.x or earlier, as soon as scheduled) and does not wait for a minor release. I1.4 is hardening with no known exploit and rides with the next release. I1.5 is a polish and goes to the 1.4 theme only if players report it. No leak is known in any of the three: players never receive hidden ids.
+
+### [ ] Task I1.3: Keep DM-only children when a player's save is malformed (P1, patch release)
+**Owner**: Minimal Change Engineer · **QA**: Application Security Engineer
+**Description**: Two cases in `mergeLevel`: (a) a visible container (e.g. a callout with a DM-only child) submitted without its `content` key deletes the DM-only children: treat a missing `content` as `[]` so the hidden children are put back; (b) a repeated block id duplicates DM-only children, and a new block that reuses a hidden block's id takes that id: use each stored id once, and treat the id of a block the player cannot see as unknown (it is reissued).
+**Acceptance Criteria**: a regression test per case in `packages/blocks/test/` and one end-to-end in `apps/server/test/visibility.test.ts` (DM-only child still there for the DM, never in the player's response); no other test changes; gate green
+**Depends on**: I1.2
+
+### [ ] Task I1.4: Drop links to pages the player cannot see (P2)
+**Owner**: Minimal Change Engineer · **QA**: Application Security Engineer
+**Description**: A `pageLink` a player submits to a page they cannot see is removed (kept as its label text) unless it is restored from the stored block (I1.2). Closes the forged-link path: a player who guesses an id cannot create a link or probe whether a page exists.
+**Acceptance Criteria**: test: a forged link to a hidden page id is stored as plain text, and a restored DM link is still kept; the sentinel crawl stays green
+**Depends on**: I1.3
+
+### [ ] Task I1.5: Restore the right link when the label is marked or repeated (P3)
+**Owner**: Minimal Change Engineer · **QA**: Code Reviewer
+**Description**: `restoreHiddenLinks` matches the label as a substring of unmarked text. Make it also find a label inside marked text (bold, italic; the link keeps the mark) and prefer the occurrence nearest to where the link was, so a repeated word does not get the link.
+**Acceptance Criteria**: tests: a bolded label keeps the DM's link; with the label word earlier in the paragraph, the link lands on the original occurrence
+**Depends on**: I1.4
+**Note**: if this proves to need a stable link identity in the document format, stop and raise it with the Software Architect instead of widening the diff.
+
 ### 6.2 Epic N1: Page history
 
-### [ ] Task N1.1: History design
+### [x] Task N1.1: History design
 **Owner**: Software Architect · **QA**: Database Reliability Engineer
+**Done:** 2026-10-23, QA Database Reliability Engineer: PASS (1 fix round, then 5 corrections). `docs/design/page-history.md`: full-snapshot `page_revisions`, lazy baseline from the pre-write hash, GM only, pruning (all for 30 days, daily, monthly after a year, soft per-campaign ceiling), restore keeps access fields (`playerUserId`). Measured: a history-heavy database deflates at 49.9:1 against the 50:1 backup limit, so **N1.2 must raise `DB_RATIO_LIMIT` for `app.sqlite` (proposed 200) with the Security Architect's written sign-off and a history-heavy backup/restore test.** **Owner decisions (2026-10-23, logged in PLAN.md):** Q1 fold saves within **2 minutes** (set `HISTORY_COALESCE_MINUTES` default to 2); Q2 tiered retention (30 days all, daily, monthly after a year, 500 MB soft ceiling); Q4 restore brings back content only; Q3 no off switch and Q8 lazy baseline stay as proposed (not asked; change if you disagree). Defaults: Q5 export without history, Q6 players never see history, Q7 player-token edits recorded as `mcp`, Q9 named versions deferred, Q10 tracker HP rows recorded.
 **Description**: `page_revisions` (page id, revision, title, body, details, properties, author user, source `web`/`player`/`mcp` with token id, created at); storage growth and pruning (e.g. keep all for 30 days, then one per day); who sees history (game masters only in 1.1).
 **Acceptance Criteria**: `docs/design/page-history.md`
 **Reference**: PRD §9 N1
@@ -543,8 +572,9 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 
 ### 6.3 Epic N3: Reveal to players
 
-### [ ] Task N3.1: Reveal flow and event design
+### [x] Task N3.1: Reveal flow and event design
 **Owner**: Realtime Collaboration Engineer · **QA**: Security Architect
+**Done:** 2026-10-23, QA Security Architect: PASS (1 fix round, then 3 wording fixes). `docs/design/reveal.md` with a 14-row threat note. Detector works per player (weak client-made block ids; fingerprint strips `revealed` and `visibility`); delivery re-checks `canSee` (new method); `PageService.onCommitted` with `batch`/`flushCommitted`; fetch-streaming client with backoff (native `EventSource` never retries a non-200); evict-oldest stream cap. **Owner decisions (2026-10-23):** Q1 reveal is inferred from saves, no explicit route (a reveal and an edit of the same hidden block in one save fires no live event); Q4 limits accepted as proposed: ring 200 events or 10 min, 6 streams per user (evict oldest), 100 per campaign, 500 global, backoff 1-30 s. Backlog: the tracker stream checks membership only at connect (a removed member keeps receiving).
 **Description**: A campaign event stream (SSE, like the tracker's) that carries only ids and kinds (`page-shared`, `block-revealed`), never content; players refetch the projected page. Reconnect handling. With Narrative Designer: what the player sees at the table.
 **Acceptance Criteria**: `docs/design/reveal.md`; threat note: events leak nothing a player can't already fetch
 **Reference**: PRD §9 N3
@@ -572,8 +602,9 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 
 ### 6.4 Epic I3: Tracker additions
 
-### [ ] Task I3.1: Rules spec
+### [x] Task I3.1: Rules spec
 **Owner**: Game Designer · **QA**: Product Manager
+**Done:** 2026-10-23, QA Product Manager: PASS (1 fix round). `docs/design/tracker-rules.md` v1.2. Product Manager accepted Q1 (PC death-save counts shown to the table, hide switch is P2), Q2 (`down` only), Q3 (Legendary Resistance always starts full), Q4 (reaction tracking deferred), Q5 (no condition tick while moved), Q6 (lair row hidden by default); the owner is informed and may overrule. Delay is a minimal `moveAfter` in v1. **Owner accepted the stated defaults on 2026-10-23** (temp HP vs death-save failures, 2024 stable wording, surprise vs legendary actions, Delay source); page numbers in §10 are still "owner to fill". I3.3 help text must say the temp-HP default is a table convention.
 **Description**: Death saves (successes/failures, 20 and 1, damage while down), legendary actions (per round, reset on the creature's turn), legendary resistance (per day), lair actions (initiative 20), recharge (roll at the start of turn), delay and ready. For 2014 and 2024 where they differ. What players see.
 **Acceptance Criteria**: `docs/design/tracker-rules.md` with each rule, source page and the player projection
 **Reference**: PRD §10 I3
@@ -596,8 +627,9 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 
 ### 6.5 Epic I2: Query block views
 
-### [ ] Task I2.1: Views design
+### [x] Task I2.1: Views design
 **Owner**: UX Architect · **QA**: UI Designer
+**Done:** 2026-10-23, QA UI Designer: PASS (1 fix round). `docs/design/query-views.md`. **Owner decisions (2026-10-23):** Q1 phone tables scroll sideways with a sticky title column; Q3 no Cards sort control yet; Q5 out of scope: drag reorder, column widths, saved viewer sort, grouping, inline edit, CSV export; Q6 `where` on DM-only fields stays as is; Q7 the player-projection fixes (query `project` hook, `isHiddenField`, `pageLink` property clearing) go inside I2.2. Follow-up outside I2: pc facet `playerUserId` is not in `FACET_DM_ONLY_FIELDS` and travels in player query rows (security).
 **Description**: Table and card views and a column picker (details fields and custom properties).
 **Reference**: PRD §10 I2
 
@@ -614,14 +646,15 @@ These come from the codebase and are not negotiable; QA fails a task that breaks
 
 ### 6.6 Release gate and waves
 
-### [ ] Task G2.1: Release 1.1 certification
+### [ ] Task G2.1: Release 1.3 certification
 **Owner**: Reality Checker · **QA**: **Owner (human)**
-**Description**: Evidence for every 1.1 item; full gate, `pnpm e2e`, phone project, Docker image.
-**Depends on**: all 1.1 tasks
+**Description**: Evidence for every 1.3 item; full gate, `pnpm e2e`, phone project, Docker image.
+**Depends on**: all 1.3 tasks
 
 | Wave | Tasks |
 |---|---|
 | 1 | I1.1, N1.1, N3.1, I3.1, I2.1 |
+| patch | I1.3 (data-loss fix, as soon as scheduled; then I1.4, I1.5 with the next release) |
 | 2 | I1.2, N1.2, N3.2, I3.2, I2.2 |
 | 3 | N1.3, N3.3, N3.4, I3.3, I2.3 |
 | 4 | N1.4, N1.5, N3.5, I3.4 |
