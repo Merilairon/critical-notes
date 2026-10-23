@@ -203,4 +203,39 @@ describe('mergePlayerEdit', () => {
     const merged = mergePlayerEdit(stored, { type: 'doc', content: [p('Only this')] }, ctx);
     expect(lines(merged, 'dm')).toEqual(['Only this', 'DM: he is cursed', 'Hidden tip', 'True parentage']);
   });
+
+  describe('a DM link to a page the player cannot see, inside a visible paragraph', () => {
+    const linkCtx = { role: 'player' as const, canSeePage: (id: string) => id !== 'hidden-page' };
+    const storedLinks = sanitizeDoc(
+      doc(
+        { type: 'paragraph', content: [{ type: 'text', text: 'Met ' }, { type: 'pageLink', attrs: { pageId: 'hidden-page', label: 'the vampire' } }, { type: 'text', text: ' once' }] },
+        p('Backstory'),
+      ),
+      { newId },
+    ).doc;
+
+    it('never sends the hidden page id to the player', () => {
+      const seen = projectDoc(storedLinks, linkCtx);
+      expect(JSON.stringify(seen)).not.toContain('hidden-page');
+      expect(docText(seen, 'player')).toContain('the vampire');
+    });
+
+    it('keeps the link when the player edits another paragraph', () => {
+      const seen = projectDoc(storedLinks, linkCtx)!;
+      const [first, backstory] = seen.content!;
+      const edited = { ...seen, content: [first!, { ...backstory!, content: [{ type: 'text', text: 'Backstory (edited)' }] }] };
+      const merged = mergePlayerEdit(storedLinks, edited, linkCtx);
+      expect(JSON.stringify(merged.content![0])).toContain('"pageId":"hidden-page"');
+      expect(docText(merged, 'dm')).toContain('Backstory (edited)');
+    });
+
+    it('keeps the link when the player edits the paragraph around it but leaves its label text', () => {
+      const seen = projectDoc(storedLinks, linkCtx)!;
+      const [first, backstory] = seen.content!;
+      const edited = { ...seen, content: [{ ...first!, content: [{ type: 'text', text: 'Never met the vampire again' }] }, backstory!] };
+      const merged = mergePlayerEdit(storedLinks, edited, linkCtx);
+      expect(JSON.stringify(merged.content![0])).toContain('"pageId":"hidden-page"');
+      expect(docText(merged, 'dm')).toContain('Never met');
+    });
+  });
 });

@@ -285,6 +285,23 @@ describe('what players may change', () => {
     expect(asDm.facet.hpCurrent).toBe(9);
   });
 
+  it('keeps the DM’s link to a hidden page when the player edits another paragraph', async () => {
+    const link = { type: 'paragraph', content: [{ type: 'text', text: 'Owes a favour to ' }, { type: 'pageLink', attrs: { pageId: ids['hidden'], label: 'a stranger' } }] };
+    const before = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
+    expect((await dm.patch(`${base()}/pages/${ids['pc']}`, { revision: before.revision, body: { ...before.body, content: [...before.body.content, link, para('Second wind')] } })).status).toBe(200);
+
+    const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+    expect(JSON.stringify(mine.body)).not.toContain(ids['hidden']);
+    const content = mine.body.content.map((b: { content?: { text?: string }[] }) => (b.content?.[0]?.text === 'Second wind' ? para('Second wind (edited)') : b));
+    const res = await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, body: { ...mine.body, content } });
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(res.body)).not.toContain(ids['hidden']);
+
+    const asDm = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
+    expect(JSON.stringify(asDm.body)).toContain('Second wind (edited)');
+    expect(JSON.stringify(asDm.body)).toContain(`"pageId":"${ids['hidden']}"`);
+  });
+
   it('cannot edit other pages, change visibility, or reassign characters', async () => {
     const town = (await player.get(`${base()}/pages/${ids['town']}`)).body;
     expect((await player.patch(`${base()}/pages/${ids['town']}`, { revision: town.revision, title: 'Mine' })).status).toBe(403);

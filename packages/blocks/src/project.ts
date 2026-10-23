@@ -51,6 +51,22 @@ function hiddenDescendants(node: BlockNode, ctx: ProjectContext): BlockNode[] {
   return (node.content ?? []).flatMap((c) => (droppedForPlayers(c, ctx) ? [c] : hiddenDescendants(c, ctx)));
 }
 
+/** Puts back the links to hidden pages that the player only saw as their label text, if that text is still there. */
+function restoreHiddenLinks(before: BlockNode, n: BlockNode, ctx: ProjectContext): BlockNode {
+  let content = n.content ?? [];
+  for (const link of before.content ?? []) {
+    if (link.type !== 'pageLink' || ctx.canSeePage(String(link.attrs?.pageId))) continue;
+    const label = String(link.attrs?.label ?? '');
+    const i = label ? content.findIndex((c) => c.type === 'text' && !c.marks?.length && c.text?.includes(label)) : -1;
+    if (i < 0) continue;
+    const t = content[i]!;
+    const at = t.text!.indexOf(label);
+    const parts = [{ ...t, text: t.text!.slice(0, at) }, link, { ...t, text: t.text!.slice(at + label.length) }].filter((x) => x.type !== 'text' || x.text);
+    content = [...content.slice(0, i), ...parts, ...content.slice(i + 1)];
+  }
+  return { ...n, content };
+}
+
 function mergeLevel(stored: BlockNode[], submitted: BlockNode[], ctx: ProjectContext): BlockNode[] {
   // Blocks the player never saw, keyed by the id of the visible block they followed ('' = the start)
   const anchored = new Map<string, BlockNode[]>();
@@ -76,7 +92,9 @@ function mergeLevel(stored: BlockNode[], submitted: BlockNode[], ctx: ProjectCon
     const id = typeof n.attrs?.id === 'string' ? n.attrs.id : '';
     const before = id ? visibleById.get(id) : undefined;
     // Containers the player edited keep their hidden children too
-    const merged = before?.content && n.content && isBlockList(before.content) ? { ...n, content: mergeLevel(before.content, n.content, ctx) } : n;
+    let merged = n;
+    if (before && JSON.stringify(projectNodes([before], ctx)) === JSON.stringify([n])) merged = before;
+    else if (before?.content && n.content) merged = isBlockList(before.content) ? { ...n, content: mergeLevel(before.content, n.content, ctx) } : restoreHiddenLinks(before, n, ctx);
     out.push(merged);
     if (id && anchored.has(id) && !placed.has(id)) {
       out.push(...anchored.get(id)!);
