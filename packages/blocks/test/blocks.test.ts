@@ -204,6 +204,32 @@ describe('mergePlayerEdit', () => {
     expect(lines(merged, 'dm')).toEqual(['Only this', 'DM: he is cursed', 'Hidden tip', 'True parentage']);
   });
 
+  it('puts back DM-only children of a visible container submitted without its content', () => {
+    const seen = projectDoc(stored, ctx)!;
+    const { content: _gone, ...bare } = seen.content![2]!;
+    const merged = mergePlayerEdit(stored, { ...seen, content: [seen.content![0]!, seen.content![1]!, bare] }, ctx);
+    expect(lines(merged, 'dm')).toContain('Hidden tip');
+  });
+
+  it('does not duplicate DM-only children for a repeated id, nor let a new block take a hidden id', () => {
+    const seen = projectDoc(stored, ctx)!;
+    const hiddenId = (stored.content![1]!.attrs as { id: string }).id;
+    const merged = mergePlayerEdit(stored, { ...seen, content: [...seen.content!, seen.content![2]!, p('Squatter', { id: hiddenId })] }, ctx);
+    expect(lines(merged, 'dm').filter((l) => l === 'Hidden tip')).toHaveLength(1);
+    expect(lines(merged, 'dm').filter((l) => l === 'DM: he is cursed')).toHaveLength(1);
+    expect(JSON.stringify(merged).match(new RegExp(`"id":"${hiddenId}"`, 'g'))).toHaveLength(1);
+  });
+
+  it('does not let a nested new block take the id of a hidden block elsewhere in the document', () => {
+    const base = sanitizeDoc(doc({ type: 'callout', content: [p('Tip')] }, p('hid', { visibility: 'dm' })), { newId }).doc;
+    const hiddenId = (base.content![1]!.attrs as { id: string }).id;
+    const seen = projectDoc(base, ctx)!;
+    const callout = seen.content![0]!;
+    const merged = mergePlayerEdit(base, { ...seen, content: [{ ...callout, content: [...callout.content!, p('Squatter', { id: hiddenId })] }] }, ctx);
+    const out = sanitizeDoc(merged, { newId }).doc;
+    expect((out.content![1]!.attrs as { id: string }).id).toBe(hiddenId);
+  });
+
   describe('a DM link to a page the player cannot see, inside a visible paragraph', () => {
     const linkCtx = { role: 'player' as const, canSeePage: (id: string) => id !== 'hidden-page' };
     const storedLinks = sanitizeDoc(

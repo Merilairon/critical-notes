@@ -285,6 +285,22 @@ describe('what players may change', () => {
     expect(asDm.facet.hpCurrent).toBe(9);
   });
 
+  it('keeps a DM-only child when the player saves its callout without content', async () => {
+    const callout = { type: 'callout', content: [para('Shared tip'), para('SENTINEL callout dm child', { visibility: 'dm' })] };
+    const before = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
+    expect((await dm.patch(`${base()}/pages/${ids['pc']}`, { revision: before.revision, body: { ...before.body, content: [...before.body.content, callout] } })).status).toBe(200);
+    const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+    const content = mine.body.content.map((b: { type: string }) => {
+      if (b.type !== 'callout') return b;
+      const { content: _gone, ...bare } = b as Record<string, unknown>;
+      return bare;
+    });
+    const res = await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, body: { ...mine.body, content } });
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(res.body)).not.toMatch(SENTINEL);
+    expect(JSON.stringify((await dm.get(`${base()}/pages/${ids['pc']}`)).body.body)).toContain('SENTINEL callout dm child');
+  });
+
   it('keeps the DM’s link to a hidden page when the player edits another paragraph', async () => {
     const link = { type: 'paragraph', content: [{ type: 'text', text: 'Owes a favour to ' }, { type: 'pageLink', attrs: { pageId: ids['hidden'], label: 'a stranger' } }] };
     const before = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;

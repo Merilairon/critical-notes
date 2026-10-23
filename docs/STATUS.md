@@ -27,7 +27,7 @@ The plan, its milestone table and the list of deviations live in [PLAN.md](PLAN.
 | 1.0 M5: CI, release workflow, app version, changelog and release guide | ✅ done; the release workflow published `v1.0.0-rc.1` to `rc.3` and the stable tags (amd64 and arm64) |
 | 1.0 M6: phone-width player flows, `phone` browser project | ✅ done, certified as scoped (2026-10-21); emulation only |
 | 1.0 gate: G1.1 penetration test, G1.2 accessibility pass, G1.3 documentation sweep, G1.4 certification | G1.1, G1.2 and G1.3 done (2026-10-22); G1.4 certification: NEEDS WORK, see [RELEASE-CERTIFICATION-1.0.md](RELEASE-CERTIFICATION-1.0.md) |
-| 1.3 I1: a player's edit keeps the DM's links to pages the player can't see (`mergePlayerEdit`) | ✅ done (2026-10-23), uncommitted; follow-ups in PROJECT.md I1.2 |
+| 1.3 I1: a player's edit keeps the DM's links to pages the player can't see, and DM-only children and ids (`mergePlayerEdit`, I1.1 to I1.3) | ✅ done (2026-10-23), unreleased; I1.4 and I1.5 remain (PROJECT.md §6.1b) |
 
 ### Before the 1.0 tag
 

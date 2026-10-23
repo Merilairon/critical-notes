@@ -86,15 +86,22 @@ function mergeLevel(stored: BlockNode[], submitted: BlockNode[], ctx: ProjectCon
     }
   }
   const submittedIds = new Set(submitted.map((n) => n.attrs?.id).filter((id): id is string => typeof id === 'string' && !!id));
+  const usedIds = new Set<string>();
   const out: BlockNode[] = [...(anchored.get('') ?? [])];
   const placed = new Set(['']);
-  for (const n of submitted) {
-    const id = typeof n.attrs?.id === 'string' ? n.attrs.id : '';
+  for (let n of submitted) {
+    let id = typeof n.attrs?.id === 'string' ? n.attrs.id : '';
+    if (id && usedIds.has(id)) {
+      const { id: _dropped, ...attrs } = n.attrs!;
+      n = { ...n, attrs };
+      id = '';
+    }
+    if (id) usedIds.add(id);
     const before = id ? visibleById.get(id) : undefined;
     // Containers the player edited keep their hidden children too
     let merged = n;
     if (before && JSON.stringify(projectNodes([before], ctx)) === JSON.stringify([n])) merged = before;
-    else if (before?.content && n.content) merged = isBlockList(before.content) ? { ...n, content: mergeLevel(before.content, n.content, ctx) } : restoreHiddenLinks(before, n, ctx);
+    else if (before?.content) merged = isBlockList(before.content) ? { ...n, content: mergeLevel(before.content, n.content ?? [], ctx) } : restoreHiddenLinks(before, n, ctx);
     out.push(merged);
     if (id && anchored.has(id) && !placed.has(id)) {
       out.push(...anchored.get(id)!);
@@ -122,5 +129,21 @@ function mergeLevel(stored: BlockNode[], submitted: BlockNode[], ctx: ProjectCon
  */
 export function mergePlayerEdit(stored: BlockDocument | null, submitted: BlockDocument, ctx: ProjectContext): BlockDocument {
   if (!stored?.content?.length) return submitted;
-  return { ...submitted, content: mergeLevel(stored.content, submitted.content ?? [], ctx) };
+  // The player never held an id of a block they cannot see, so any submitted block carrying one (at any depth) gets a new id on save
+  const hiddenIds = new Set<string>();
+  const collectAll = (node: BlockNode) => {
+    if (typeof node.attrs?.id === 'string') hiddenIds.add(node.attrs.id);
+    node.content?.forEach(collectAll);
+  };
+  const collectHidden = (node: BlockNode) => (droppedForPlayers(node, ctx) ? collectAll(node) : node.content?.forEach(collectHidden));
+  stored.content.forEach(collectHidden);
+  const stripHidden = (node: BlockNode): BlockNode => {
+    let out = node;
+    if (typeof node.attrs?.id === 'string' && hiddenIds.has(node.attrs.id)) {
+      const { id: _dropped, ...attrs } = node.attrs;
+      out = { ...node, attrs };
+    }
+    return out.content ? { ...out, content: out.content.map(stripHidden) } : out;
+  };
+  return { ...submitted, content: mergeLevel(stored.content, (submitted.content ?? []).map(stripHidden), ctx) };
 }

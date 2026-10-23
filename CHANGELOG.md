@@ -9,6 +9,10 @@ Before you update, read the entries between your version and the new one, and
 
 ## [Unreleased]
 
+### Fixed
+
+- A player saving a page no longer destroys the game master's content on it. Links the player cannot see (to hidden pages) now survive when the player edits another paragraph or the text around them, and a callout or other container saved without its contents keeps its DM-only blocks. Repeated or reused block ids can no longer duplicate DM-only blocks or take over their ids. Players still never receive the hidden pages' ids or DM-only text. There is nothing to do when updating; no database change is needed.
+
 ## [1.2.0] - 2026-10-22
 
 The editor's block options can now be used from the keyboard. There is nothing to do when updating; no database change is
