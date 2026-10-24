@@ -18,6 +18,8 @@ export interface AppEnv {
     user: SessionUser | null;
     /** Set for calls made on behalf of an API token (the MCP server); read tokens may not write. */
     tokenScope?: 'read' | 'write';
+    /** The `api_tokens.id` behind an MCP call (page history records it); set together with `tokenScope`. */
+    tokenId?: string;
     /** Stored id of the browser session behind this request (the token hash); unset for API tokens and anonymous calls. */
     sessionId?: string;
   };
@@ -33,6 +35,8 @@ export const INTERNAL_AUTH = Symbol('cn.internalAuth');
 export interface InternalAuth {
   userId: string;
   scope: 'read' | 'write';
+  /** The token's id (the MCP route always sets it; page history records it). */
+  tokenId?: string;
 }
 export const internalAuth = (auth: InternalAuth) => ({ [INTERNAL_AUTH]: auth });
 
@@ -67,6 +71,7 @@ export function sessionMiddleware(db: AppDb, secure: boolean): MiddlewareHandler
       if (internal.scope === 'read' && !['GET', 'HEAD'].includes(c.req.method)) throw forbidden('This token can only read; create a read & write token to make changes');
       c.set('user', { id: user.id, username: user.username, displayName: user.displayName, isAdmin: user.isAdmin });
       c.set('tokenScope', internal.scope);
+      if (internal.tokenId) c.set('tokenId', internal.tokenId);
       return next();
     }
     const token = getCookie(c, SESSION_COOKIE);

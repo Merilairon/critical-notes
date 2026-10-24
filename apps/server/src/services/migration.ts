@@ -24,6 +24,7 @@ import type { IndexDb } from '../reference/index-db';
 import type { CampaignService } from './campaigns';
 import type { PageService } from './pages';
 import type { PropertyService } from './properties';
+import { contextFor, type WriteOrigin } from './revisions';
 
 interface EntityRow {
   uid: string;
@@ -143,7 +144,7 @@ export class EditionMigration {
   }
 
   /** Rewrites the mapped references (except those to keep) and switches the campaign's rules. */
-  apply(campaignId: string, userId: string, to: RulesetId, keep: string[]): MigrationResultDto {
+  apply(campaignId: string, userId: string, to: RulesetId, keep: string[], origin: WriteOrigin): MigrationResultDto {
     const report = this.plan(campaignId, userId, to);
     const skip = new Set(keep.map((k) => k.toLowerCase()));
     const mapping = new Map<string, Target>(
@@ -193,7 +194,7 @@ export class EditionMigration {
         ...(body ? { body: body as never } : {}),
         ...(facet ? { facet } : {}),
         ...(Object.keys(props).length ? { props } : {}),
-      });
+      }, contextFor(userId, origin, 'edition_migration'));
     }
     for (const e of this.db.select().from(encounters).where(and(eq(encounters.campaignId, campaignId), isNull(encounters.deletedAt))).all()) {
       const creatures = (e.creatures as { uid?: string | null }[]).map((c) => ({ ...c, uid: mapUid(c.uid) }));

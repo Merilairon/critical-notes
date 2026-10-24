@@ -42,6 +42,8 @@ import { tokenRoutes } from './routes/tokens';
 import { adminRoutes } from './routes/admin';
 import { backupRoutes } from './routes/backups';
 import { BackupScheduler } from './services/backup-scheduler';
+import { HistoryPruner } from './services/history-pruner';
+import { PageHistoryService } from './services/page-history';
 import { TrashPurger } from './services/trash-purger';
 import { BackupService } from './services/backups';
 import { UserAdminService } from './services/users';
@@ -63,7 +65,7 @@ export function createServices({ indexDb, db, config }: AppDeps) {
   const campaigns = new CampaignService(db, homebrewIndex, reload);
   const properties = new PropertyService(db);
   const pageSearch = new PageSearchIndex(indexDb);
-  const pages = new PageService(db, properties, new PageIndexer(db, pageSearch));
+  const pages = new PageService(db, properties, new PageIndexer(db, pageSearch), config.history);
   const homebrew = new HomebrewService(db, homebrewIndex, indexDb, reload);
   const uploads = new UploadService(db, config.uploadsDir);
   const homebrewTransfer = new HomebrewTransfer(db, homebrew);
@@ -86,7 +88,9 @@ export function createServices({ indexDb, db, config }: AppDeps) {
   // Built here, started by main.ts (off unless BACKUP_EVERY_HOURS is set)
   const backupScheduler = new BackupScheduler({ service: backups, config });
   const trashPurger = new TrashPurger({ pages, templates, backups, config });
-  return { backups, backupScheduler, trashPurger, userAdmin, apiTokens, visibility, transfer, migration, reference, homebrewIndex, campaigns, pages, homebrew, homebrewTransfer, properties, pageSearch, uploads, templates, encounters, trackers, inventory };
+  const historyPruner = new HistoryPruner({ db, backups, config });
+  const pageHistory = new PageHistoryService(db, pages, properties);
+  return { pageHistory, backups, backupScheduler, trashPurger, historyPruner, userAdmin, apiTokens, visibility, transfer, migration, reference, homebrewIndex, campaigns, pages, homebrew, homebrewTransfer, properties, pageSearch, uploads, templates, encounters, trackers, inventory };
 }
 
 export type Services = ReturnType<typeof createServices>;

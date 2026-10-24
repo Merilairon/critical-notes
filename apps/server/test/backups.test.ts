@@ -250,11 +250,11 @@ describe('backup service: round trip and consistency', () => {
       format: 1,
       trigger: 'api',
       app: { version: appVersion() },
-      database: { engine: 'sqlite', latestTag: '0006_accounts' },
+      database: { engine: 'sqlite', latestTag: '0007_page_history' },
       counts: { users: 1, campaigns: 1, uploads: 5 },
       uploads: { files: 8, missing: 0 },
     });
-    expect(result.manifest.database.migrations.map((m) => m.tag)).toEqual(['0000_init', '0001_links_properties_uploads', '0002_templates', '0003_encounters_inventory', '0004_members_invites', '0005_api_tokens', '0006_accounts']);
+    expect(result.manifest.database.migrations.map((m) => m.tag)).toEqual(['0000_init', '0001_links_properties_uploads', '0002_templates', '0003_encounters_inventory', '0004_members_invites', '0005_api_tokens', '0006_accounts', '0007_page_history']);
     expect(createHash('sha256').update(readFileSync(join(bdir(), r.name))).digest('hex')).toBe(r.sha256);
     backup.close();
   });

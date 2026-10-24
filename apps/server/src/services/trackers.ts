@@ -24,6 +24,7 @@ import { badRequest, notFound } from '../lib/http';
 import { newId } from '../lib/ids';
 import type { EncounterService } from './encounters';
 import type { PageService } from './pages';
+import type { WriteContext } from './revisions';
 
 type Row = typeof trackers.$inferSelect;
 export type TrackerListener = (event: { dm: TrackerDto; player: PlayerTrackerView }) => void;
@@ -129,7 +130,7 @@ export class TrackerService {
   }
 
   /** Applies one action and notifies subscribers. */
-  apply(campaignId: string, id: string, action: TrackerAction): TrackerDto {
+  apply(campaignId: string, id: string, action: TrackerAction, ctx: WriteContext): TrackerDto {
     const r = this.row(campaignId, id);
     if (r.status === 'ended' && action.type !== 'start') throw badRequest('This combat has ended');
     const state = this.reduce(r.state as TrackerState, action);
@@ -140,18 +141,18 @@ export class TrackerService {
       .where(eq(trackers.id, id))
       .run();
     const dto = this.get(campaignId, id);
-    if (action.type === 'end') this.syncPartyHp(campaignId, dto.state);
+    if (action.type === 'end') this.syncPartyHp(campaignId, dto.state, ctx);
     this.notify(dto);
     return dto;
   }
 
   /** After combat, player characters' current hit points go back to their pages. */
-  private syncPartyHp(campaignId: string, state: TrackerState) {
+  private syncPartyHp(campaignId: string, state: TrackerState, ctx: WriteContext) {
     for (const c of state.combatants) {
       if (c.kind !== 'pc' || !c.ref || c.hp === null) continue;
       try {
         const page = this.pages.get(campaignId, c.ref);
-        if (page.facet?.['hpCurrent'] !== c.hp) this.pages.update(campaignId, c.ref, { revision: page.revision, facet: { hpCurrent: c.hp } });
+        if (page.facet?.['hpCurrent'] !== c.hp) this.pages.update(campaignId, c.ref, { revision: page.revision, facet: { hpCurrent: c.hp } }, ctx);
       } catch {
         // The page was deleted or changed meanwhile: leave it
       }

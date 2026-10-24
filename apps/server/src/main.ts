@@ -90,6 +90,10 @@ if (scheduler.enabled) {
 const trashPurger = services.trashPurger;
 trashPurger.start();
 
+// Page history thinning (all revisions for 30 days, then one per day, one per month after a year); same schedule, defers during backups.
+const historyPruner = services.historyPruner;
+historyPruner.start();
+
 // SIGTERM / SIGINT (docker stop, Ctrl+C): stop accepting requests, wait up to 8 s for a running backup (scheduled or from the
 // web page), close both databases, exit 0. An interrupted backup publishes nothing; a second signal exits at once.
 // SHUTDOWN_BACKUP_WAIT_MS shortens the 8 s wait (tests only; invalid or missing = 8000)
@@ -97,7 +101,7 @@ const waitMs = Number(process.env.SHUTDOWN_BACKUP_WAIT_MS);
 shutdown.arm({
   backupWaitMs: Number.isInteger(waitMs) && waitMs > 0 && waitMs <= 8000 ? waitMs : undefined,
   server,
-  stopScheduler: () => Promise.all([scheduler.stop(), trashPurger.stop()]).then(() => undefined),
+  stopScheduler: () => Promise.all([scheduler.stop(), trashPurger.stop(), historyPruner.stop()]).then(() => undefined),
   backupRunning: () => services.backups.isRunning(),
   abortBackup: () => services.backups.abortInFlightSync(),
   closeDatabases: () => {

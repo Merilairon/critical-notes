@@ -422,6 +422,41 @@ export const templates = sqliteTable(
   (t) => [index('templates_owner').on(t.scope, t.ownerUserId), index('templates_campaign').on(t.campaignId)],
 );
 
+/**
+ * Full snapshot of a page after each recorded write (page history, task N1.2; design: docs/design/page-history.md). The body is the
+ * stored document including DM-only and secret blocks: only game masters may ever read these rows. `token_id` has no foreign key
+ * so history survives a revoked token.
+ */
+export const pageRevisions = sqliteTable(
+  'page_revisions',
+  {
+    pageId: text('page_id')
+      .notNull()
+      .references(() => pages.id, { onDelete: 'cascade' }),
+    /** Equals `pages.revision` after the write; not necessarily contiguous (folded saves); the lazy baseline can be lower. */
+    revision: integer('revision').notNull(),
+    campaignId: text('campaign_id')
+      .notNull()
+      .references(() => campaigns.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    type: text('type').notNull(),
+    body: text('body', { mode: 'json' }),
+    details: text('details', { mode: 'json' }),
+    properties: text('properties', { mode: 'json' }).notNull(),
+    authorUserId: text('author_user_id').references(() => users.id, { onDelete: 'set null' }),
+    /** web | player | mcp | system (system: the baseline row and the start-up upgrade of built-in templates) */
+    source: text('source').notNull(),
+    tokenId: text('token_id'),
+    /** create | edit | restore | template_sync | template_apply | edition_migration | import | tracker | baseline */
+    cause: text('cause').notNull(),
+    restoredFrom: integer('restored_from'),
+    contentHash: text('content_hash').notNull(),
+    bytes: integer('bytes').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.pageId, t.revision] }), index('page_revisions_created').on(t.createdAt)],
+);
+
 /** Every saved version of a template (linked instances re-render from the current one). */
 export const templateVersions = sqliteTable(
   'template_versions',

@@ -12,7 +12,7 @@ flowchart LR
   end
   subgraph Server["apps/server (Hono on Node)"]
     routes["routes/<br/>auth, admin, backups, campaigns,<br/>play, reference, homebrew,<br/>templates, uploads, img, mcp"]
-    services["services/<br/>pages, visibility, campaigns, users,<br/>homebrew, templates, encounters,<br/>trackers, inventory, transfer, migration,<br/>backups, backup-scheduler, trash-purger"]
+    services["services/<br/>pages, visibility, campaigns, users,<br/>homebrew, templates, encounters,<br/>trackers, inventory, transfer, migration,<br/>backups, backup-scheduler, trash-purger,<br/>page-history, history-pruner"]
     indexer["reference/<br/>indexer + ReferenceService"]
     cli["dist/admin.mjs<br/>reset-link, backup, restore"]
   end
@@ -125,6 +125,26 @@ and backlinks (the page index drops them), and Restore rebuilds the derived rows
 back. Templates and homebrew use the same soft delete. `trash-purger` removes pages and templates deleted more than
 30 days ago (`TRASH_RETENTION_DAYS`, first about a minute after start and then daily); it waits while a backup or restore
 runs. **Delete permanently** is `DELETE .../purge`; it is never on the MCP allowlist.
+
+## Page history
+
+Every content write of a page (`PageService.create` and `update`, which also serve the player edit, template sync and apply,
+edition migration, import, the tracker's end-of-combat hit-point sync and the MCP tools) leaves a full snapshot in
+`page_revisions`, in the same transaction as the write: title, type, body (with DM-only blocks), details and properties, who
+(`web`, `player` or `mcp` with the token id), and why (`cause`). Design and reasons: [design/page-history.md](design/page-history.md).
+
+- **Folding:** saves by the same author and source within `HISTORY_COALESCE_MINUTES` (default 2) become one row that keeps the
+  time of its first save. MCP calls, restores, template, migration and tracker writes are never folded.
+- **Baseline:** the first recorded write of an older page also stores the state it overwrote (`cause = baseline`, source
+  `system`), decided by comparing content hashes, so history is never silently missing the overwritten state.
+- **Retention** (`HistoryPruner`, daily, waits for backups and restores): every row for `HISTORY_KEEP_ALL_DAYS` (30), then one per
+  page per day, one per month after `HISTORY_MONTHLY_AFTER_DAYS` (365); a page over `HISTORY_MAX_PER_PAGE` (200) rows and a campaign
+  over `HISTORY_MAX_MB_PER_CAMPAIGN` (500, soft) are thinned early, never inside the 30-day window. The newest and the oldest row
+  of a page are never pruned. Purging a page deletes its history first, in short transactions. There is no switch to turn history off.
+- **Who reads it:** only `PageHistoryService`, and only for game masters (the endpoints are task N1.3). Players never see history,
+  and history is not exported with a campaign.
+- **Backups:** history lives in `app.sqlite`, so backups grow with it. Near-identical page copies deflate at about 50:1, so the
+  restore reader's ratio limit for the database is 200:1 (it was 50:1).
 
 ## What players can see
 
@@ -254,6 +274,8 @@ erDiagram
   campaigns ||--o{ homebrew_source_shares : uses
   homebrew_sources ||--o{ homebrew_entities : contains
   homebrew_entities ||--o{ homebrew_revisions : "history of"
+  pages ||--o{ page_revisions : "history of (full copies)"
+  campaigns ||--o{ page_revisions : "scopes"
   templates ||--o{ template_versions : "versions of"
   templates ||--o{ template_usage : "used in (derived)"
   pages ||--o{ template_usage : uses

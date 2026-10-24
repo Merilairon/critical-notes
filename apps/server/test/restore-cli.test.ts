@@ -566,7 +566,7 @@ describe('the migration level and hostile files', () => {
     cpSync(join(old.config.backupDir, made.name), olderZip);
     const r = await runCli(['restore', olderZip, '--yes'], env.config);
     expect(r.code).toBe(0);
-    expect(r.out).toMatch(/Migrated 4 steps/);
+    expect(r.out).toMatch(/Migrated 5 steps/);
     expect(q('select username from users')).toEqual([{ username: 'oldtimer' }]);
     expect(q('select count(*) as n from __drizzle_migrations')).toEqual([{ n: loadJournal().length }]);
     expect(q('select disabled_at from users')).toEqual([{ disabled_at: null }]); // a column added by a later migration

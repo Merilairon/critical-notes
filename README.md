@@ -102,6 +102,11 @@ resolved from the repository root.
 | `BACKUP_KEEP` | `7` | Backups to keep, 1 to 1000 (an invalid value logs a warning and uses 7). Backups made from the web page are protected for 7 days and do not count until then |
 | `BACKUP_EVERY_HOURS` | off (`24` in `docker-compose.yml`) | Make a backup in the server every N hours, 1 to 720 (`0` or unset = off; recommended `24`). The shipped `docker-compose.yml` turns it on with 24; put `BACKUP_EVERY_HOURS=0` in the `.env` next to it to turn it off, see [Backups](#scheduled-backups). After downtime one catch-up backup is made about a minute after start; it is skipped while a backup or a restore is running. An invalid value stops the server from starting. The Backups page shows the next run |
 | `BACKUP_DIR` | `DATA_DIR/backups` | Where backup zips go; use another disk or mount so the backups survive the data. Must not be inside the web build, the uploads or the 5etools folders, or `DATA_DIR` itself, and must not be world-writable (the server refuses to start) |
+| `HISTORY_KEEP_ALL_DAYS` | `30` | Page history: every saved version is kept this many days (1 to 3650); older ones are thinned to one per page per day. An invalid value logs a warning and uses the default |
+| `HISTORY_COALESCE_MINUTES` | `2` | Page history: saves by the same person within this many minutes become one version (0 = keep every save, 0 to 1440). A paste you regret can overwrite at most this much earlier state |
+| `HISTORY_MONTHLY_AFTER_DAYS` | `365` | Page history: after this many days only one version per page per month is kept (1 to 36500) |
+| `HISTORY_MAX_PER_PAGE` | `200` | Page history: a page with more versions than this is thinned early, oldest first (10 to 100000) |
+| `HISTORY_MAX_MB_PER_CAMPAIGN` | `500` | Page history: soft size limit per campaign (10 to 1000000 MB); older versions are thinned beyond it, the last 30 days never are. Pruning stops history from growing; it does not shrink the database file |
 | `PORT` | `3000` | |
 | `PUBLIC_URL` | `http://localhost:4200` | The address people open; requests from other origins are refused |
 | `SECURE_COOKIES` | from `PUBLIC_URL` | `1` or `0` to override (for example behind a TLS-terminating proxy that forwards plain http) |

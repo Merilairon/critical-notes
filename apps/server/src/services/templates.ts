@@ -52,6 +52,7 @@ import type { ReferenceService } from '../reference/service';
 import type { CampaignService } from './campaigns';
 import type { PageService } from './pages';
 import type { PropertyService } from './properties';
+import { contextFor, type WriteContext, type WriteOrigin } from './revisions';
 
 type Row = typeof templates.$inferSelect;
 type Def = BlockTemplateDef | PageTemplateDef;
@@ -249,7 +250,7 @@ export class TemplateService {
   }
 
   /** Saves a new version. Linked instances of block templates are re-rendered with it. */
-  update(userId: string, id: string, input: UpdateTemplateInput): { template: TemplateDto; propagated: number } {
+  update(userId: string, id: string, input: UpdateTemplateInput, origin: WriteOrigin): { template: TemplateDto; propagated: number } {
     const t = this.editableRow(userId, id);
     if (input.version !== t.version) throw conflict('This template was changed elsewhere. Reload it before saving.', { version: t.version });
     const definition = input.definition ? this.normalize(userId, t.kind as TemplateKindDto, input.definition, { selfId: t.id, campaignId: t.campaignId }) : (t.definition as Def);
@@ -269,7 +270,7 @@ export class TemplateService {
         .run();
       tx.insert(templateVersions).values({ templateId: id, version, definition }).run();
     });
-    const propagated = t.kind === 'block' ? this.propagate(id, definition as BlockTemplateDef, version) : 0;
+    const propagated = t.kind === 'block' ? this.propagate(id, definition as BlockTemplateDef, version, contextFor(userId, origin, 'template_sync')) : 0;
     return { template: this.get(userId, id), propagated };
   }
 
@@ -437,7 +438,7 @@ export class TemplateService {
           tx.update(templates).set({ ...values, updatedAt: Date.now() }).where(eq(templates.id, existing.id)).run();
           tx.insert(templateVersions).values({ templateId: existing.id, version: b.version, definition: b.definition }).onConflictDoNothing().run();
         });
-        if (b.kind === 'block') this.propagate(existing.id, b.definition as BlockTemplateDef, b.version);
+        if (b.kind === 'block') this.propagate(existing.id, b.definition as BlockTemplateDef, b.version, { userId: null, source: 'system', cause: 'template_sync' });
         updated++;
       }
     }
@@ -527,7 +528,7 @@ export class TemplateService {
   }
 
   /** Creates a page (and its child pages) from a page template. */
-  createPage(userId: string, campaignId: string, input: CreatePageFromTemplateInput): PageDto {
+  createPage(userId: string, campaignId: string, input: CreatePageFromTemplateInput, origin: WriteOrigin): PageDto {
     this.campaigns.requireDm(campaignId, userId);
     const counter = { pages: 0 };
     return this.createPageInner(userId, campaignId, {
@@ -540,6 +541,7 @@ export class TemplateService {
       depth: 0,
       ancestors: new Set(),
       counter,
+      ctx: contextFor(userId, origin, 'create'),
     });
   }
 
@@ -556,6 +558,7 @@ export class TemplateService {
       depth: number;
       ancestors: Set<string>;
       counter: { pages: number };
+      ctx: WriteContext;
     },
   ): PageDto {
     const t = this.lookup(userId, a.templateRef, campaignId);
@@ -569,6 +572,11 @@ export class TemplateService {
     const facet = instantiateValue(def.facet, fill) as Record<string, unknown>;
     const body = instantiate(def.body, opts);
     const keyMap = this.ensureProperties(campaignId, def);
+    const props: Record<string, unknown> = {};
+    for (const p of def.properties) {
+      if (p.default === undefined || p.default === null || p.default === '') continue;
+      props[keyMap.get(p.key)!] = instantiateValue(p.default, fill);
+    }
 
     const page = this.pages.create(campaignId, userId, {
       type: def.pageType as PageType,
@@ -579,15 +587,10 @@ export class TemplateService {
       tags: def.defaults.tags ?? [],
       body: { type: 'doc', content: body.length ? body : [{ type: 'paragraph' }] },
       facet: Object.fromEntries(Object.entries(facet).filter(([, v]) => v !== null && v !== '')),
-    });
+      props,
+    }, a.ctx);
     a.counter.pages++;
-    const props: Record<string, unknown> = {};
-    for (const p of def.properties) {
-      if (p.default === undefined || p.default === null || p.default === '') continue;
-      props[keyMap.get(p.key)!] = instantiateValue(p.default, fill);
-    }
-    let result = page;
-    if (Object.keys(props).length) result = this.pages.update(campaignId, page.id, { revision: page.revision, props });
+    const result = page;
     this.db.update(pages).set({ fromTemplateId: t.id, fromTemplateVersion: t.version }).where(eq(pages.id, page.id)).run();
     this.db.insert(templateUsage).values({ templateId: t.id, pageId: page.id, blockId: '', version: t.version, mode: 'page' }).onConflictDoNothing().run();
 
@@ -599,7 +602,7 @@ export class TemplateService {
         if (childTemplate && childTemplate.kind === 'page' && !ancestors.has(childTemplate.id)) {
           this.createPageInner(userId, campaignId, { ...a, templateRef: childTemplate.id, title: child.title, parentId: page.id, depth: a.depth + 1, ancestors });
         } else {
-          this.pages.create(campaignId, userId, { type: 'generic', title: child.title, parentId: page.id, visibility: 'dm', tags: [] });
+          this.pages.create(campaignId, userId, { type: 'generic', title: child.title, parentId: page.id, visibility: 'dm', tags: [] }, a.ctx);
           a.counter.pages++;
         }
       }
@@ -608,7 +611,7 @@ export class TemplateService {
   }
 
   /** Adds a page template's missing properties and appends its blocks; never overwrites anything. */
-  applyToPage(userId: string, campaignId: string, pageId: string, input: { templateId: string; values: Record<string, unknown>; mode: 'fill' | 'fields' }): PageDto {
+  applyToPage(userId: string, campaignId: string, pageId: string, input: { templateId: string; values: Record<string, unknown>; mode: 'fill' | 'fields' }, origin: WriteOrigin): PageDto {
     this.campaigns.requireDm(campaignId, userId);
     const t = this.lookup(userId, input.templateId, campaignId);
     if (!t || t.kind !== 'page') throw notFound('Page template not found');
@@ -625,7 +628,7 @@ export class TemplateService {
     }
     const added = instantiate(def.body, opts);
     const body = { type: 'doc' as const, content: [...((page.body?.content as BlockNode[] | undefined) ?? []), ...added] };
-    return this.pages.update(campaignId, pageId, { revision: page.revision, body, ...(Object.keys(props).length ? { props } : {}) });
+    return this.pages.update(campaignId, pageId, { revision: page.revision, body, ...(Object.keys(props).length ? { props } : {}) }, contextFor(userId, origin, 'template_apply'));
   }
 
   defaults(campaignId: string): Record<string, string> {
@@ -654,7 +657,7 @@ export class TemplateService {
   // region Linked instances
 
   /** Re-renders every linked instance of a block template with a new version. Returns how many changed. */
-  private propagate(templateId: string, def: BlockTemplateDef, version: number): number {
+  private propagate(templateId: string, def: BlockTemplateDef, version: number, ctx: WriteContext): number {
     const pageIds = [
       ...new Set(
         this.db
@@ -681,7 +684,7 @@ export class TemplateService {
         });
       const content = replace(((row.body as { content?: BlockNode[] }).content ?? []) as BlockNode[]);
       if (!touched) continue;
-      this.pages.update(row.campaignId, pageId, { revision: row.revision, body: { type: 'doc', content } });
+      this.pages.update(row.campaignId, pageId, { revision: row.revision, body: { type: 'doc', content } }, ctx);
       changed++;
     }
     return changed;
