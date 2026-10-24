@@ -141,7 +141,7 @@ edition migration, import, the tracker's end-of-combat hit-point sync and the MC
   page per day, one per month after `HISTORY_MONTHLY_AFTER_DAYS` (365); a page over `HISTORY_MAX_PER_PAGE` (200) rows and a campaign
   over `HISTORY_MAX_MB_PER_CAMPAIGN` (500, soft) are thinned early, never inside the 30-day window. The newest and the oldest row
   of a page are never pruned. Purging a page deletes its history first, in short transactions. There is no switch to turn history off.
-- **Who reads it:** only `PageHistoryService`, and only for game masters (the endpoints are task N1.3). Players never see history,
+- **Who reads it:** only `PageHistoryService`, and only for game masters (the endpoints `GET /pages/:pid/history`, `GET /pages/:pid/history/:rev` and `POST /pages/:pid/history/:rev/restore`, task N1.3, check the GM role in a middleware before anything else). Players never see history,
   and history is not exported with a campaign.
 - **Backups:** history lives in `app.sqlite`, so backups grow with it. Near-identical page copies deflate at about 50:1, so the
   restore reader's ratio limit for the database is 200:1 (it was 50:1).
