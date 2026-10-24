@@ -73,6 +73,7 @@ export interface BacklinkDto extends PageSummaryDto {
 }
 
 export interface QueryRowDto extends PageSummaryDto {
+  createdAt: number;
   tags: string[];
   facet: Record<string, unknown> | null;
   props: Record<string, unknown>;

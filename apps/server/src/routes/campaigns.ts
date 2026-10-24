@@ -136,10 +136,7 @@ export function campaignRoutes(deps: {
     // House rules may hold DM notes too
     return c.json({
       ...campaign,
-      houseRules: projectDoc(campaign.houseRules as BlockDocument | null, {
-        role: 'player',
-        canSeePage: (id) => visible.has(id),
-      }),
+      houseRules: projectDoc(campaign.houseRules as BlockDocument | null, pages.playerContext(properties.list(campaignId), visible)),
     });
   });
 

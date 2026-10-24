@@ -165,6 +165,15 @@ describe('runQuery', () => {
     expect(q({ sort: { field: 'updatedAt', dir: 'desc' }, limit: 2 }, null)).toEqual(['Glasstaff', 'Phandalin']);
     expect(q({})).not.toContain('Phandalin');
   });
+
+  it('keeps empty values last in both directions', () => {
+    // Sildar has no level, Phandalin neither; Toblen 2, Glasstaff 9
+    expect(q({ sort: { field: 'prop.level', dir: 'asc' } }, null)).toEqual(['Toblen', 'Glasstaff', 'Phandalin', 'Sildar']);
+    expect(q({ sort: { field: 'prop.level', dir: 'desc' } }, null)).toEqual(['Glasstaff', 'Toblen', 'Phandalin', 'Sildar']);
+    // An empty list or text counts as empty too
+    expect(q({ sort: { field: 'tags', dir: 'desc' } }, null).slice(-1)).toEqual(['Sildar']);
+    expect(q({ sort: { field: 'tags', dir: 'asc' } }, null).slice(-1)).toEqual(['Sildar']);
+  });
 });
 
 describe('mergePlayerEdit', () => {
@@ -263,5 +272,70 @@ describe('mergePlayerEdit', () => {
       expect(JSON.stringify(merged.content![0])).toContain('"pageId":"hidden-page"');
       expect(docText(merged, 'dm')).toContain('Never met');
     });
+  });
+});
+
+describe('query block columns and player projection', () => {
+  const query = (attrs: Record<string, unknown>) => ({ type: 'query', attrs: { id: 'q1', ...attrs } });
+  const hidden = (f: string) => f === 'prop.secret' || f === 'facet.statblockUid';
+  const ctx = { role: 'player' as const, canSeePage: () => true, isHiddenField: hidden };
+  const attrsOf = (d: BlockDocument | null) => d!.content![0]!.attrs as Record<string, unknown>;
+
+  it('drops bad column keys instead of wiping the block attributes', () => {
+    const { doc: out } = sanitizeDoc(
+      doc(query({ title: 'Mine', view: 'table', filter: { types: ['npc'] }, columns: ['facet.status', 'title', 'bogus', 7, 'prop.a b', 'facet.status', 'tags'] })),
+      { newId },
+    );
+    expect(attrsOf(out)).toMatchObject({ title: 'Mine', view: 'table', filter: { types: ['npc'] }, columns: ['facet.status', 'tags'] });
+  });
+
+  it('caps columns at 10 and defaults a missing or non-array list to empty', () => {
+    const many = Array.from({ length: 14 }, (_, i) => `prop.p${i}`);
+    expect((attrsOf(sanitizeDoc(doc(query({ columns: many })), { newId }).doc)['columns'] as string[]).length).toBe(10);
+    expect(attrsOf(sanitizeDoc(doc(query({})), { newId }).doc)['columns']).toEqual([]);
+    expect(attrsOf(sanitizeDoc(doc(query({ columns: 'tags' })), { newId }).doc)['columns']).toEqual([]);
+  });
+
+  it('removes DM-only columns and resets a DM-only default sort for players', () => {
+    const d = sanitizeDoc(doc(query({ view: 'table', columns: ['prop.secret', 'prop.mood', 'facet.statblockUid', 'type'], filter: { sort: { field: 'prop.secret', dir: 'desc' } } })), { newId }).doc;
+    const seen = attrsOf(projectDoc(d, ctx));
+    expect(seen['columns']).toEqual(['prop.mood', 'type']);
+    expect(seen['filter']).toMatchObject({ sort: { field: 'title', dir: 'asc' } });
+    expect(JSON.stringify(seen)).not.toContain('secret');
+    // A visible sort stays
+    const ok = sanitizeDoc(doc(query({ filter: { sort: { field: 'prop.mood', dir: 'desc' } } })), { newId }).doc;
+    expect(attrsOf(projectDoc(ok, ctx))['filter']).toMatchObject({ sort: { field: 'prop.mood', dir: 'desc' } });
+  });
+
+  it('leaves the block alone when the context cannot tell hidden fields (exports, merges)', () => {
+    const d = sanitizeDoc(doc(query({ columns: ['prop.secret'] })), { newId }).doc;
+    expect(attrsOf(projectDoc(d, { role: 'player', canSeePage: () => true }))['columns']).toEqual(['prop.secret']);
+    expect(projectDoc(d, { role: 'dm', canSeePage: () => true, isHiddenField: hidden })).toBe(d);
+  });
+
+  it('keeps the stored columns and sort when a player saves the cleaned copy', () => {
+    const stored = sanitizeDoc(doc(query({ columns: ['prop.secret', 'prop.mood'], filter: { sort: { field: 'prop.secret', dir: 'desc' } } })), { newId }).doc;
+    const seen = projectDoc(stored, ctx)!;
+    const merged = mergePlayerEdit(stored, seen, ctx);
+    expect(attrsOf(merged)['columns']).toEqual(['prop.secret', 'prop.mood']);
+    expect(attrsOf(merged)['filter']).toMatchObject({ sort: { field: 'prop.secret', dir: 'desc' } });
+  });
+
+  it('keeps every hidden key when the player’s visible list is already full', () => {
+    const visible = Array.from({ length: 9 }, (_, i) => `prop.v${i}`);
+    const stored = sanitizeDoc(doc(query({ columns: ['prop.secret', 'facet.statblockUid', ...visible.slice(0, 8)] })), { newId }).doc;
+    const seen = projectDoc(stored, ctx)!;
+    const edited = { ...seen, content: [{ ...seen.content![0]!, attrs: { ...attrsOf(seen), columns: [...visible, 'type'] } }] };
+    const columns = attrsOf(sanitizeDoc(mergePlayerEdit(stored, edited, ctx), { newId }).doc)['columns'] as string[];
+    expect(columns).toHaveLength(10);
+    expect(columns).toEqual(expect.arrayContaining(['prop.secret', 'facet.statblockUid']));
+    expect(columns.slice(0, 8)).toEqual(visible.slice(0, 8));
+  });
+
+  it('applies a player’s own column change and still keeps the hidden keys', () => {
+    const stored = sanitizeDoc(doc(query({ columns: ['prop.secret', 'prop.mood'] })), { newId }).doc;
+    const seen = projectDoc(stored, ctx)!;
+    const edited = { ...seen, content: [{ ...seen.content![0]!, attrs: { ...attrsOf(seen), columns: ['type', 'prop.mood'] } }] };
+    expect(attrsOf(mergePlayerEdit(stored, edited, ctx))['columns']).toEqual(['type', 'prop.mood', 'prop.secret']);
   });
 });

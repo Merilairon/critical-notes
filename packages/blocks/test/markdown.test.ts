@@ -60,7 +60,7 @@ function corpus(): BlockDocument {
     { type: 'image', attrs: { id: 'i2', src: { kind: 'img', path: 'bestiary/MM/Goblin.webp' }, alt: 'Goblin' } },
     { type: 'statGrid', attrs: { id: 'sg', items: [{ label: 'Population', value: '500' }] } },
     { type: 'loot', attrs: { id: 'l1', items: [{ name: 'Silver ring', qty: 1 }] } },
-    { type: 'query', attrs: { id: 'q1', title: 'NPCs here' } },
+    { type: 'query', attrs: { id: 'q1', title: 'NPCs here', view: 'table', columns: ['facet.status', 'prop.mood', 'updatedAt'] } },
     { type: 'pageEmbed', attrs: { id: 'pe', pageId: 'loc1' } },
     p(t('Fields like '), { type: 'placeholder', attrs: { name: 'dc', valueType: 'number', label: 'DC' } }, t(' stay.')),
   );

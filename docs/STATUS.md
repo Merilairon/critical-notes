@@ -548,7 +548,7 @@ The plan and release 1.0 are built and shipped, as are the follow-ups 1.1.0 to 1
 - **Any new endpoint that returns campaign content must project for players** (pages through `PageService.projectPage` / `getFor`, inventory through `projectInventoryForPlayers`, member characters filtered by visible pages). It also needs a sentinel string in the seed of `test/visibility.test.ts`, so the crawl covers it.
 - Trackers are not part of the campaign export. `selected` pages import as DM-only, because the viewers are users of the old instance.
 - The edition migration rewrites only simple `name|source` tags; class-feature style references keep their old target.
-- The query block has only a `list` view. The `table` and `cards` views and the column picker are not built yet.
+- The query block has `list`, `table` and `cards` views and a column picker (I2.2, docs/design/query-views.md). Not built: drag and drop reordering, column widths, saving the viewer sort, a Cards sort control, reference-link columns (no cheap name lookup yet). The query benchmark (I2.3) is pending.
 - `apps/web` excludes `packages/fivetools/src/node` in `tsconfig.app.json`. Keep Node-only code there.
 - UI code that sits in the initial bundle (app shell, command palette) must not import values from `@cn/shared`'s main entry, which pulls in zod. Use `@cn/shared/page-types` or type-only imports.
 - An `effect` that calls an async method must wrap the call in `untracked`, or every signal the method reads before its first `await` becomes a dependency.

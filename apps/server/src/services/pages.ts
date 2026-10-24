@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { and, asc, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
-import { docLinks, mergePlayerEdit, projectDoc, queryFilterSchema, runQuery, sanitizeDoc, type BlockDocument, type QueryablePage, type QueryFilterInput } from '@cn/blocks';
+import { docLinks, mergePlayerEdit, projectDoc, queryFilterSchema, runQuery, sanitizeDoc, type BlockDocument, type ProjectContext, type QueryablePage, type QueryFilterInput } from '@cn/blocks';
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { generateKeyBetween } from 'fractional-indexing';
 import {
@@ -461,9 +461,9 @@ export class PageService {
    */
   projectPage(campaignId: string, page: PageDto, visible: ReadonlySet<string>): PageDto {
     const canSeePage = (id: string) => visible.has(id);
-    const body = projectDoc(page.body as BlockDocument | null, { role: 'player', canSeePage }) as BlockDoc | null;
-    const facetType = facetTypeFor(page.type);
     const defs = this.properties.list(campaignId);
+    const body = projectDoc(page.body as BlockDocument | null, this.playerContext(defs, visible)) as BlockDoc | null;
+    const facetType = facetTypeFor(page.type);
     const props: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(page.props)) {
       const def = defs.find((d) => d.key === key);
@@ -478,6 +478,17 @@ export class PageService {
       facet: facetType ? projectFacetForPlayers(facetType, page.facet, canSeePage) : page.facet,
       props,
       viewers: [],
+    };
+  }
+
+  /** What block projection needs to know about a player: visible pages and DM-only query fields. */
+  playerContext(defs: { key: string; dmOnly: boolean }[], visible: ReadonlySet<string>): ProjectContext {
+    const hiddenProps = new Set(defs.filter((d) => d.dmOnly).map((d) => d.key));
+    const hiddenFacet = new Set(Object.values(FACET_DM_ONLY_FIELDS).flat());
+    return {
+      role: 'player',
+      canSeePage: (id) => visible.has(id),
+      isHiddenField: (field) => (field.startsWith('prop.') ? hiddenProps.has(field.slice(5)) : field.startsWith('facet.') ? hiddenFacet.has(field.slice(6)) : false),
     };
   }
 
@@ -522,12 +533,15 @@ export class PageService {
     if (!parsed.success) throw badRequest('Invalid query', parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })));
     const defs = this.properties.list(campaignId);
     const hiddenProps = new Set(defs.filter((d) => d.dmOnly).map((d) => d.key));
+    const pageLinkProps = new Set(defs.filter((d) => d.type === 'pageLink').map((d) => d.key));
     const canSeePage = (id: string) => visible.has(id);
     const rows = this.queryable(campaignId)
       .filter((p) => visible.has(p.id))
       .map((p) => {
         const facetType = facetTypeFor(p.type as PageType);
-        const props = Object.fromEntries(Object.entries(p.props).filter(([k]) => !hiddenProps.has(k)));
+        const props = Object.fromEntries(
+          Object.entries(p.props).filter(([k, v]) => !hiddenProps.has(k) && !(pageLinkProps.has(k) && typeof v === 'string' && !canSeePage(v))),
+        );
         return {
           ...p,
           parentId: p.parentId && canSeePage(p.parentId) ? p.parentId : null,
@@ -539,7 +553,7 @@ export class PageService {
     const byId = new Map(rows.map((r) => [r.id, r]));
     return runQuery(rows, parsed.data, ctxPageId && canSeePage(ctxPageId) ? ctxPageId : null).map((p) => {
       const full = byId.get(p.id)!;
-      return { ...full.summary, tags: full.tags, facet: full.facet, props: full.props };
+      return { ...full.summary, createdAt: full.createdAt, tags: full.tags, facet: full.facet, props: full.props };
     });
   }
 
@@ -556,7 +570,7 @@ export class PageService {
     const dmFields = new Set(facetType ? FACET_DM_ONLY_FIELDS[facetType] : []);
     if (input.facet && Object.keys(input.facet).some((k) => dmFields.has(k) || k === 'playerUserId')) throw badRequest('Those details are for the DM');
     const body = input.body
-      ? (mergePlayerEdit(current.body as BlockDocument | null, input.body as BlockDocument, { role: 'player', canSeePage: (id) => visible.has(id) }) as BlockDoc)
+      ? (mergePlayerEdit(current.body as BlockDocument | null, input.body as BlockDocument, this.playerContext(this.properties.list(campaignId), visible)) as BlockDoc)
       : undefined;
     const saved = this.update(campaignId, pageId, { ...input, ...(body ? { body } : {}) });
     return this.projectPage(campaignId, saved, visible);
@@ -616,7 +630,7 @@ export class PageService {
     const byId = new Map(all.map((p) => [p.id, p]));
     return runQuery(all, parsed.data, ctxPageId).map((p) => {
       const full = byId.get(p.id)!;
-      return { ...full.summary, tags: full.tags, facet: full.facet, props: full.props };
+      return { ...full.summary, createdAt: full.createdAt, tags: full.tags, facet: full.facet, props: full.props };
     });
   }
 }

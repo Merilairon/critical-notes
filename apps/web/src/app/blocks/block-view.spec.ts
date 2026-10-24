@@ -1,6 +1,9 @@
 import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { CampaignStore } from '../campaign/campaign.store';
 import { BlockView, type ViewNode } from './block-view';
 
 const text = (t: string, marks?: ViewNode['marks']): ViewNode => ({ type: 'text', text: t, ...(marks ? { marks } : {}) });
@@ -144,5 +147,63 @@ describe('table names', () => {
     expect(hs.map((x) => x.tagName)).toEqual(['H3', 'H4']);
     expect(hs.map((x) => x.getAttribute('aria-level'))).toEqual(['2', '3']);
     host.remove();
+  });
+});
+
+describe('BlockView: query blocks', () => {
+  async function renderQuery(attrs: Record<string, unknown>) {
+    TestBed.configureTestingModule({
+      imports: [BlockView],
+      providers: [
+        provideRouter([]),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: CampaignStore, useValue: { id: signal('c1'), isGm: signal(false), propertyDefs: signal([]), byId: signal(new Map()) } },
+      ],
+    });
+    const fixture = TestBed.createComponent(BlockView);
+    fixture.componentRef.setInput('doc', { type: 'doc', content: [{ type: 'query', attrs }] });
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    return { fixture, http, el: fixture.nativeElement as HTMLElement };
+  }
+  const flush = async (f: { detectChanges(): void }) => {
+    await new Promise((r) => setTimeout(r));
+    f.detectChanges();
+    await new Promise((r) => setTimeout(r));
+    f.detectChanges();
+  };
+  const rowDto = { id: 'a', parentId: null, sortKey: 'a', type: 'npc', title: 'Sildar', icon: null, visibility: 'all', updatedAt: 1, createdAt: 1, tags: [], facet: { status: 'alive' }, props: {} };
+
+  it('renders a block saved before the table and card views as the list', async () => {
+    const { fixture, http, el } = await renderQuery({ title: 'Cast', filter: { types: ['npc'] } });
+    expect(el.textContent).toContain('Loading pages...');
+    http.expectOne('/api/campaigns/c1/query').flush({ rows: [rowDto] });
+    await flush(fixture);
+    expect(el.querySelector('ul.cn-query-results')).not.toBeNull();
+    expect(el.querySelector('table')).toBeNull();
+    expect(el.querySelector('.cn-embed > .font-semibold')!.textContent).toBe('Cast');
+  });
+
+  it('renders the saved view and columns, and the title as the table caption', async () => {
+    const { fixture, http, el } = await renderQuery({ title: 'Cast', view: 'table', columns: ['facet.status'], filter: { types: ['npc'] } });
+    http.expectOne('/api/campaigns/c1/query').flush({ rows: [rowDto] });
+    await flush(fixture);
+    expect(el.querySelector('caption')!.textContent).toBe('Cast');
+    expect(el.querySelector('.cn-embed > .font-semibold')).toBeNull();
+    expect(Array.from(el.querySelectorAll('thead th')).map((th) => th.textContent!.replace(/[▲▼]/g, '').trim())).toEqual(['Title', 'Status']);
+  });
+
+  it('shows an error with Try again that asks again, instead of "No matching pages"', async () => {
+    const { fixture, http, el } = await renderQuery({ view: 'cards', filter: {} });
+    http.expectOne('/api/campaigns/c1/query').flush({ error: 'x' }, { status: 500, statusText: 'Server Error' });
+    await flush(fixture);
+    expect(el.querySelector('[role=alert]')!.textContent).toContain('Could not load these pages.');
+    expect(el.textContent).not.toContain('No matching pages');
+    el.querySelector<HTMLButtonElement>('[role=alert] button')!.click();
+    await flush(fixture);
+    http.expectOne('/api/campaigns/c1/query').flush({ rows: [] });
+    await flush(fixture);
+    expect(el.textContent).toContain('No matching pages.');
   });
 });

@@ -6,6 +6,8 @@ import { CampaignStore } from '../campaign/campaign.store';
 import { api } from '../core/api';
 import { ContextService } from '../core/context.service';
 import { imageSrcUrl } from '../editor/views/atom-views';
+import { normalizeView } from '../editor/views/query-model';
+import { QueryResults } from '../editor/views/query-results';
 import { EntityView } from '../reference/entity-view';
 import { Inline } from '../reference/render/inline';
 import { Roll } from '../reference/render/roll';
@@ -90,23 +92,32 @@ export class RefEmbedBlock {
 
 @Component({
   selector: 'cn-query-block',
-  imports: [RouterLink],
+  imports: [QueryResults],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<div class="cn-embed">
-    @if (title()) {<div class="font-semibold">{{ title() }}</div>}
-    <ul class="cn-query-results">
-      @for (row of rows(); track row.id) {
-        <li><a [routerLink]="['/c', store?.id(), 'p', row.id]">{{ row.icon || icons[row.type] }} {{ row.title }}</a></li>
-      } @empty {<li class="text-muted">No matching pages</li>}
-    </ul>
+  template: `<div class="cn-embed cn-query-frame">
+    @if (title() && mode() !== 'table') {<div class="font-semibold">{{ title() }}</div>}
+    <cn-query-results
+      [rows]="rows()"
+      [view]="view()"
+      [columns]="columns()"
+      [filter]="filter()"
+      [title]="title()"
+      [loading]="results.isLoading() && !results.hasValue()"
+      [busy]="results.isLoading()"
+      [error]="!!results.error()"
+      (retry)="results.reload()"
+    />
   </div>`,
 })
 export class QueryBlock {
   readonly filter = input.required<unknown>();
   readonly title = input('');
+  /** Saved `view` and `columns`; blocks saved before the table and card views have neither. */
+  readonly view = input<unknown>('list');
+  readonly columns = input<unknown>([]);
   readonly pageId = input<string | null>(null);
   protected readonly store = inject(CampaignStore, { optional: true });
-  protected readonly icons = PAGE_TYPE_ICONS;
+  protected readonly mode = computed(() => normalizeView(this.view()));
   protected readonly results = httpResource<{ rows: QueryRowDto[] }>(() => {
     const id = this.store?.id();
     return id ? { url: `/api/campaigns/${id}/query`, method: 'POST', body: { filter: this.filter(), contextPageId: this.pageId() } } : undefined;

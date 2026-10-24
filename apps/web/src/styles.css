@@ -763,7 +763,8 @@ body {
   padding: 0.3rem;
 }
 .cn-query-title {
-  flex: 1;
+  flex: 1 1 8rem;
+  min-width: 0;
   font-weight: 700;
   background: transparent;
 }
@@ -792,6 +793,390 @@ body {
 }
 .cn-query-results a {
   color: var(--link);
+}
+
+/* ---------- Query block views: table, cards, column picker (docs/design/query-views.md) ---------- */
+/* The block frame is the container: narrow or wide follows the block, not the viewport */
+.cn-query-frame {
+  container: frame / inline-size;
+}
+/* A custom element is inline by default; its block content made hit-testing report it instead of the controls inside */
+cn-query-results {
+  display: block;
+}
+.cn-query-state,
+.cn-query-foot,
+.cn-table,
+.cn-card {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+.cn-query-state {
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+}
+.cn-query-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.375rem;
+  padding: 0.6rem;
+  color: var(--ink);
+}
+.cn-query-error p {
+  margin: 0;
+}
+.cn-query-foot {
+  margin: 0.4rem 0 0;
+  font-size: 0.8125rem;
+}
+.cn-query-foot:empty {
+  margin: 0;
+}
+.cn-btn[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Quiet chip for data cells (the uppercase .cn-badge is built for edition labels) */
+.cn-badge-plain {
+  display: inline-block;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 0.5em;
+  background: var(--panel-2);
+  color: var(--ink);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  text-transform: none;
+  white-space: normal;
+}
+.cn-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+.cn-cell-link {
+  color: var(--link);
+  text-decoration: underline;
+}
+.cn-clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+/* Table */
+.cn-table-wrap {
+  overflow-x: auto;
+  margin-top: 0.4rem;
+}
+.cn-table {
+  width: 100%;
+  table-layout: auto;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+.cn-table-title {
+  /* Stays in view when the region scrolls sideways: the width of the block, not of the table */
+  position: sticky;
+  left: 0;
+  width: 100cqw;
+  box-sizing: border-box;
+  padding: 0 0 0.4rem;
+  text-align: left;
+  font-weight: 600;
+}
+.cn-table th,
+.cn-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+}
+.cn-table td {
+  min-width: 6rem;
+}
+.cn-table thead th {
+  padding: 0;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.cn-table thead th[aria-sort] {
+  color: var(--ink);
+}
+.cn-table thead button {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0.5rem 0.75rem;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cn-sort-glyph {
+  color: var(--accent);
+}
+.cn-table .cn-title-cell {
+  min-width: 12rem;
+  font-weight: 500;
+}
+.cn-table thead .cn-title-cell {
+  font-weight: 600;
+}
+.cn-title-link {
+  color: var(--link);
+}
+.cn-title-link > [aria-hidden] {
+  margin-right: 0.35rem;
+}
+.cn-table .cn-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.cn-table thead .cn-num button {
+  justify-content: flex-end;
+}
+.cn-table tbody tr:hover > *,
+.cn-table tbody tr:focus-within > * {
+  background: color-mix(in srgb, var(--panel-2) 60%, transparent);
+}
+/* The sticky title cell is opaque, so its hover is the opaque equivalent and the row reads as one band */
+.cn-table tbody tr:hover > .cn-title-cell,
+.cn-table tbody tr:focus-within > .cn-title-cell {
+  background: color-mix(in srgb, var(--panel-2) 60%, var(--panel));
+}
+@container frame (max-width: 29.99rem) {
+  .cn-table .cn-title-cell {
+    position: sticky;
+    left: 0;
+    min-width: 9rem;
+    max-width: 11rem;
+    background: var(--panel);
+    box-shadow: inset -1px 0 0 var(--line);
+  }
+  .cn-table thead .cn-title-cell {
+    z-index: 1;
+    background: var(--panel-2);
+  }
+}
+
+/* Cards */
+.cn-cards {
+  list-style: none !important;
+  margin: 0.4rem 0 0 !important;
+  padding: 0 !important;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+  gap: 0.75rem;
+}
+.cn-card {
+  position: relative;
+  margin: 0 !important;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--panel);
+  padding: 0.75rem;
+}
+.cn-card:hover {
+  border-color: var(--accent);
+}
+.cn-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.cn-card-link {
+  color: var(--link);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+/* The title link covers the card, so the whole card is one target; links inside stay separate */
+.cn-card-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 0.5rem;
+}
+.cn-card-link:focus-visible {
+  outline: none;
+}
+.cn-card-link:focus-visible::after {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.cn-card .cn-cell-link {
+  position: relative;
+  z-index: 1;
+}
+.cn-card-fields {
+  margin: 0.5rem 0 0;
+}
+.cn-card {
+  container: card / inline-size;
+}
+/* Label above value; side by side only when the card is wide enough for both */
+.cn-card-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.1rem 0.5rem;
+  margin-top: 0.25rem;
+}
+@container card (min-width: 13rem) {
+  .cn-card-pair {
+    grid-template-columns: minmax(4rem, 38%) minmax(0, 1fr);
+  }
+}
+.cn-card-pair dt {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.cn-card-pair dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+.cn-card .cn-clamp {
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+}
+@container frame (max-width: 29.99rem) {
+  .cn-card-extra {
+    display: none;
+  }
+}
+
+/* Configure panel: view, columns, default sort */
+.cn-seg-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+.cn-seg-group legend {
+  float: left;
+  margin-right: 0.5rem;
+  padding: 0;
+}
+.cn-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 0.375rem;
+  padding: 0.2rem 0.6rem;
+  cursor: pointer;
+}
+.cn-query-config .cn-seg input {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  accent-color: var(--accent);
+}
+.cn-sort-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 1rem;
+}
+.cn-qcols-list {
+  list-style: none !important;
+  margin: 0.3rem 0 !important;
+  padding: 0 !important;
+  display: grid;
+  gap: 0.3rem;
+}
+.cn-qcols-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 0.75rem;
+  margin: 0 !important;
+  border: 1px solid var(--line);
+  border-radius: 0.375rem;
+  padding: 0.3rem 0.5rem;
+}
+.cn-qcols-stale {
+  border-style: dashed;
+}
+.cn-qcols-name {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.cn-qcols-actions {
+  display: inline-flex;
+  gap: 0.3rem;
+}
+.cn-qcols-note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.75rem;
+}
+.cn-qcols-add {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.3rem;
+}
+.cn-qcols-reset {
+  margin-top: 0.4rem;
+}
+/* Touch (same condition as the touch: variant). Buttons and .cn-input are covered by the shared rules; these are
+   the bare controls of the old Configure panel and the new table, list and picker parts */
+@media (pointer: coarse), (max-width: 639.98px) {
+  .cn-query-config select,
+  .cn-query-config input:not([type='checkbox']):not([type='radio']) {
+    min-height: 44px;
+    font-size: 1rem;
+  }
+  .cn-table thead button {
+    min-height: 44px;
+  }
+  .cn-title-link,
+  .cn-list-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .cn-seg {
+    min-height: 44px;
+    padding: 0.2rem 0.8rem;
+  }
+  .cn-qcols-name {
+    flex-basis: 100%;
+  }
+  .cn-qcols-actions {
+    flex: 1 1 100%;
+  }
+  .cn-qcols-actions .cn-btn {
+    flex: 1;
+  }
+}
+@container frame (max-width: 29.99rem) {
+  .cn-query-config {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .cn-stat-grid {
   display: grid;

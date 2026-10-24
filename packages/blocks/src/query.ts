@@ -94,10 +94,10 @@ function matches(cond: QueryCondition, page: QueryablePage, ctxPageId: string | 
   }
 }
 
+const isEmptyValue = (v: unknown) => v == null || v === '' || (Array.isArray(v) && v.length === 0);
+
+/** Compares two non-empty values. */
 function compare(a: unknown, b: unknown): number {
-  if (a == null && b == null) return 0;
-  if (a == null) return 1;
-  if (b == null) return -1;
   if (typeof a === 'number' && typeof b === 'number') return a - b;
   return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
 }
@@ -114,6 +114,14 @@ export function runQuery(pages: QueryablePage[], filter: QueryFilter, ctxPageId:
     return filter.where.every((c) => matches(c, p, ctxPageId));
   });
   const dir = filter.sort.dir === 'desc' ? -1 : 1;
-  out.sort((a, b) => compare(fieldValue(a, filter.sort.field), fieldValue(b, filter.sort.field)) * dir || a.title.localeCompare(b.title));
+  // Empty values go last in both directions (the browser's header sort does the same)
+  out.sort((a, b) => {
+    const x = fieldValue(a, filter.sort.field);
+    const y = fieldValue(b, filter.sort.field);
+    const xe = isEmptyValue(x);
+    const ye = isEmptyValue(y);
+    const order = xe || ye ? (xe === ye ? 0 : xe ? 1 : -1) : compare(x, y) * dir;
+    return order || a.title.localeCompare(b.title);
+  });
   return out.slice(0, filter.limit);
 }
