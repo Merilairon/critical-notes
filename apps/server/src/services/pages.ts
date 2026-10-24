@@ -40,6 +40,7 @@ import { badRequest, conflict, notFound } from '../lib/http';
 import { newId } from '../lib/ids';
 import type { PageIndexer } from './page-index';
 import type { PropertyService } from './properties';
+import { DEFAULT_HISTORY_COALESCE_MINUTES, recordRevision, snapshotHash, type HistorySettings, type PageSnapshot, type PreState, type WriteContext } from './revisions';
 import type { Viewer } from './visibility';
 
 /** Short random id for blocks inside documents. */
@@ -89,11 +90,25 @@ export function toSummary(p: PageRow): PageSummaryDto {
   };
 }
 
+/** Anything that can run the page reads: the database or a transaction on it. */
+type Reader = Pick<AppDb, 'select'>;
+
+/** Pages removed per purge transaction, and history rows per delete transaction. */
+const PURGE_PAGES_PER_TX = 100;
+const REVISION_DELETE_BATCH = 1000;
+
+/** In-memory bound for the import / instantiation fold map. */
+const MAX_OPERATIONS = 20_000;
+
 export class PageService {
+  /** page id -> operation id of the call that created it (design 4.6); never stored, bounded. */
+  private readonly operations = new Map<string, string>();
+
   constructor(
     private readonly db: AppDb,
     private readonly properties: PropertyService,
     private readonly indexer: PageIndexer,
+    private readonly history: HistorySettings = { coalesceMinutes: DEFAULT_HISTORY_COALESCE_MINUTES },
   ) {}
 
   // region Commit hook (docs/design/reveal.md 2.2)
@@ -152,6 +167,43 @@ export class PageService {
 
   // endregion
 
+
+  /**
+   * The versioned content of a page as stored: the row, its facet and its property values (by key), read with `h`
+   * (the transaction handle inside a write). Never built from request input.
+   */
+  private snapshotOf(h: Reader, campaignId: string, pageId: string): { snapshot: PageSnapshot; revision: number; updatedAt: number } {
+    const p = h.select().from(pages).where(eq(pages.id, pageId)).get();
+    if (!p) throw notFound('Page not found');
+    return {
+      snapshot: {
+        title: p.title,
+        type: p.type,
+        body: p.body ?? null,
+        details: this.facetOf(p.type as PageType, p.id, h),
+        properties: this.properties.valuesFor(campaignId, [p.id], h).get(p.id) ?? {},
+      },
+      revision: p.revision,
+      updatedAt: p.updatedAt,
+    };
+  }
+
+  private preState(h: Reader, campaignId: string, pageId: string): PreState {
+    const s = this.snapshotOf(h, campaignId, pageId);
+    return { snapshot: s.snapshot, hash: snapshotHash(s.snapshot), revision: s.revision, updatedAt: s.updatedAt };
+  }
+
+  /** Records the page state after a write on the transaction `tx` (see `recordRevision`). */
+  private record(tx: Reader & Pick<AppDb, 'insert' | 'delete'>, campaignId: string, pageId: string, pre: PreState | null, ctx: WriteContext) {
+    const post = this.snapshotOf(tx, campaignId, pageId);
+    const same = !!ctx.operationId && this.operations.get(pageId) === ctx.operationId;
+    recordRevision(tx, { pageId, campaignId, revision: post.revision, post: post.snapshot, pre, ctx, now: Date.now(), settings: this.history, sameOperation: same });
+    if (!pre && ctx.operationId) {
+      if (this.operations.size >= MAX_OPERATIONS) this.operations.delete(this.operations.keys().next().value as string);
+      this.operations.set(pageId, ctx.operationId);
+    }
+  }
+
   private sanitizeBody(body: unknown) {
     return sanitizeDoc(body, { newId: newBlockId }).doc as BlockDoc;
   }
@@ -203,11 +255,11 @@ export class PageService {
     return row;
   }
 
-  private facetOf(type: PageType, pageId: string): Record<string, unknown> | null {
+  private facetOf(type: PageType, pageId: string, h: Reader = this.db): Record<string, unknown> | null {
     const facetType = facetTypeFor(type);
     if (!facetType) return null;
     const table = FACET_TABLES[facetType];
-    const row = this.db.select().from(table).where(eq(table.pageId, pageId)).get() as Record<string, unknown> | undefined;
+    const row = h.select().from(table).where(eq(table.pageId, pageId)).get() as Record<string, unknown> | undefined;
     if (!row) return FACET_SCHEMAS[facetType].parse({}) as Record<string, unknown>;
     const { pageId: _ignored, ...rest } = row;
     return rest;
@@ -287,7 +339,7 @@ export class PageService {
     return data;
   }
 
-  create(campaignId: string, userId: string, input: CreatePageInput & { type: PageType; parentId: string | null; visibility: PageVisibility; tags: string[] }): PageDto {
+  create(campaignId: string, userId: string, input: CreatePageInput & { type: PageType; parentId: string | null; visibility: PageVisibility; tags: string[]; cover?: string | null }, ctx: WriteContext): PageDto {
     this.assertPageInCampaign(campaignId, input.parentId);
     const siblings = this.siblingKeys(campaignId, input.parentId);
     let sortKey: string;
@@ -312,6 +364,7 @@ export class PageService {
           type: input.type,
           title: input.title,
           icon: input.icon ?? null,
+          cover: input.cover ?? null,
           visibility: input.visibility,
           body,
           createdBy: userId,
@@ -323,13 +376,14 @@ export class PageService {
       for (const tag of new Set(input.tags)) tx.insert(pageTags).values({ pageId: id, tag }).run();
       // Same connection, same transaction: an invalid value undoes the whole page
       if (input.props) this.properties.setValues(campaignId, id, input.props, (pid) => this.assertPageInCampaign(campaignId, pid));
+      this.record(tx, campaignId, id, null, ctx);
     });
     this.committed({ campaignId, pageId: id, before: null, after: { visibility: input.visibility, viewers: [], deletedAt: null, body } });
     this.reindex(campaignId, id);
     return this.get(campaignId, id);
   }
 
-  update(campaignId: string, pageId: string, input: UpdatePageInput): PageDto {
+  update(campaignId: string, pageId: string, input: UpdatePageInput, ctx: WriteContext): PageDto {
     const current = this.row(campaignId, pageId);
     if (current.revision !== input.revision) {
       throw conflict('This page was changed by someone else', { current: this.get(campaignId, pageId) });
@@ -342,11 +396,13 @@ export class PageService {
       const base = newFacetType === oldFacetType ? (this.facetOf(nextType, pageId) ?? {}) : {};
       facet = this.validateFacet(campaignId, newFacetType, { ...base, ...(input.facet ?? {}) });
     }
-    if (input.props) this.properties.setValues(campaignId, pageId, input.props, (id) => this.assertPageInCampaign(campaignId, id));
     const storedBody = input.body !== undefined ? this.sanitizeBody(input.body) : undefined;
     const viewersBefore = this.onCommitted ? this.viewerIds(pageId) : [];
 
     this.db.transaction((tx) => {
+      // The state this write overwrites, before anything changes; the properties join the page and its revision in one commit
+      const pre = this.preState(tx, campaignId, pageId);
+      if (input.props) this.properties.setValues(campaignId, pageId, input.props, (id) => this.assertPageInCampaign(campaignId, id));
       const patch: Partial<typeof pages.$inferInsert> = { updatedAt: Date.now(), revision: current.revision + 1 };
       if (input.title !== undefined) patch.title = input.title;
       if (input.icon !== undefined) patch.icon = input.icon;
@@ -372,6 +428,7 @@ export class PageService {
         tx.delete(pageViewers).where(eq(pageViewers.pageId, pageId)).run();
         for (const userId of new Set(input.viewers)) tx.insert(pageViewers).values({ pageId, userId }).run();
       }
+      this.record(tx, campaignId, pageId, pre, ctx);
     });
     this.committed({
       campaignId,
@@ -512,13 +569,30 @@ export class PageService {
    * campaign, not to a page, so none is touched: an image used by a purged page stays valid for every page that still shows it.
    */
   private purgeIds(ids: string[]) {
-    for (let i = 0; i < ids.length; i += 500) {
-      const chunk = ids.slice(i, i + 500);
+    // 100 pages per transaction: their history goes first (below), so the foreign-key cascade has nothing left to do
+    for (let i = 0; i < ids.length; i += PURGE_PAGES_PER_TX) {
+      const chunk = ids.slice(i, i + PURGE_PAGES_PER_TX);
+      this.deleteRevisions(chunk);
       this.db.transaction((tx) => {
         tx.delete(pageLinks).where(inArray(pageLinks.toPageId, chunk)).run();
         tx.delete(pages).where(inArray(pages.id, chunk)).run();
       });
       this.indexer.remove(chunk);
+      for (const id of chunk) this.operations.delete(id);
+    }
+  }
+
+  /**
+   * Deletes the history of pages in short transactions of at most `REVISION_DELETE_BATCH` rows, so a purge never holds the single
+   * writer for the time it takes to drop hundreds of megabytes. Not atomic with the page delete, and it does not need to be: a
+   * purge only accepts a page that is already in the trash.
+   */
+  private deleteRevisions(pageIds: string[]) {
+    for (;;) {
+      const n = this.db.$client
+        .prepare(`delete from page_revisions where rowid in (select rowid from page_revisions where page_id in (${pageIds.map(() => '?').join(',')}) limit ${REVISION_DELETE_BATCH})`)
+        .run(...pageIds).changes;
+      if (n < REVISION_DELETE_BATCH) return;
     }
   }
 
@@ -633,7 +707,7 @@ export class PageService {
    * A player's edit of their own character: content, details and (non-DM) properties. Blocks they cannot see
    * are kept; they cannot change type, visibility or who may see the page.
    */
-  updateAsPlayer(campaignId: string, pageId: string, input: UpdatePageInput, visible: ReadonlySet<string>): PageDto {
+  updateAsPlayer(campaignId: string, pageId: string, input: UpdatePageInput, visible: ReadonlySet<string>, ctx: WriteContext): PageDto {
     const current = this.get(campaignId, pageId);
     if (input.type !== undefined || input.visibility !== undefined || input.viewers !== undefined) throw badRequest('Only the DM can change who sees a page or its type');
     const hiddenProps = new Set(this.properties.list(campaignId).filter((d) => d.dmOnly).map((d) => d.key));
@@ -644,7 +718,7 @@ export class PageService {
     const body = input.body
       ? (mergePlayerEdit(current.body as BlockDocument | null, input.body as BlockDocument, { role: 'player', canSeePage: (id) => visible.has(id) }) as BlockDoc)
       : undefined;
-    const saved = this.update(campaignId, pageId, { ...input, ...(body ? { body } : {}) });
+    const saved = this.update(campaignId, pageId, { ...input, ...(body ? { body } : {}) }, ctx);
     return this.projectPage(campaignId, saved, visible);
   }
 

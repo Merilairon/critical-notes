@@ -143,6 +143,20 @@ export const FACET_DM_ONLY_FIELDS: Record<FacetType, readonly string[]> = {
   item: ['itemHomebrewEntityId'],
 };
 
+/**
+ * Facet fields that decide who may see or edit a page (a user reference). A history restore keeps their live values: restoring an
+ * old version must never give a removed player their character back.
+ */
+export const FACET_ACCESS_FIELDS: Record<FacetType, readonly string[]> = {
+  npc: [],
+  location: [],
+  session: [],
+  quest: [],
+  faction: [],
+  pc: ['playerUserId'],
+  item: [],
+};
+
 /** A facet as a player may see it: DM-only fields removed, links to pages they cannot see cleared. */
 export function projectFacetForPlayers(type: FacetType, facet: Record<string, unknown> | null, canSeePage: (id: string) => boolean): Record<string, unknown> | null {
   if (!facet) return facet;

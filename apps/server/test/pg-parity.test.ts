@@ -14,6 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { openAppDb } from '../src/db';
 import * as sqliteSchema from '../src/db/schema';
 import * as pgSchema from '../src/db/schema.pg';
+import { snapshotHash } from '../src/services/revisions';
 
 const PG_MIGRATIONS = join(import.meta.dirname, '..', 'drizzle-pg');
 
@@ -100,5 +101,26 @@ describe('Postgres migrations', () => {
     // Deleting the campaign cascades to its pages, as in SQLite
     await db.delete(pgSchema.campaigns).where(eq(pgSchema.campaigns.id, 'c1'));
     expect(await db.select().from(pgSchema.pages)).toEqual([]);
+  });
+  it('page_revisions: the content hash is the same after a round trip through jsonb (which reorders keys)', async () => {
+    const db = drizzle(client, { schema: pgSchema });
+    await db.insert(pgSchema.users).values({ id: 'u2', username: 'hist', displayName: 'H', passwordHash: 'x' });
+    await db.insert(pgSchema.campaigns).values({ id: 'c2', name: 'Hist', ruleset: 'r', createdBy: 'u2' });
+    await db.insert(pgSchema.pages).values({ id: 'p2', campaignId: 'c2', sortKey: 'a0', title: 'T' });
+    const snapshot = {
+      title: 'Zebra',
+      type: 'npc',
+      body: { zeta: 1, type: 'doc', content: [{ text: 'hi', type: 'text', attrs: { b: 2, a: 1 } }] },
+      details: { status: 'alive', hpMax: 10, aaa: null },
+      properties: { zzz: 'x', mood: 'calm' },
+    };
+    const hash = snapshotHash(snapshot);
+    await db.insert(pgSchema.pageRevisions).values({ pageId: 'p2', revision: 1, campaignId: 'c2', ...snapshot, source: 'web', cause: 'create', contentHash: hash, bytes: 1 });
+    const [row] = await db.select().from(pgSchema.pageRevisions).where(eq(pgSchema.pageRevisions.pageId, 'p2'));
+    expect(row!.createdAt).toBeGreaterThan(Date.UTC(2020, 0, 1));
+    expect(snapshotHash({ title: row!.title, type: row!.type, body: row!.body, details: row!.details as Record<string, unknown>, properties: row!.properties as Record<string, unknown> })).toBe(hash);
+    // the history goes with the page
+    await db.delete(pgSchema.pages).where(eq(pgSchema.pages.id, 'p2'));
+    expect(await db.select().from(pgSchema.pageRevisions)).toEqual([]);
   });
 });

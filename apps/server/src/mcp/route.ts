@@ -18,10 +18,10 @@ const hostOf = (origin: string) => {
 
 export function mcpRoutes(deps: { app: Hono<AppEnv>; tokens: ApiTokenService; publicUrl: string }) {
   const handler = createMcpHandler((ctx) => {
-    const extra = ctx.authInfo?.extra as { userId: string; scope: 'read' | 'write' } | undefined;
+    const extra = ctx.authInfo?.extra as { userId: string; scope: 'read' | 'write'; tokenId: string } | undefined;
     // The route below only serves requests with a verified token
     if (!extra) throw new Error('Missing authentication');
-    return buildMcpServer(deps.app, { userId: extra.userId, scope: extra.scope });
+    return buildMcpServer(deps.app, { userId: extra.userId, scope: extra.scope, tokenId: extra.tokenId });
   });
   const publicOrigin = new URL(deps.publicUrl).origin;
   const route = new Hono<AppEnv>();
@@ -37,7 +37,7 @@ export function mcpRoutes(deps: { app: Hono<AppEnv>; tokens: ApiTokenService; pu
       });
     }
     return handler.fetch(c.req.raw, {
-      authInfo: { token, clientId: verified.tokenId, scopes: [verified.scope], extra: { userId: verified.user.id, scope: verified.scope } },
+      authInfo: { token, clientId: verified.tokenId, scopes: [verified.scope], extra: { userId: verified.user.id, scope: verified.scope, tokenId: verified.tokenId } },
     });
   });
   return route;

@@ -11,6 +11,7 @@ import {
   CHUNK,
   DEFAULT_TOTAL_BUDGET,
   FIXED_ENTRIES,
+  MAX_DB_ENTRY_BYTES,
   MAX_ENTRIES,
   MAX_UPLOAD_FILES,
   readBackup,
@@ -22,6 +23,7 @@ import {
 } from '../src/services/backup-zip';
 import { rawZip, sha, testManifest, uid, validEntries, type RawEntry } from './zip-builder';
 
+const MiB = 1024 * 1024;
 let dir: string;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'cn-zip-'));
@@ -409,18 +411,65 @@ describe('backup zip: manifest', () => {
 });
 
 describe('backup zip: limits while inflating', () => {
-  it('refuses a ratio above 200:1 for uploads (small and streamed entries) and above 50:1 for the database', async () => {
+  it('refuses a ratio above 200:1 for uploads (small and streamed entries) and for the database (was 50:1 until page history, N1.2)', async () => {
     // small path (compressed under 64 KiB): 3 MiB of zeros
     await expectRefused(zipFile('r1.zip', rawZip(validEntries({ db, uploads: { [uid(1)]: Buffer.alloc(3 * 1024 * 1024) } }))));
     // streamed path (compressed over 64 KiB, about 73 KB): the largest allowed upload, all zeros, ratio about 230
     const noisy = Buffer.alloc(16 * 1024 * 1024);
     await expectRefused(zipFile('r2.zip', rawZip(validEntries({ db, uploads: { [uid(1)]: noisy } }))));
-    const bigDb = Buffer.alloc(8 * 1024 * 1024);
+    // 48 MiB of zeros around 100 KB of noise deflates at about 300:1, above the database's 200:1
+    const bigDb = Buffer.alloc(48 * 1024 * 1024);
     randomBytes(100_000).copy(bigDb, 1000);
     await expectRefused(zipFile('r3.zip', rawZip(validEntries({ db: bigDb, uploads: {} }))));
     // the control: ordinary compressible data well under the ratio passes
     const text = Buffer.from(randomBytes(800_000).toString('hex')); // 1.6 MB of text, compresses about 2:1
     await readBackup(zipFile('ok.zip', rawZip(validEntries({ db: text, uploads: {} }))));
+  });
+
+  it('N1.2: a database at about 70:1 (history-heavy) now passes, and the size bounds still refuse a hostile one', async () => {
+    const heavy = Buffer.alloc(8 * 1024 * 1024);
+    randomBytes(100_000).copy(heavy, 1000); // 8 MiB around 100 KB of noise: about 70:1, over the old 50:1 limit
+    const path = zipFile('heavy.zip', rawZip(validEntries({ db: heavy, uploads: {} })));
+    const measured = heavy.length / deflateRawSync(heavy).length;
+    console.log(`N1.2 heavy database fixture: measured ratio ${measured.toFixed(1)}:1`);
+    expect(measured).toBeGreaterThan(50);
+    expect(measured).toBeLessThan(200);
+    await readBackup(path);
+    // the other bounds did not move: a total cap (the free-space check) below its declared size refuses it before any entry starts
+    expect((await expectRefused(path, { maxTotalBytes: 4 * 1024 * 1024 })).code).toBe('invalid');
+    // a manifest that declares less than the real size lowers the cap for the database: refused
+    const lying = validEntries({ db: heavy, uploads: {} }).map((e) => (e.name === 'manifest.json' ? { ...e, data: Buffer.from(JSON.stringify(testManifest(1024 * 1024))) } : e));
+    await expectRefused(zipFile('lying.zip', rawZip(lying)));
+    // a hostile sparse database (all zeros, ratio about 1000:1) is still refused by the ratio rule after 4 MiB. A 16 MiB file stands in
+    // for the design's sparse 4 GiB-declared one (same rule, a test that does not inflate 4 GiB)
+    await expectRefused(zipFile('sparse.zip', rawZip(validEntries({ db: Buffer.alloc(16 * 1024 * 1024), uploads: {} }))));
+  });
+
+  it('N1.2 (security): a database declared at about 4 GiB with little data is refused by the declared-size checks, not the ratio', async () => {
+    const small = Buffer.from(randomBytes(2000));
+    const huge = MAX_DB_ENTRY_BYTES;
+    const declared = validEntries({ db: small, uploads: {} }).map((e) =>
+      e.name === 'manifest.json' ? { ...e, data: Buffer.from(JSON.stringify(testManifest(huge))) } : e.name === 'app.sqlite' ? { ...e, usize: huge } : e,
+    );
+    const path = zipFile('declared.zip', rawZip(declared));
+    // the declared sizes exceed the space available (free space minus 64 MiB): refused before any entry starts
+    const gated: string[] = [];
+    expect((await expectRefused(path, { maxTotalBytes: 100 * MiB, onGate: (e) => gated.push(e.name) })).code).toBe('invalid');
+    expect(gated).toEqual([]);
+    // and the real output (2000 bytes) does not match the declared size anyway
+    await expectRefused(path);
+    // a directory that declares more than MAX_DB_ENTRY_BYTES is refused whatever the manifest says
+    const over = validEntries({ db: small, uploads: {} }).map((e) =>
+      e.name === 'manifest.json' ? { ...e, data: Buffer.from(JSON.stringify(testManifest(huge + 1))) } : e.name === 'app.sqlite' ? { ...e, usize: huge + 1 } : e,
+    );
+    await expectRefused(zipFile('over.zip', rawZip(over)));
+  });
+
+  it('N1.2 (security): a database entry whose directory understates its size is refused (the real output must match)', async () => {
+    const heavy = Buffer.alloc(6 * 1024 * 1024);
+    randomBytes(100_000).copy(heavy, 1000);
+    const understated = validEntries({ db: heavy, uploads: {} }).map((e) => (e.name === 'app.sqlite' ? { ...e, usize: 10 } : e));
+    await expectRefused(zipFile('understated.zip', rawZip(understated)));
   });
 
   it('refuses entries larger than their kind allows, whatever the archive declares', async () => {

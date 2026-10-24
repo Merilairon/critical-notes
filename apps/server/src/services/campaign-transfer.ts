@@ -30,6 +30,7 @@ import type { CampaignService } from './campaigns';
 import type { HomebrewService } from './homebrew';
 import type { PageService } from './pages';
 import type { PropertyService } from './properties';
+import { contextFor, type WriteOrigin } from './revisions';
 import type { TemplateService } from './templates';
 import type { UploadService } from './uploads';
 
@@ -244,7 +245,7 @@ export class CampaignTransfer {
     return { doc, files };
   }
 
-  async importZip(userId: string, bytes: Uint8Array): Promise<CampaignImportReportDto> {
+  async importZip(userId: string, bytes: Uint8Array, origin: WriteOrigin): Promise<CampaignImportReportDto> {
     const { doc, files } = this.readZip(bytes);
     const { campaigns: cs, pages: ps, properties, templates: ts, homebrewTransfer, uploads } = this.services;
     const warnings: string[] = [];
@@ -259,6 +260,8 @@ export class CampaignTransfer {
       crossEdition: !!doc.campaign.crossEdition,
     });
     const campaignId = created.id;
+    // One import: the create and the fill of a page are one history row (design 4.6)
+    const writeCtx = contextFor(userId, origin, 'import', { operationId: newId() });
     const newSource = cs.campaignSource(campaignId)!;
     const ids = new Map<string, string>();
 
@@ -335,7 +338,7 @@ export class CampaignTransfer {
           // Named viewers do not exist here: "selected" pages become DM-only
           visibility: (p.visibility === 'all' ? 'all' : 'dm') as PageVisibility,
           tags: list<string>(p.tags).slice(0, 30),
-        });
+        }, writeCtx);
         ids.set(p.id, page.id);
       } catch (e) {
         warnings.push(`Page ${String(p.title)}: ${(e as Error).message}`);
@@ -359,7 +362,7 @@ export class CampaignTransfer {
           ...(facet ? { facet } : {}),
           ...(Object.keys(props).length ? { props } : {}),
           ...(p.cover ? { cover: String(p.cover) } : {}),
-        });
+        }, writeCtx);
         const template = p.fromTemplateId ? ids.get(p.fromTemplateId) : undefined;
         if (template) this.db.update(pages).set({ fromTemplateId: template }).where(eq(pages.id, id)).run();
       } catch (e) {

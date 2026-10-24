@@ -27,6 +27,7 @@ import type { PageSearchIndex } from '../reference/page-search';
 import type { PropertyService } from '../services/properties';
 import type { UploadService } from '../services/uploads';
 import { requireUser, type AppEnv } from '../auth/session';
+import { writeContext, writeOrigin } from '../auth/write-context';
 import { audit } from '../lib/audit';
 import { badRequest, forbidden, notFound, validate } from '../lib/http';
 import type { ReferenceService } from '../reference/service';
@@ -109,7 +110,7 @@ export function campaignRoutes(deps: {
       const body = await c.req.parseBody();
       const file = body['file'];
       if (!(file instanceof File)) throw badRequest('Choose a campaign file (.zip)');
-      return c.json(await transfer.importZip(uid(c), new Uint8Array(await file.arrayBuffer())), 201);
+      return c.json(await transfer.importZip(uid(c), new Uint8Array(await file.arrayBuffer()), writeOrigin(c)), 201);
     },
   );
 
@@ -185,8 +186,8 @@ export function campaignRoutes(deps: {
           parentId: input.parentId,
           mode: 'fields',
           withChildren: true,
-        })
-      : pages.create(campaignId, uid(c), input);
+        }, writeOrigin(c))
+      : pages.create(campaignId, uid(c), input, writeContext(c, 'create'));
     campaigns.touch(campaignId);
     return c.json(page, 201);
   });
@@ -195,13 +196,13 @@ export function campaignRoutes(deps: {
 
   app.post('/:campaignId/pages/from-template', validate('json', createPageFromTemplateInput), (c) => {
     const campaignId = c.req.param('campaignId');
-    const page = templates.createPage(uid(c), campaignId, c.req.valid('json'));
+    const page = templates.createPage(uid(c), campaignId, c.req.valid('json'), writeOrigin(c));
     campaigns.touch(campaignId);
     return c.json(page, 201);
   });
 
   app.post('/:campaignId/pages/:pageId/apply-template', validate('json', applyTemplateInput), (c) =>
-    c.json(templates.applyToPage(uid(c), c.req.param('campaignId'), c.req.param('pageId'), c.req.valid('json'))),
+    c.json(templates.applyToPage(uid(c), c.req.param('campaignId'), c.req.param('pageId'), c.req.valid('json'), writeOrigin(c))),
   );
 
   /** Block template content to insert into a page (filled, as fields, or linked). */
@@ -237,9 +238,9 @@ export function campaignRoutes(deps: {
     const { campaignId, viewer, visible } = seen(c);
     const pageId = c.req.param('pageId');
     let page;
-    if (viewer.gm) page = pages.update(campaignId, pageId, c.req.valid('json'));
+    if (viewer.gm) page = pages.update(campaignId, pageId, c.req.valid('json'), writeContext(c, 'edit'));
     else if (visibility.canEdit(campaignId, viewer, pageId))
-      page = pages.updateAsPlayer(campaignId, pageId, c.req.valid('json'), visible);
+      page = pages.updateAsPlayer(campaignId, pageId, c.req.valid('json'), visible, writeContext(c, 'edit', true));
     else if (visible.has(pageId)) throw forbidden('Only the DM can edit this page');
     else throw notFound('Page not found');
     campaigns.touch(campaignId);
@@ -381,7 +382,7 @@ export function campaignRoutes(deps: {
     const updated = pages.update(campaignId, page.id, {
       revision: page.revision,
       facet: { statblockUid: newUid, statblockHomebrewEntityId: entity.id },
-    });
+    }, writeContext(c, 'edit'));
     return c.json({ page: updated, entityId: entity.id, uid: newUid, warnings }, 201);
   });
 
@@ -426,7 +427,7 @@ export function campaignRoutes(deps: {
 
   app.post('/:campaignId/migrate-edition', validate('json', migrateEditionInput), (c) => {
     const { to, keep } = c.req.valid('json');
-    return c.json(migration.apply(c.req.param('campaignId'), uid(c), to, keep));
+    return c.json(migration.apply(c.req.param('campaignId'), uid(c), to, keep, writeOrigin(c)));
   });
 
   // endregion

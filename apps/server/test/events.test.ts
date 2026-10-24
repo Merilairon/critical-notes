@@ -7,6 +7,7 @@ import { createShutdown } from '../src/lib/shutdown';
 import type { InMemoryCampaignEventBus, CampaignEvent } from '../src/services/event-bus';
 import { newlyVisibleBlockIds } from '../src/services/reveal';
 import { viewerOf } from '../src/services/visibility';
+import { contextFor } from '../src/services/revisions';
 import { openEvents } from './events-helpers';
 import { createFixture, createSignedInApp, TestClient, type Fixture, type TestApp } from './helpers';
 
@@ -462,6 +463,7 @@ describe('PageService.onCommitted, batch and flushCommitted', () => {
     const off = services.eventBus.subscribe(cid, (e) => got.push(e));
     return { got, off };
   };
+  const wctx = contextFor(dmId, { source: 'web' }, 'create');
   const input = (visibility: 'all' | 'dm') => ({ type: 'generic' as const, title: `Batch ${++seq}`, parentId: null, visibility, tags: [] as string[] });
 
   it('publishes after the save, and a page write inside a transaction must use batch', async () => {
@@ -470,25 +472,25 @@ describe('PageService.onCommitted, batch and flushCommitted', () => {
     expect(players).toContain(patId);
     // Up to three new shared pages in one flush: one event each
     services.pages.batch(() => {
-      for (let i = 0; i < 3; i++) services.pages.create(cid, dmId, input('all'));
+      for (let i = 0; i < 3; i++) services.pages.create(cid, dmId, input('all'), wctx);
     });
     expect(got.map((e) => e.kind)).toEqual(['page-shared', 'page-shared', 'page-shared']);
     expect([...got[0]!.audience].sort()).toEqual(players);
     got.length = 0;
     // More than three: one resync for the players, no page-shared
     services.pages.batch(() => {
-      for (let i = 0; i < 5; i++) services.pages.create(cid, dmId, input('all'));
+      for (let i = 0; i < 5; i++) services.pages.create(cid, dmId, input('all'), wctx);
     });
     expect(got.map((e) => e.kind)).toEqual(['resync']);
     expect([...got[0]!.audience].sort()).toEqual(players);
     expect(got[0]!.token).toBe('');
     got.length = 0;
     // A write inside somebody else's transaction without a batch is refused (and rolled back with it)
-    expect(() => fx.db.transaction(() => services.pages.create(cid, dmId, input('all')))).toThrow(/pages\.batch/);
+    expect(() => fx.db.transaction(() => services.pages.create(cid, dmId, input('all'), wctx))).toThrow(/pages\.batch/);
     // Inside a batch the event waits for the commit, and a rollback publishes nothing
     let during = -1;
     services.pages.batch(() => {
-      fx.db.transaction(() => services.pages.create(cid, dmId, input('all')));
+      fx.db.transaction(() => services.pages.create(cid, dmId, input('all'), wctx));
       during = got.length;
     });
     expect(during).toBe(0);
@@ -497,7 +499,7 @@ describe('PageService.onCommitted, batch and flushCommitted', () => {
     expect(() =>
       services.pages.batch(() => {
         fx.db.transaction(() => {
-          services.pages.create(cid, dmId, input('all'));
+          services.pages.create(cid, dmId, input('all'), wctx);
           throw new Error('rolled back');
         });
       }),
@@ -506,8 +508,8 @@ describe('PageService.onCommitted, batch and flushCommitted', () => {
     services.pages.flushCommitted();
     expect(got).toEqual([]);
     // A hidden page, or a change that touches neither body nor visibility, costs one compare and no event
-    const hidden = services.pages.create(cid, dmId, input('dm'));
-    services.pages.update(cid, hidden.id, { revision: hidden.revision, title: 'Renamed' });
+    const hidden = services.pages.create(cid, dmId, input('dm'), wctx);
+    services.pages.update(cid, hidden.id, { revision: hidden.revision, title: 'Renamed' }, wctx);
     expect(got).toEqual([]);
     off();
   });

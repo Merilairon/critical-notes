@@ -546,8 +546,9 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 **Acceptance Criteria**: `docs/design/page-history.md`
 **Reference**: PRD §9 N1
 
-### [ ] Task N1.2: Record revisions
+### [x] Task N1.2: Record revisions
 **Owner**: Backend Architect · **QA**: API Tester
+**Done:** 2026-10-24, Code Reviewer PASS (2 rounds), QA API Tester: PASS, Security Architect sign-off for the `DB_RATIO_LIMIT` raise (50 to 200 for `app.sqlite`, recorded in `docs/PLAN.md`). `page_revisions` in both schemas (migrations `0007_page_history`, pg `0003_page_history`); a revision is written in the same transaction as every page write, with the source, cause and token id from a server-side `WriteContext` (never from the client); 2-minute coalescing, lazy baseline, tiered `HistoryPruner`, `PageHistoryService` (no routes yet: N1.3), restore keeps `playerUserId`. Also built here, as the design assigns: `HistoryPruner`, `PageHistoryService`, `FACET_ACCESS_FIELDS`. Merged to `main` with N3.2 and I3.2 (conflicts resolved by the Git Workflow Master; gate 929 + 317, `pnpm e2e` 100 passed, 8 skipped). **For N1.3:** add the history routes to the sentinel crawl. **Follow-up:** the restore-drill test against the built bundle is skipped unless `dist/` exists; run it in the release gate. Merged 2026-10-24.
 **Description**: Write a revision in the same transaction as every page update (`PageService.update`, `updateAsPlayer`, template propagation, edition migration); carry the source from the request (`tokenScope` marks MCP calls). Both schemas plus migrations.
 **Depends on**: N1.1
 

@@ -89,11 +89,11 @@ export class PropertyService {
   }
 
   /** Values for pages, keyed by page id then property key. */
-  valuesFor(campaignId: string, pageIds: string[]): Map<string, Record<string, unknown>> {
+  valuesFor(campaignId: string, pageIds: string[], h: Pick<AppDb, 'select'> = this.db): Map<string, Record<string, unknown>> {
     const out = new Map<string, Record<string, unknown>>();
     if (!pageIds.length) return out;
     const keys = new Map(this.list(campaignId).map((d) => [d.id, d.key]));
-    const rows = this.db.select().from(pagePropertyValues).where(inArray(pagePropertyValues.pageId, pageIds)).all();
+    const rows = h.select().from(pagePropertyValues).where(inArray(pagePropertyValues.pageId, pageIds)).all();
     for (const r of rows) {
       const key = keys.get(r.defId);
       if (!key) continue;

@@ -24,6 +24,12 @@ services:
       # Live event stream limits (README); an empty value behaves as unset (500 and 100)
       EVENTS_MAX_CONNECTIONS: ${EVENTS_MAX_CONNECTIONS:-}
       EVENTS_MAX_PER_CAMPAIGN: ${EVENTS_MAX_PER_CAMPAIGN:-}
+      # Page history (README "Configuration"). Empty = the default.
+      HISTORY_KEEP_ALL_DAYS: ${HISTORY_KEEP_ALL_DAYS:-}
+      HISTORY_COALESCE_MINUTES: ${HISTORY_COALESCE_MINUTES:-}
+      HISTORY_MAX_PER_PAGE: ${HISTORY_MAX_PER_PAGE:-}
+      HISTORY_MAX_MB_PER_CAMPAIGN: ${HISTORY_MAX_MB_PER_CAMPAIGN:-}
+      HISTORY_MONTHLY_AFTER_DAYS: ${HISTORY_MONTHLY_AFTER_DAYS:-}
     volumes:
       - ./5etools-data/5etools-src:/data/5etools-src:ro
       - ./5etools-data/5etools-img:/data/5etools-img:ro

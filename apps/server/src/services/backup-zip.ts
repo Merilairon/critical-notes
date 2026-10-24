@@ -43,7 +43,14 @@ export const MAX_DB_ENTRY_BYTES = 4 * 1024 * MiB - 2; // 0xffffffff is the zip64
 /** Default cap on the total inflated output of one pass (verify mode): 200,000 entries of zeros must not cost 200 GB of CPU. */
 export const DEFAULT_TOTAL_BUDGET = 64 * 1024 * MiB;
 export const RATIO_LIMIT = 200;
-export const DB_RATIO_LIMIT = 50;
+/**
+ * SECURITY-RELEVANT CONSTANT. Security Architect sign-off, Task N1.2 (2026-10-23): 50 -> 200 for app.sqlite (after DB_RATIO_AFTER =
+ * 4 MiB) accepted, because page history makes near-identical copies that deflate at about 50:1. A ratio guard is not what stops
+ * a hostile backup: each entry's real output must equal its directory size (and crc), the size is capped by the manifest's
+ * database.bytes, MAX_DB_ENTRY_BYTES and the space available, and declared sizes are checked before any entry starts.
+ * Conditions: do not raise further without a new review; keep DB_RATIO_AFTER at 4 MiB. Record: docs/PLAN.md.
+ */
+export const DB_RATIO_LIMIT = 200;
 /** The database's ratio rule starts later (a fresh, mostly empty database sits near 49:1 at 1 MiB). */
 export const DB_RATIO_AFTER = 4 * MiB;
 /** The ratio rules only apply after this much output. */

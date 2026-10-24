@@ -15,6 +15,7 @@ import {
   type InventoryItemDto,
 } from '@cn/shared';
 import { requireUser, type AppEnv } from '../auth/session';
+import { writeContext } from '../auth/write-context';
 import { forbidden, validate } from '../lib/http';
 import { sseResponse } from '../lib/sse';
 import type { CampaignService } from '../services/campaigns';
@@ -122,7 +123,7 @@ export function playRoutes(deps: {
   app.get('/:campaignId/trackers/:id', (c) => c.json(trackers.get(dm(c), c.req.param('id'))));
 
   app.post('/:campaignId/trackers/:id/actions', validate('json', trackerAction), (c) =>
-    c.json(trackers.apply(dm(c), c.req.param('id'), c.req.valid('json'))),
+    c.json(trackers.apply(dm(c), c.req.param('id'), c.req.valid('json'), writeContext(c, 'tracker'))),
   );
 
   app.delete('/:campaignId/trackers/:id', (c) => {

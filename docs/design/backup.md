@@ -261,7 +261,7 @@ The reader parses the central directory first, validates the whole structure, an
 | `uploads/<id>.thumb` | at most 4 MiB |
 | `app.sqlite` | at most the size **declared in `manifest.database.bytes`** (a lying manifest can only *lower* what is accepted, never raise it), and never more than 4 GiB (backup refuses an entry of 4 GiB or more, so the two limits agree), and never more than free space minus 64 MiB |
 | Total decompressed | at most free space minus 64 MiB |
-| Compression ratio | an entry exceeding 200:1 after its first 1 MiB aborts (uploads, thumbnails, JSON); `app.sqlite` is held to 50:1, because it legitimately compresses well but a hostile sparse file does not need to |
+| Compression ratio | an entry exceeding 200:1 after its first 1 MiB aborts (uploads, thumbnails, JSON); `app.sqlite` is held to the same 200:1 after its first 4 MiB (it was 50:1 until page history, task N1.2: successive near-identical page revisions deflate at about 50:1, so a history-heavy database failed its own verify; the real bounds against a hostile sparse file are the declared size, the 4 GiB cap and the free-space check) |
 | Method | deflate (8) only |
 
 Limits are enforced **while inflating** (byte counting in the `ondata` callback, terminating the stream at the cap), never trusted from headers. An abort deletes staging.

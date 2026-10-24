@@ -64,6 +64,43 @@ export function parseBackupEveryHours(value: string | undefined): { hours: numbe
   return { hours: 0, error: `BACKUP_EVERY_HOURS must be a whole number from 1 to ${MAX_BACKUP_EVERY_HOURS}, or 0 or empty for no scheduled backups (got "${v.slice(0, 40)}")` };
 }
 
+/** Page history settings (task N1.2): environment variables `HISTORY_*`, validated like `BACKUP_KEEP`. There is no switch to turn history off. */
+export interface HistoryConfig {
+  /** Every revision is kept this many days; older ones are thinned to one per page per day (`HISTORY_KEEP_ALL_DAYS`, 1 to 3650, default 30). */
+  keepAllDays: number;
+  /** Saves by the same author within this many minutes fold into one revision (`HISTORY_COALESCE_MINUTES`, 0 to 1440, default 2; 0 = off). */
+  coalesceMinutes: number;
+  /** A page over this many revisions is thinned early (`HISTORY_MAX_PER_PAGE`, 10 to 100000, default 200). */
+  maxPerPage: number;
+  /** Soft per-campaign ceiling for history in MB (`HISTORY_MAX_MB_PER_CAMPAIGN`, 10 to 1000000, default 500). */
+  maxMbPerCampaign: number;
+  /** After this many days only one revision per page per month is kept (`HISTORY_MONTHLY_AFTER_DAYS`, 1 to 36500, default 365). */
+  monthlyAfterDays: number;
+}
+
+export const DEFAULT_HISTORY: HistoryConfig = { keepAllDays: 30, coalesceMinutes: 2, maxPerPage: 200, maxMbPerCampaign: 500, monthlyAfterDays: 365 };
+
+function intSetting(name: string, value: string | undefined, min: number, max: number, fallback: number, warn: (msg: string) => void): number {
+  if (value === undefined || value.trim() === '') return fallback;
+  const v = value.trim();
+  const n = /^\d{1,7}$/.test(v) ? Number(v) : NaN;
+  if (Number.isInteger(n) && n >= min && n <= max) return n;
+  warn(`${name} must be an integer from ${min} to ${max} (got "${v.slice(0, 40)}"); using ${fallback}`);
+  return fallback;
+}
+
+/** The `HISTORY_*` settings; an invalid value warns and falls back to its default. */
+export function parseHistoryConfig(env: Record<string, string | undefined>, warn: (msg: string) => void = (m) => console.warn(m)): HistoryConfig {
+  const d = DEFAULT_HISTORY;
+  return {
+    keepAllDays: intSetting('HISTORY_KEEP_ALL_DAYS', env.HISTORY_KEEP_ALL_DAYS, 1, 3650, d.keepAllDays, warn),
+    coalesceMinutes: intSetting('HISTORY_COALESCE_MINUTES', env.HISTORY_COALESCE_MINUTES, 0, 1440, d.coalesceMinutes, warn),
+    maxPerPage: intSetting('HISTORY_MAX_PER_PAGE', env.HISTORY_MAX_PER_PAGE, 10, 100000, d.maxPerPage, warn),
+    maxMbPerCampaign: intSetting('HISTORY_MAX_MB_PER_CAMPAIGN', env.HISTORY_MAX_MB_PER_CAMPAIGN, 10, 1_000_000, d.maxMbPerCampaign, warn),
+    monthlyAfterDays: intSetting('HISTORY_MONTHLY_AFTER_DAYS', env.HISTORY_MONTHLY_AFTER_DAYS, 1, 36500, d.monthlyAfterDays, warn),
+  };
+}
+
 export interface AppConfig {
   fivetoolsSrcPath: string;
   fivetoolsImgPath: string;
@@ -87,6 +124,8 @@ export interface AppConfig {
    * membership tests): deliberately not documented in README or .env.example. Keep it under the proxy's 60 s idle timeout.
    */
   eventsHeartbeatMs: number;
+  /** Page history retention and folding. */
+  history: HistoryConfig;
   publicUrl: string;
   /** Session cookies carry `Secure`: by default when PUBLIC_URL is https (browsers drop them over plain http). */
   secureCookies: boolean;
@@ -118,6 +157,7 @@ export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     eventsMaxConnections: parseIntInRange(env.EVENTS_MAX_CONNECTIONS, 500, 1, 100_000),
     eventsMaxPerCampaign: parseIntInRange(env.EVENTS_MAX_PER_CAMPAIGN, 100, 1, 100_000),
     eventsHeartbeatMs: parseIntInRange(env.EVENTS_HEARTBEAT_MS, 25_000, 20, 55_000),
+    history: parseHistoryConfig(env),
     publicUrl,
     secureCookies: env.SECURE_COOKIES ? env.SECURE_COOKIES === '1' || env.SECURE_COOKIES === 'true' : publicUrl.startsWith('https://'),
     trustProxy: env.TRUST_PROXY === '1' || env.TRUST_PROXY === 'true',

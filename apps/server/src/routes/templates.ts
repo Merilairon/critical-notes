@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { createTemplateInput, duplicateTemplateInput, TEMPLATE_KINDS, updateTemplateInput, type TemplateKindDto } from '@cn/shared';
 import type { AppEnv } from '../auth/session';
+import { writeOrigin } from '../auth/write-context';
 import { audit } from '../lib/audit';
 import { validate } from '../lib/http';
 import type { TemplateService } from '../services/templates';
@@ -47,7 +48,7 @@ export function templateRoutes(templates: TemplateService) {
 
   app.get('/:id', (c) => c.json(templates.get(uid(c), c.req.param('id'))));
 
-  app.put('/:id', validate('json', updateTemplateInput), (c) => c.json(templates.update(uid(c), c.req.param('id'), c.req.valid('json'))));
+  app.put('/:id', validate('json', updateTemplateInput), (c) => c.json(templates.update(uid(c), c.req.param('id'), c.req.valid('json'), writeOrigin(c))));
 
   app.delete('/:id', (c) => {
     templates.remove(uid(c), c.req.param('id'));
