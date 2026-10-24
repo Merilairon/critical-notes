@@ -81,7 +81,7 @@
         <a class="cn-embed cn-page-card" [routerLink]="['/c', store?.id(), 'p', p.id]"><span class="text-2xl">{{ p.icon || icons[p.type] }}</span><span class="font-semibold">{{ p.title }}</span></a>
       }
     }
-    @case ('query') { <cn-query-block [filter]="n.attrs?.['filter']" [title]="$any(n.attrs?.['title'] ?? '')" [pageId]="pageId()" /> }
+    @case ('query') { <cn-query-block [filter]="n.attrs?.['filter']" [title]="$any(n.attrs?.['title'] ?? '')" [view]="n.attrs?.['view']" [columns]="n.attrs?.['columns']" [pageId]="pageId()" /> }
     @case ('columns') {
       <div class="cn-columns">
         @for (col of n.content ?? []; track $index) {<div><cn-block-nodes [nodes]="col.content ?? []" [pageId]="pageId()" /></div>}

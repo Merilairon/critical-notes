@@ -637,8 +637,9 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 **Description**: Table and card views and a column picker (details fields and custom properties).
 **Reference**: PRD §10 I2
 
-### [ ] Task I2.2: Table and card views
+### [x] Task I2.2: Table and card views
 **Owner**: Frontend Developer · **QA**: Evidence Collector
+**Done:** 2026-10-24, Code Reviewer PASS (2 rounds), QA Evidence Collector: PASS (2 rounds, in a real browser at 1280/390/320 px, light and dark, DM and player). Table and card views, the column picker, loading/error/empty states and viewer sorting; the player-visibility fixes inside this task (query `project` hook, optional `isHiddenField`, `restoreHidden` so a player's save keeps the DM's hidden columns and sort, `pageLink` property clearing); `createdAt` on query rows. Behaviour change: in a query, empty values now sort last in both directions (noted in `docs/PLAN.md`). `pnpm e2e` 104 passed, 8 skipped. Not tested: axe and contrast audits, real screen readers and devices, the "Showing the first 100" text, reference-link columns, old blocks without `view`, Cards inside a Columns block. **Follow-ups (not built):** check by keyboard that the Properties panel cannot delete a custom property without a confirmation (the QA script lost a property while sending stray keys); the "Missing" badge breaks mid-word at 320 px and 200% text. Merged 2026-10-24.
 **Description**: Implement both views and the column picker in the query block (`apps/web/src/app/editor/views/`); the server already projects query rows for players.
 **Depends on**: I2.1
 
@@ -659,7 +660,7 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 |---|---|
 | 1 | I1.1, N1.1, N3.1, I3.1, I2.1 |
 | patch | I1.3 (data-loss fix, as soon as scheduled; then I1.4, I1.5 with the next release) |
-| 2 | I1.2, N1.2, N3.2, I3.2, I2.2 |
+| 2 | I1.2, N1.2, N3.2, I3.2, I2.2 (all done 2026-10-24) |
 | 3 | N1.3, N3.3, N3.4, I3.3, I2.3 |
 | 4 | N1.4, N1.5, N3.5, I3.4 |
 | 5 | N1.6, then G2.1 |

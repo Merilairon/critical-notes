@@ -102,6 +102,8 @@ function mergeLevel(stored: BlockNode[], submitted: BlockNode[], ctx: ProjectCon
     let merged = n;
     if (before && JSON.stringify(projectNodes([before], ctx)) === JSON.stringify([n])) merged = before;
     else if (before?.content) merged = isBlockList(before.content) ? { ...n, content: mergeLevel(before.content, n.content ?? [], ctx) } : restoreHiddenLinks(before, n, ctx);
+    // Block types put back what their own projection took out (a query block's DM-only columns)
+    if (before && merged !== before) merged = blockType(n.type)?.restoreHidden?.(before, merged, ctx) ?? merged;
     out.push(merged);
     if (id && anchored.has(id) && !placed.has(id)) {
       out.push(...anchored.get(id)!);

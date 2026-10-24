@@ -1,5 +1,5 @@
 import { HttpClient, httpResource } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal, viewChild, type ElementRef } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { isSafeImagePath } from '@cn/fivetools';
 import { PAGE_TYPE_ICONS, PAGE_TYPE_LABELS, PAGE_TYPES, type EntityDto, type QueryRowDto, type UploadDto } from '@cn/shared';
@@ -14,6 +14,11 @@ import { errorMessage } from '../../core/http.interceptor';
 import { imgUrl } from '../../core/urls';
 import { EntityView } from '../../reference/entity-view';
 import { EDITOR_CONTEXT } from '../editor-context';
+import { QueryColumns } from './query-columns';
+import { effectiveColumns, normalizeColumns, normalizeView, resolveColumn, type ColumnContext } from './query-model';
+import { QueryResults } from './query-results';
+
+let nextQueryViewId = 0;
 
 type ImageSrc = { kind: 'upload'; id: string } | { kind: 'img'; path: string } | { kind: 'url'; url: string } | null;
 
@@ -177,15 +182,34 @@ export class PageEmbedView extends AngularNodeViewComponent {
 
 @Component({
   selector: 'cn-query-view',
-  imports: [RouterLink],
+  imports: [QueryColumns, QueryResults],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<div class="cn-embed" contenteditable="false" [class.ring-2]="selected()">
+  template: `<div class="cn-embed cn-query-frame" contenteditable="false" [class.ring-2]="selected()">
     <div class="flex flex-wrap items-center gap-2">
-      <input class="cn-query-title" placeholder="Query title (e.g. NPCs here)" [value]="title()" (change)="updateAttributes()({ title: $any($event.target).value })" />
-      <button type="button" class="cn-block-btn" (click)="configuring.set(!configuring())">{{ configuring() ? 'Done' : 'Configure' }}</button>
+      <input class="cn-query-title" placeholder="Query title (e.g. NPCs here)" aria-label="Query title" [value]="title()" (change)="updateAttributes()({ title: $any($event.target).value })" />
+      <button #configBtn type="button" class="cn-block-btn cn-config-btn" [attr.aria-expanded]="configuring()" (click)="configuring.set(!configuring())">{{ configuring() ? 'Done' : 'Configure' }}</button>
     </div>
     @if (configuring()) {
-      <div class="cn-query-config">
+      <div class="cn-query-config" (keydown.escape)="closeConfig()">
+        <fieldset class="cn-seg-group">
+          <legend class="cn-label">View</legend>
+          @for (v of views; track v.value) {
+            <label class="cn-seg"><input type="radio" [name]="uid + '-view'" [value]="v.value" [checked]="mode() === v.value" (change)="setView(v.value)" /> <span>{{ v.label }}</span></label>
+          }
+        </fieldset>
+        <cn-query-columns [columns]="columnsAttr()" [types]="filter().types" [mode]="mode()" (columnsChange)="updateAttributes()({ columns: $event })" />
+        <div class="cn-sort-row">
+          <label><span class="cn-label">Default sort</span>
+            <select class="cn-input" (change)="setSortField($any($event.target).value)">
+              @for (o of sortOptions(); track o.value) {<option [value]="o.value" [selected]="o.value === filter().sort.field">{{ o.label }}</option>}
+            </select>
+          </label>
+          <fieldset class="cn-seg-group">
+            <legend class="cn-label">Direction</legend>
+            <label class="cn-seg"><input type="radio" [name]="uid + '-dir'" value="asc" [checked]="filter().sort.dir !== 'desc'" (change)="setSortDir('asc')" /> <span>Ascending</span></label>
+            <label class="cn-seg"><input type="radio" [name]="uid + '-dir'" value="desc" [checked]="filter().sort.dir === 'desc'" (change)="setSortDir('desc')" /> <span>Descending</span></label>
+          </fieldset>
+        </div>
         <div><span class="cn-label">Types</span>
           @for (t of types; track t) {
             <label><input type="checkbox" [checked]="filter().types.includes(t)" (change)="toggleType(t)" /> {{ labels[t] }}</label>
@@ -197,30 +221,34 @@ export class PageEmbedView extends AngularNodeViewComponent {
             @for (r of relations; track r.value) {<option [value]="r.value" [selected]="r.value === relation()">{{ r.label }}</option>}
           </select>
         </label>
-        <label><span class="cn-label">Sort</span>
-          <select (change)="setSort($any($event.target).value)">
-            <option value="title:asc" [selected]="sortKey() === 'title:asc'">Title A→Z</option>
-            <option value="updatedAt:desc" [selected]="sortKey() === 'updatedAt:desc'">Recently edited</option>
-            <option value="facet.number:desc" [selected]="sortKey() === 'facet.number:desc'">Session number</option>
-          </select>
-        </label>
       </div>
     }
-    <ul class="cn-query-results">
-      @for (row of rows(); track row.id) {
-        <li><a [routerLink]="['/c', store?.id(), 'p', row.id]">{{ row.icon || icons[row.type] }} {{ row.title }}</a></li>
-      } @empty {
-        <li class="text-muted">{{ results.isLoading() ? 'Loading…' : 'No matching pages' }}</li>
-      }
-    </ul>
+    <cn-query-results
+      [rows]="rows()"
+      [view]="mode()"
+      [columns]="columnsAttr()"
+      [filter]="filter()"
+      [title]="title()"
+      [loading]="results.isLoading() && !results.hasValue()"
+      [busy]="results.isLoading()"
+      [error]="!!results.error()"
+      [editing]="true"
+      (retry)="results.reload()"
+    />
   </div>`,
 })
 export class QueryView extends AngularNodeViewComponent {
   protected readonly store = inject(CampaignStore, { optional: true });
-  protected readonly icons = PAGE_TYPE_ICONS;
   protected readonly labels = PAGE_TYPE_LABELS;
   protected readonly types = PAGE_TYPES;
+  protected readonly uid = `cn-qv-${nextQueryViewId++}`;
   protected readonly configuring = signal(false);
+  private readonly configBtn = viewChild<ElementRef<HTMLButtonElement>>('configBtn');
+  protected readonly views = [
+    { value: 'list', label: 'List' },
+    { value: 'table', label: 'Table' },
+    { value: 'cards', label: 'Cards' },
+  ] as const;
   protected readonly relations = [
     { value: '', label: 'Anywhere in the campaign' },
     { value: 'children', label: 'Subpages of this page' },
@@ -230,6 +258,8 @@ export class QueryView extends AngularNodeViewComponent {
     { value: 'facet.giverPageId', label: 'Quests given by this NPC' },
   ];
   protected readonly title = computed(() => String(this.node().attrs['title'] ?? ''));
+  protected readonly mode = computed(() => normalizeView(this.node().attrs['view']));
+  protected readonly columnsAttr = computed(() => normalizeColumns(this.node().attrs['columns']));
   protected readonly filter = computed(() => {
     const f = (this.node().attrs['filter'] ?? {}) as Partial<{ types: string[]; tags: string[]; parent: unknown; where: { field: string; op: string; value?: unknown }[]; sort: { field: string; dir: string }; limit: number }>;
     return { types: f.types ?? [], tags: f.tags ?? [], parent: f.parent ?? null, where: f.where ?? [], sort: f.sort ?? { field: 'title', dir: 'asc' }, limit: f.limit ?? 100 };
@@ -239,7 +269,24 @@ export class QueryView extends AngularNodeViewComponent {
     if (f.parent && typeof f.parent === 'object') return 'children';
     return f.where.find((w) => w.value && typeof w.value === 'object' && '$ctx' in (w.value as object))?.field ?? '';
   });
-  protected readonly sortKey = computed(() => `${this.filter().sort.field}:${this.filter().sort.dir}`);
+  private readonly columnContext = computed<ColumnContext>(() => ({ types: this.filter().types, props: this.store?.propertyDefs() ?? [], isGm: this.store?.isGm() ?? false }));
+  /** Title, type and dates, every shown column the server can sort on, and the field the block uses now. */
+  protected readonly sortOptions = computed(() => {
+    const cx = this.columnContext();
+    const options: { value: string; label: string }[] = [
+      { value: 'title', label: 'Title' },
+      { value: 'type', label: 'Type' },
+      { value: 'updatedAt', label: 'Updated' },
+      { value: 'createdAt', label: 'Created' },
+    ];
+    for (const c of effectiveColumns(this.columnsAttr(), this.filter().types, this.mode() === 'list' ? 'table' : this.mode(), cx)) {
+      if (c.scalar && !options.some((o) => o.value === c.key)) options.push({ value: c.key, label: c.label });
+    }
+    if (!options.some((o) => o.value === 'facet.number')) options.push({ value: 'facet.number', label: 'Session number' });
+    const current = this.filter().sort.field;
+    if (!options.some((o) => o.value === current)) options.push({ value: current, label: `${resolveColumn(current, cx)?.label ?? current} (not shown)` });
+    return options;
+  });
   private readonly editorContext = inject(EDITOR_CONTEXT, { optional: true });
   private readonly pageId = computed(() => this.editorContext?.pageId() ?? null);
   protected readonly results = httpResource<{ rows: QueryRowDto[] }>(() => {
@@ -251,6 +298,14 @@ export class QueryView extends AngularNodeViewComponent {
 
   private setFilter(patch: Record<string, unknown>) {
     this.updateAttributes()({ filter: { ...this.filter(), ...patch } });
+  }
+  protected closeConfig() {
+    this.configuring.set(false);
+    this.configBtn()?.nativeElement.focus();
+  }
+  /** Switching views keeps the columns (they serve both table and cards). */
+  protected setView(view: string) {
+    this.updateAttributes()({ view });
   }
   protected toggleType(t: string) {
     const types = this.filter().types.includes(t) ? this.filter().types.filter((x) => x !== t) : [...this.filter().types, t];
@@ -265,9 +320,11 @@ export class QueryView extends AngularNodeViewComponent {
     else if (value) this.setFilter({ parent: null, where: [...where, { field: value, op: 'eq', value: { $ctx: 'currentPage' } }] });
     else this.setFilter({ parent: null, where });
   }
-  protected setSort(v: string) {
-    const [field, dir] = v.split(':');
-    this.setFilter({ sort: { field, dir } });
+  protected setSortField(field: string) {
+    this.setFilter({ sort: { field, dir: this.filter().sort.dir === 'desc' ? 'desc' : 'asc' } });
+  }
+  protected setSortDir(dir: 'asc' | 'desc') {
+    this.setFilter({ sort: { field: this.filter().sort.field, dir } });
   }
 }
 

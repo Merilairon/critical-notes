@@ -16,6 +16,11 @@ export interface ProjectContext {
   role: 'dm' | 'player';
   /** Whether the viewer may see a page (for page links/embeds). */
   canSeePage(pageId: string): boolean;
+  /**
+   * Whether a query field (`facet.<key>`, `prop.<key>`) is DM-only for the viewer. Optional: callers that
+   * do not pass it (exports, merges) behave as before.
+   */
+  isHiddenField?(field: string): boolean;
 }
 
 export interface BlockTypeDef {
@@ -28,6 +33,11 @@ export interface BlockTypeDef {
   secretByDefault?: boolean;
   /** Custom projection for players (after the generic visibility check). Return null to drop the node. */
   project?(node: BlockNode, ctx: ProjectContext): BlockNode | null;
+  /**
+   * Called when a player's edit is merged over the stored page, for a node present in both: lets the type
+   * put back what its `project` hook removed (the player never received it, so could not have changed it).
+   */
+  restoreHidden?(stored: BlockNode, submitted: BlockNode, ctx: ProjectContext): BlockNode;
   /** Custom plain-text extraction (defaults to children's text). */
   text?(node: BlockNode): string;
   label: string;
@@ -54,6 +64,51 @@ const imageAttrs = z.object({
   /** map: zoomable, full width */
   style: z.enum(['inline', 'wide', 'map']).default('inline'),
 });
+
+/** Column keys of a query block: the query DSL's field grammar, minus `title` (always shown). */
+export const QUERY_COLUMN_KEY = /^(type|tags|updatedAt|createdAt|facet\.[A-Za-z0-9_]+|prop\.[A-Za-z0-9_]+)$/;
+
+/** A bad column key is dropped (not an error: that would reset the whole block to defaults); duplicates collapse. */
+const queryColumns = z.preprocess(
+  (v) => (Array.isArray(v) ? [...new Set(v.filter((k): k is string => typeof k === 'string' && k.length <= 80 && QUERY_COLUMN_KEY.test(k)))].slice(0, 10) : []),
+  z.array(z.string().max(80)).max(10),
+) as unknown as z.ZodType<string[]>;
+
+const DEFAULT_QUERY_SORT = { field: 'title', dir: 'asc' } as const;
+
+/** Players must not learn the name of a DM-only column or sort field from the page body. */
+function projectQuery(node: BlockNode, ctx: ProjectContext): BlockNode {
+  const hidden = ctx.isHiddenField;
+  if (!hidden) return node;
+  const attrs = (node.attrs ?? {}) as Record<string, unknown>;
+  const columns = Array.isArray(attrs.columns) ? (attrs.columns as unknown[]).filter((k) => typeof k !== 'string' || !hidden(k)) : attrs.columns;
+  const filter = attrs.filter as { sort?: { field?: unknown } } | undefined;
+  const sortField = filter?.sort?.field;
+  const nextFilter = typeof sortField === 'string' && hidden(sortField) ? { ...filter, sort: { ...DEFAULT_QUERY_SORT } } : filter;
+  return { ...node, attrs: { ...attrs, columns, filter: nextFilter } };
+}
+
+/** Puts back the DM's hidden columns and sort when a player's copy (cleaned by `projectQuery`) is saved. */
+function restoreQuery(stored: BlockNode, submitted: BlockNode, ctx: ProjectContext): BlockNode {
+  if (!ctx.isHiddenField) return submitted;
+  const before = projectQuery(stored, ctx);
+  const sa = (stored.attrs ?? {}) as Record<string, unknown>;
+  const ba = (before.attrs ?? {}) as Record<string, unknown>;
+  const na = (submitted.attrs ?? {}) as Record<string, unknown>;
+  const attrs = { ...na };
+  // Left as received: the stored list. Changed by the player: their list plus the hidden keys they never saw.
+  if (JSON.stringify(na.columns) === JSON.stringify(ba.columns)) attrs.columns = sa.columns;
+  else if (Array.isArray(na.columns) && Array.isArray(sa.columns)) {
+    const hidden = (sa.columns as unknown[]).filter((k) => typeof k === 'string' && ctx.isHiddenField!(k));
+    // The hidden keys always fit: the player's own list gives way. They go at the end (original positions are not tracked).
+    const visible = (na.columns as unknown[]).filter((k) => !hidden.includes(k as string)).slice(0, Math.max(0, 10 - hidden.length));
+    attrs.columns = [...new Set([...visible, ...hidden])];
+  }
+  const bf = (ba.filter ?? {}) as { sort?: unknown };
+  const nf = (na.filter ?? {}) as { sort?: unknown };
+  if (JSON.stringify(nf.sort) === JSON.stringify(bf.sort)) attrs.filter = { ...nf, sort: (sa.filter as { sort?: unknown } | undefined)?.sort ?? nf.sort };
+  return { ...submitted, attrs };
+}
 
 export const statGridItemSchema = z.object({ label: z.string().max(80), value: z.string().max(500) });
 
@@ -141,9 +196,11 @@ const defs: BlockTypeDef[] = [
       title: z.string().max(120).default(''),
       filter: queryFilterSchema.default(queryFilterSchema.parse({})),
       view: z.enum(['list', 'table', 'cards']).default('list'),
-      columns: z.array(z.string().max(80)).max(10).default([]),
+      columns: queryColumns,
     }),
     content: 'none',
+    project: projectQuery,
+    restoreHidden: restoreQuery,
   },
   // endregion
 

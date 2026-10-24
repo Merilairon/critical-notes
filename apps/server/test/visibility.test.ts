@@ -20,6 +20,17 @@ const base = () => `/api/campaigns/${campaignId}`;
 const para = (text: string, attrs: Record<string, unknown> = {}) => ({ type: 'paragraph', attrs, content: [{ type: 'text', text }] });
 const doc = (...content: unknown[]) => ({ type: 'doc', content });
 const ids: Record<string, string> = {};
+/** A query block whose columns and default sort name DM-only keys (the key names are secret too). */
+const hiddenColumnsQuery = (id: string) => ({
+  type: 'query',
+  attrs: {
+    id,
+    title: 'Places',
+    view: 'table',
+    columns: ['prop.sentinel_stash', 'facet.statblockUid', 'prop.mood', 'prop.contact', 'updatedAt'],
+    filter: { sort: { field: 'prop.sentinel_stash', dir: 'desc' } },
+  },
+});
 
 async function join(token: string, username: string): Promise<{ client: TestClient; userId: string }> {
   const client = new TestClient(app);
@@ -69,9 +80,11 @@ beforeAll(async () => {
   // A shared page full of things players must not get
   await dm.post(`${base()}/properties`, { label: 'Secret motive', type: 'text', dmOnly: true });
   await dm.post(`${base()}/properties`, { label: 'Mood', type: 'text' });
+  await dm.post(`${base()}/properties`, { label: 'Sentinel stash', type: 'text', dmOnly: true });
+  await dm.post(`${base()}/properties`, { label: 'Contact', type: 'pageLink' });
   await create('town', { title: 'Town', visibility: 'all' });
   await patch('town', {
-    props: { secret_motive: 'SENTINEL motive', mood: 'calm' },
+    props: { secret_motive: 'SENTINEL motive', mood: 'calm', sentinel_stash: 'SENTINEL stash value', contact: ids['hidden'] },
     body: doc(
       para('Welcome to town.'),
       para('SENTINEL dm paragraph', { visibility: 'dm' }),
@@ -91,7 +104,8 @@ beforeAll(async () => {
 
   // The player's character, with a DM note on it
   await create('pc', { type: 'pc', title: 'Pat the Brave', visibility: 'dm', facet: { playerUserId: playerId } });
-  await patch('pc', { body: doc(para('My backstory'), para('SENTINEL dm note about Pat', { visibility: 'dm' })) });
+  await patch('pc', { body: doc(para('My backstory'), para('SENTINEL dm note about Pat', { visibility: 'dm' }), hiddenColumnsQuery('qry_pc')) });
+  await create('board', { title: 'Board', visibility: 'all', body: doc(hiddenColumnsQuery('qry_board')) });
 
   // House rules, a campaign template, a tracker
   await dm.patch(base(), { houseRules: doc(para('Flanking is on.'), para('SENTINEL house secret', { visibility: 'dm' })) });
@@ -185,6 +199,7 @@ describe('sentinel crawl: nothing DM-only reaches a player', () => {
     await post(`${base()}/query`, { filter: {} });
     await post(`${base()}/query`, { filter: { where: [{ field: 'facet.statblockUid', op: 'exists' }] } });
     await post(`${base()}/query`, { filter: { where: [{ field: 'props.secret_motive', op: 'exists' }] } });
+    await post(`${base()}/query`, { filter: { sort: { field: 'prop.sentinel_stash', dir: 'desc' } } });
     for (const q of ['sentinel', 'door', 'town', 'secret', 'motive']) await get(`${base()}/search?q=${q}`);
     await get(`${base()}/properties`);
     await get(`${base()}/members`);
@@ -253,7 +268,7 @@ describe('sentinel crawl: nothing DM-only reaches a player', () => {
 
   it('still shows players what is meant for them', async () => {
     const tree = (await player.get(`${base()}/pages`)).body.pages as { id: string; title: string; parentId: string | null }[];
-    expect(tree.map((p) => p.title).sort()).toEqual(['Cellar', 'Grik', 'Letter for Pat', 'Pat the Brave', 'Town']);
+    expect(tree.map((p) => p.title).sort()).toEqual(['Board', 'Cellar', 'Grik', 'Letter for Pat', 'Pat the Brave', 'Town']);
     expect(tree.find((p) => p.title === 'Cellar')!.parentId).toBeNull(); // its parent is hidden
     const town = (await player.get(`${base()}/pages/${ids['town']}`)).body;
     const text = JSON.stringify(town.body);
@@ -266,7 +281,7 @@ describe('sentinel crawl: nothing DM-only reaches a player', () => {
     ]);
     expect(town.props).toEqual({ mood: 'calm' });
     expect((await player.get(`${base()}/pages/${ids['npc']}`)).body.facet).not.toHaveProperty('statblockUid');
-    expect((await player.get(`${base()}/properties`)).body.properties.map((p: { key: string }) => p.key)).toEqual(['mood']);
+    expect((await player.get(`${base()}/properties`)).body.properties.map((p: { key: string }) => p.key)).toEqual(['mood', 'contact']);
     const view = (await player.get(`${base()}/trackers/${ids['tracker']}/player`)).body;
     expect(view.combatants.map((c: { name: string }) => c.name)).toEqual(['Pat the Brave', 'Wyrm']);
     // Death saves show for the player's character; a visible monster shows none of its tracker data
@@ -334,6 +349,34 @@ describe('sentinel crawl: nothing DM-only reaches a player', () => {
     expect(await pages(dm)).toBe(live);
   });
 
+  it('keeps DM-only columns, sort fields and linked page ids out of query blocks and rows', async () => {
+    const queryBlock = (body: { content: { type: string; attrs: Record<string, unknown> }[] }) => body.content.find((b) => b.type === 'query')!.attrs;
+    const board = (await player.get(`${base()}/pages/${ids['board']}`)).body;
+    const attrs = queryBlock(board.body);
+    // Visible keys stay, in order; the DM-only property, the DM-only facet field and the sort on them go
+    expect(attrs['columns']).toEqual(['prop.mood', 'prop.contact', 'updatedAt']);
+    expect(attrs['filter']).toMatchObject({ sort: { field: 'title', dir: 'asc' } });
+    expect(attrs['view']).toBe('table');
+    const raw = JSON.stringify(board);
+    expect(raw).not.toMatch(SENTINEL);
+    expect(raw).not.toContain('statblockUid');
+    // The DM's own copy is untouched
+    const asDm = queryBlock((await dm.get(`${base()}/pages/${ids['board']}`)).body.body);
+    expect(asDm['columns']).toEqual(['prop.sentinel_stash', 'facet.statblockUid', 'prop.mood', 'prop.contact', 'updatedAt']);
+
+    // The query response: no sentinel value, and the property link to the hidden page is cleared
+    const res = await player.post(`${base()}/query`, { filter: { sort: { field: 'prop.sentinel_stash', dir: 'desc' } } });
+    expect(res.status).toBe(200);
+    const text = JSON.stringify(res.body);
+    expect(text).not.toMatch(SENTINEL);
+    expect(text).not.toContain(ids['hidden']);
+    const town = (res.body.rows as { id: string; props: Record<string, unknown> }[]).find((r) => r.id === ids['town'])!;
+    expect(town.props).toEqual({ mood: 'calm' });
+    // The same page link is still there for the DM
+    const dmTown = ((await dm.post(`${base()}/query`, { filter: {} })).body.rows as { id: string; props: Record<string, unknown> }[]).find((r) => r.id === ids['town'])!;
+    expect(dmTown.props['contact']).toBe(ids['hidden']);
+  });
+
   it('shows the DM everything (the projection is for players only)', async () => {
     const town = (await dm.get(`${base()}/pages/${ids['town']}`)).body;
     expect(JSON.stringify(town)).toContain('SENTINEL dm paragraph');
@@ -390,6 +433,19 @@ describe('what players may change', () => {
     const asDm = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
     expect(JSON.stringify(asDm.body)).toContain('Second wind (edited)');
     expect(JSON.stringify(asDm.body)).toContain(`"pageId":"${ids['hidden']}"`);
+  });
+
+  it('does not strip the DM’s hidden columns when a player saves their page', async () => {
+    const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+    const res = await player.patch(`${base()}/pages/${ids['pc']}`, {
+      revision: mine.revision,
+      body: { ...mine.body, content: [...mine.body.content, para('Edited once more.')] },
+    });
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(res.body)).not.toMatch(SENTINEL);
+    const stored = (await dm.get(`${base()}/pages/${ids['pc']}`)).body.body.content.find((b: { type: string }) => b.type === 'query').attrs;
+    expect(stored.columns).toEqual(['prop.sentinel_stash', 'facet.statblockUid', 'prop.mood', 'prop.contact', 'updatedAt']);
+    expect(stored.filter.sort).toEqual({ field: 'prop.sentinel_stash', dir: 'desc' });
   });
 
   it('cannot edit other pages, change visibility, or reassign characters', async () => {
