@@ -21,6 +21,9 @@ services:
       BACKUP_KEEP: ${BACKUP_KEEP:-}
       # Where backup zips go inside the container (default /data/app/backups). The folder must be writable by uid 1000.
       BACKUP_DIR: ${BACKUP_DIR:-}
+      # Live event stream limits (README); an empty value behaves as unset (500 and 100)
+      EVENTS_MAX_CONNECTIONS: ${EVENTS_MAX_CONNECTIONS:-}
+      EVENTS_MAX_PER_CAMPAIGN: ${EVENTS_MAX_PER_CAMPAIGN:-}
     volumes:
       - ./5etools-data/5etools-src:/data/5etools-src:ro
       - ./5etools-data/5etools-img:/data/5etools-img:ro

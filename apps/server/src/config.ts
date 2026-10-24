@@ -43,6 +43,13 @@ export function parseBackupKeep(value: string | undefined, warn: (msg: string) =
   return DEFAULT_BACKUP_KEEP;
 }
 
+/** A positive integer in range from the environment, else the default (the event stream limits are not worth refusing to start for). */
+export function parseIntInRange(value: string | undefined, fallback: number, min: number, max: number): number {
+  const v = value?.trim() ?? '';
+  const n = /^\d{1,9}$/.test(v) ? Number(v) : NaN;
+  return Number.isInteger(n) && n >= min && n <= max ? n : fallback;
+}
+
 export const MAX_BACKUP_EVERY_HOURS = 720;
 
 /**
@@ -72,6 +79,14 @@ export interface AppConfig {
   backupEveryHours: number;
   /** Why `BACKUP_EVERY_HOURS` is invalid (the server refuses to start), or null. */
   backupEveryHoursError: string | null;
+  /** Open event streams in total (`EVENTS_MAX_CONNECTIONS`, default 500) and per campaign (`EVENTS_MAX_PER_CAMPAIGN`, default 100); over a cap: 503. */
+  eventsMaxConnections: number;
+  eventsMaxPerCampaign: number;
+  /**
+   * Event stream heartbeat in ms (`EVENTS_HEARTBEAT_MS`, default 25000, 20 to 55000). A TEST-ONLY seam (short heartbeats for the
+   * membership tests): deliberately not documented in README or .env.example. Keep it under the proxy's 60 s idle timeout.
+   */
+  eventsHeartbeatMs: number;
   publicUrl: string;
   /** Session cookies carry `Secure`: by default when PUBLIC_URL is https (browsers drop them over plain http). */
   secureCookies: boolean;
@@ -100,6 +115,9 @@ export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     backupKeep: parseBackupKeep(env.BACKUP_KEEP),
     backupEveryHours: every.hours,
     backupEveryHoursError: every.error,
+    eventsMaxConnections: parseIntInRange(env.EVENTS_MAX_CONNECTIONS, 500, 1, 100_000),
+    eventsMaxPerCampaign: parseIntInRange(env.EVENTS_MAX_PER_CAMPAIGN, 100, 1, 100_000),
+    eventsHeartbeatMs: parseIntInRange(env.EVENTS_HEARTBEAT_MS, 25_000, 20, 55_000),
     publicUrl,
     secureCookies: env.SECURE_COOKIES ? env.SECURE_COOKIES === '1' || env.SECURE_COOKIES === 'true' : publicUrl.startsWith('https://'),
     trustProxy: env.TRUST_PROXY === '1' || env.TRUST_PROXY === 'true',

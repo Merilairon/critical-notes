@@ -29,6 +29,10 @@ import { homebrewRoutes } from './routes/homebrew';
 import { HomebrewTransfer } from './homebrew/transfer';
 import { templateRoutes } from './routes/templates';
 import { playRoutes } from './routes/play';
+import { eventRoutes } from './routes/events';
+import { InMemoryCampaignEventBus } from './services/event-bus';
+import { EventStreamHub } from './services/event-streams';
+import { RevealService } from './services/reveal';
 import { inviteRoutes } from './routes/invites';
 import { EncounterService } from './services/encounters';
 import { InventoryService } from './services/inventory';
@@ -72,6 +76,15 @@ export function createServices({ indexDb, db, config }: AppDeps) {
   const trackers = new TrackerService(db, encounters, pages);
   const inventory = new InventoryService(db, reference);
   const visibility = new VisibilityService(db);
+  // Reveal events (docs/design/reveal.md): committed page writes -> per-player detector -> bus -> open streams
+  const eventBus = new InMemoryCampaignEventBus();
+  const reveal = new RevealService(db, visibility, eventBus);
+  pages.onCommitted = (changes) => reveal.handle(changes);
+  const eventStreams = new EventStreamHub(
+    { db, campaigns, visibility, bus: eventBus },
+    { global: config.eventsMaxConnections, perCampaign: config.eventsMaxPerCampaign },
+    config.eventsHeartbeatMs,
+  );
   const transfer = new CampaignTransfer(db, indexDb, { campaigns, pages, properties, templates, homebrew, homebrewTransfer, uploads });
   const migration = new EditionMigration(db, indexDb, { campaigns, pages, properties });
   const apiTokens = new ApiTokenService(db);
@@ -86,7 +99,7 @@ export function createServices({ indexDb, db, config }: AppDeps) {
   // Built here, started by main.ts (off unless BACKUP_EVERY_HOURS is set)
   const backupScheduler = new BackupScheduler({ service: backups, config });
   const trashPurger = new TrashPurger({ pages, templates, backups, config });
-  return { backups, backupScheduler, trashPurger, userAdmin, apiTokens, visibility, transfer, migration, reference, homebrewIndex, campaigns, pages, homebrew, homebrewTransfer, properties, pageSearch, uploads, templates, encounters, trackers, inventory };
+  return { eventBus, eventStreams, backups, backupScheduler, trashPurger, userAdmin, apiTokens, visibility, transfer, migration, reference, homebrewIndex, campaigns, pages, homebrew, homebrewTransfer, properties, pageSearch, uploads, templates, encounters, trackers, inventory };
 }
 
 export type Services = ReturnType<typeof createServices>;
@@ -149,6 +162,7 @@ export function createApp(deps: AppDeps, services: Services = createServices(dep
   app.route('/api/homebrew', homebrewRoutes(services, services.homebrewTransfer));
   app.route('/api/campaigns', campaignRoutes(services));
   app.route('/api/campaigns', playRoutes(services));
+  app.route('/api/campaigns', eventRoutes(services));
   app.use('/api/uploads/*', requireUser);
   app.route('/api/uploads', uploadRoutes(services));
   app.route('/img', imageRoutes(config.fivetoolsImgPath));

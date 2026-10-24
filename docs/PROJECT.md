@@ -580,8 +580,9 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 **Acceptance Criteria**: `docs/design/reveal.md`; threat note: events leak nothing a player can't already fetch
 **Reference**: PRD §9 N3
 
-### [ ] Task N3.2: Event stream
+### [x] Task N3.2: Event stream
 **Owner**: Realtime Collaboration Engineer · **QA**: API Tester, Application Security Engineer
+**Done:** 2026-10-24, Code Reviewer PASS, QA API Tester PASS, QA Application Security Engineer PASS (plus a hardening round with its own re-check). `GET /api/campaigns/:cid/events` per `docs/design/reveal.md`: cookie session only, per-player detector, delivery-time `canSee`, replay with revalidation, limits 6 per user (evict oldest), 100 per campaign, 500 global, shared `lib/sse.ts` (hand-written frame encoder, bounded write queue; the tracker stream uses it too), `PageService.onCommitted`/`batch`/`flushCommitted`. Server only: no web client yet (N3.3, N3.4). **For N3.3:** the editor must keep every block's `attrs.id`, including children of secrets, on resave, or the detector sees a changed fingerprint and sends no event. Backlog: the tracker stream still checks membership only at connect. Merged to `main` 2026-10-24.
 **Description**: `GET /api/campaigns/:cid/events` (members); events filtered per player by visibility; heartbeat; not compressed (see `app.ts`).
 **Acceptance Criteria**: a player gets an event only for pages they can now see; sentinel crawl reads the stream
 **Depends on**: N3.1

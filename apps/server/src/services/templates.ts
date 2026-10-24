@@ -530,17 +530,20 @@ export class TemplateService {
   createPage(userId: string, campaignId: string, input: CreatePageFromTemplateInput): PageDto {
     this.campaigns.requireDm(campaignId, userId);
     const counter = { pages: 0 };
-    return this.createPageInner(userId, campaignId, {
-      templateRef: input.templateId,
-      title: input.title,
-      parentId: input.parentId ?? null,
-      values: input.values ?? {},
-      mode: input.mode ?? 'fields',
-      withChildren: input.withChildren ?? true,
-      depth: 0,
-      ancestors: new Set(),
-      counter,
-    });
+    // One flush for the whole tree: many shared pages collapse into one resync, not one event each
+    return this.pages.batch(() =>
+      this.createPageInner(userId, campaignId, {
+        templateRef: input.templateId,
+        title: input.title,
+        parentId: input.parentId ?? null,
+        values: input.values ?? {},
+        mode: input.mode ?? 'fields',
+        withChildren: input.withChildren ?? true,
+        depth: 0,
+        ancestors: new Set(),
+        counter,
+      }),
+    );
   }
 
   private createPageInner(
