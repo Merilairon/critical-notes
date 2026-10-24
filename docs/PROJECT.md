@@ -610,8 +610,9 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 **Acceptance Criteria**: `docs/design/tracker-rules.md` with each rule, source page and the player projection
 **Reference**: PRD §10 I3
 
-### [ ] Task I3.2: Reducer actions
+### [x] Task I3.2: Reducer actions
 **Owner**: Backend Architect · **QA**: API Tester
+**Done:** 2026-10-24, Code Reviewer PASS (1 fix round: docs, plus three robustness fixes), QA API Tester: PASS. Reducer actions and player projection per `docs/design/tracker-rules.md` v1.2; hidden information checked in the player GET and SSE; old stored trackers load. Deviations are in `docs/PLAN.md`. **For I3.3:** `rolls` (recharge) reaches the DM only; hide HP/AC controls on the lair row; `deathSaveAdjust` can leave a stable character with failures; a monster not flagged for death saves can still get a dying state at 0 HP (never projected); help text must say the temp-HP rule is a table convention. Merged to `main` 2026-10-24.
 **Description**: New actions in the tracker reducer (`packages/shared/src/tracker.ts`) and the player projection; legendary and recharge data from the statblock where the index has it.
 **Acceptance Criteria**: unit tests per rule; hidden information stays hidden in the player view
 **Depends on**: I3.1

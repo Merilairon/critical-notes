@@ -101,10 +101,37 @@ beforeAll(async () => {
     name: 'Fight',
     combatants: [
       { kind: 'pc', ref: ids['pc'], name: 'Pat the Brave', hpMax: 20, notes: 'SENTINEL combat note' },
-      { kind: 'monster', name: 'SENTINEL lurker', hpMax: 30, hidden: true },
+      { kind: 'monster', name: 'SENTINEL lurker', hpMax: 30, hidden: true, deathSaves: true },
+      {
+        kind: 'monster',
+        name: 'Wyrm',
+        hpMax: 100,
+        deathSaves: true,
+        legendary: { perRound: 3 },
+        resistance: { max: 3 },
+        recharge: [{ name: 'SENTINEL breath', min: 5 }],
+      },
     ],
   });
   ids['tracker'] = tracker.body.id;
+  // Tracker rules (I3): death saves, a readied action, recharge, a hidden lair row, the delay move
+  const act = async (action: object) => expect((await dm.post(`${base()}/trackers/${ids['tracker']}/actions`, action)).status).toBe(200);
+  const cs = (tracker.body.state.combatants as { id: string; name: string }[]);
+  const idOf = (n: string) => cs.find((c) => c.name === n)!.id;
+  await act({ type: 'hp', id: idOf('SENTINEL lurker'), change: -30 });
+  await act({ type: 'deathSave', id: idOf('SENTINEL lurker'), roll: 3 });
+  await act({ type: 'hp', id: idOf('Wyrm'), change: -100 });
+  await act({ type: 'ready', id: idOf('Wyrm'), trigger: 'SENTINEL wyrm trigger' });
+  await act({ type: 'ready', id: idOf('SENTINEL lurker'), trigger: 'SENTINEL lurker trigger' });
+  await act({ type: 'legendarySpend', id: idOf('Wyrm') });
+  await act({ type: 'legendaryResist', id: idOf('Wyrm') });
+  await act({ type: 'rechargeUsed', id: idOf('Wyrm'), name: 'SENTINEL breath' });
+  await act({ type: 'setInLair', id: idOf('Wyrm'), inLair: true });
+  await act({ type: 'lairAdd', name: 'SENTINEL lair', ref: 'SENTINEL group', markInLair: [idOf('Wyrm')] });
+  await act({ type: 'update', id: idOf('Pat the Brave'), patch: { initiative: 12 } });
+  await act({ type: 'moveAfter', id: idOf('Wyrm'), afterId: idOf('Pat the Brave') });
+  await act({ type: 'hp', id: idOf('Pat the Brave'), change: -20 });
+  await act({ type: 'deathSave', id: idOf('Pat the Brave'), roll: 4 });
 
   // Belongings: an item nobody has identified yet, and a character the players don't know about
   const ring = await dm.post(`${base()}/inventory/items`, { ownerPageId: null, name: 'SENTINEL ring of lies', notes: 'SENTINEL cursed' });
@@ -240,7 +267,53 @@ describe('sentinel crawl: nothing DM-only reaches a player', () => {
     expect((await player.get(`${base()}/pages/${ids['npc']}`)).body.facet).not.toHaveProperty('statblockUid');
     expect((await player.get(`${base()}/properties`)).body.properties.map((p: { key: string }) => p.key)).toEqual(['mood']);
     const view = (await player.get(`${base()}/trackers/${ids['tracker']}/player`)).body;
-    expect(view.combatants.map((c: { name: string }) => c.name)).toEqual(['Pat the Brave']);
+    expect(view.combatants.map((c: { name: string }) => c.name)).toEqual(['Pat the Brave', 'Wyrm']);
+    // Death saves show for the player's character; a visible monster shows none of its tracker data
+    const [pat, wyrm] = view.combatants;
+    expect(pat.dying).toEqual({ successes: 0, failures: 1, status: 'dying' });
+    expect(wyrm).toEqual({ id: wyrm.id, name: 'Wyrm', kind: 'monster', initiative: 12, hp: null, health: 'down', conditions: [], dying: null, readied: null });
+    expect(JSON.stringify(view)).not.toMatch(/legendary|resistance|recharge|inLair|tieRank|SENTINEL|trigger/i);
+  });
+
+  it('keeps tracker rule data out of the player event stream and the DM-only rolls out of player events', async () => {
+    const url = `http://localhost${base()}/trackers/${ids['tracker']}/events?view=player`;
+    const stream = await player.app.request(url, { headers: { cookie: player.cookie, origin: 'http://localhost', host: 'localhost' } });
+    const reader = stream.body!.getReader();
+    const decoder = new TextDecoder();
+    await reader.read(); // the snapshot
+    const wyrm = (await dm.get(`${base()}/trackers/${ids['tracker']}`)).body.state.combatants.find((c: { name: string }) => c.name === 'Wyrm').id;
+    // Heal the wyrm and cycle the turns until it acts, so its spent breath rolls
+    const res = await dm.post(`${base()}/trackers/${ids['tracker']}/actions`, { type: 'legendaryResist', id: wyrm, undo: true });
+    expect(res.status).toBe(200);
+    const event = decoder.decode((await reader.read()).value);
+    await reader.cancel();
+    expect(event).toContain('event: state');
+    expect(event).not.toMatch(SENTINEL);
+    expect(event).not.toMatch(/legendary|resistance|recharge|rolls|inLair|tieRank/i);
+  });
+
+  it('sends recharge rolls to the DM only', async () => {
+    const tid = ids['tracker'];
+    const state = (await dm.get(`${base()}/trackers/${tid}`)).body.state as { combatants: { id: string; name: string }[] };
+    const wyrm = state.combatants.find((c) => c.name === 'Wyrm')!.id;
+    const stream = await player.app.request(`http://localhost${base()}/trackers/${tid}/events?view=player`, { headers: { cookie: player.cookie, origin: 'http://localhost', host: 'localhost' } });
+    const reader = stream.body!.getReader();
+    await reader.read(); // the snapshot
+    // The breath is spent: the wyrm's turn rolls it, the DM response carries the roll
+    const actions = [{ type: 'start' }, { type: 'next' }, { type: 'next' }, { type: 'next' }];
+    const rolls: { combatantId: string; name: string; min: number }[] = [];
+    const events: string[] = [];
+    for (const action of actions) {
+      const res = await dm.post(`${base()}/trackers/${tid}/actions`, action);
+      expect(res.status).toBe(200);
+      rolls.push(...(res.body.rolls ?? []));
+      events.push(new TextDecoder().decode((await reader.read()).value));
+    }
+    await reader.cancel();
+    expect(rolls).toHaveLength(1);
+    expect(rolls[0]).toMatchObject({ combatantId: wyrm, name: 'SENTINEL breath', min: 5 });
+    expect(events.join('')).not.toMatch(/SENTINEL|roll|breath/i);
+    expect(JSON.stringify((await player.get(`${base()}/trackers/${tid}/player`)).body)).not.toMatch(/SENTINEL|roll/i);
   });
 
   it('counts only the pages the viewer may see in the campaign list and in list_campaigns', async () => {

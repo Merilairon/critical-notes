@@ -3,7 +3,7 @@ import { applyTrackerAction, emptyTrackerState, healthWord, projectTrackerForPla
 
 function ctx(rolls: number[] = []) {
   let n = 0;
-  return { d20: () => rolls.shift() ?? 10, newId: () => `c${++n}` };
+  return { d20: () => rolls.shift() ?? 10, d6: () => 3, newId: () => `c${++n}` };
 }
 
 function run(actions: TrackerAction[], rolls: number[] = [], start: TrackerState = emptyTrackerState()) {
@@ -66,7 +66,7 @@ describe('player view', () => {
     let view = projectTrackerForPlayers(s);
     expect(view.combatants.map((c) => c.name)).toEqual(['Aria', 'Goblin']);
     expect(view.activeId).toBeNull(); // the hidden Lurker is acting
-    expect(view.combatants[0]).toEqual({ id: 'c1', name: 'Aria', kind: 'pc', initiative: 15, hp: { current: 30, max: 30, temp: 0 }, health: null, conditions: [] });
+    expect(view.combatants[0]).toEqual({ id: 'c1', name: 'Aria', kind: 'pc', initiative: 15, hp: { current: 30, max: 30, temp: 0 }, health: null, conditions: [], dying: null, readied: null });
     expect(view.combatants[1]!.health).toBe('bloodied');
     expect(JSON.stringify(view)).not.toMatch(/Lurker|Has the key|"ac"/);
     s = run([{ type: 'next' }], [], s);

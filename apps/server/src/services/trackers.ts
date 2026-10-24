@@ -13,6 +13,7 @@ import {
   type CombatantInput,
   type EncounterCreature,
   type PlayerTrackerView,
+  type RechargeRoll,
   type TrackerAction,
   type TrackerDto,
   type TrackerState,
@@ -104,8 +105,12 @@ export class TrackerService {
     for (const line of enc.creatures as EncounterCreature[]) {
       const r = enc.resolved.find((x) => x.id === line.id);
       if (!r) continue;
+      const facts = r.uid ? this.encounters.combatFacts(r.uid, policy) : null;
       for (let i = 1; i <= line.count; i++) {
         combatants.push({
+          ...(facts?.legendary ? { legendary: facts.legendary } : {}),
+          ...(facts?.resistance ? { resistance: facts.resistance } : {}),
+          ...(facts?.recharge.length ? { recharge: facts.recharge } : {}),
           kind: line.kind,
           ref: line.kind === 'npc' ? line.pageId : r.uid,
           name: line.count > 1 ? `${r.name} ${i}` : r.name,
@@ -120,9 +125,9 @@ export class TrackerService {
     return this.create(campaignId, enc.name, combatants, encounterId);
   }
 
-  private reduce(state: TrackerState, action: TrackerAction): TrackerState {
+  private reduce(state: TrackerState, action: TrackerAction, onRecharge?: (roll: RechargeRoll) => void): TrackerState {
     try {
-      return applyTrackerAction(state, action, { d20: () => randomInt(1, 21), newId: shortId });
+      return applyTrackerAction(state, action, { d20: () => randomInt(1, 21), d6: () => randomInt(1, 7), newId: shortId, ...(onRecharge ? { onRecharge } : {}) });
     } catch (e) {
       throw badRequest(e instanceof Error ? e.message.slice(0, 300) : 'Invalid action');
     }
@@ -132,15 +137,18 @@ export class TrackerService {
   apply(campaignId: string, id: string, action: TrackerAction): TrackerDto {
     const r = this.row(campaignId, id);
     if (r.status === 'ended' && action.type !== 'start') throw badRequest('This combat has ended');
-    const state = this.reduce(r.state as TrackerState, action);
+    const rolls: RechargeRoll[] = [];
+    const state = this.reduce(r.state as TrackerState, action, (roll) => rolls.push(roll));
     const status = action.type === 'end' ? 'ended' : action.type === 'start' ? 'active' : r.status;
     this.db
       .update(trackers)
       .set({ state, status, revision: r.revision + 1, updatedAt: Date.now() })
       .where(eq(trackers.id, id))
       .run();
-    const dto = this.get(campaignId, id);
-    if (action.type === 'end') this.syncPartyHp(campaignId, dto.state);
+    const stored = this.get(campaignId, id);
+    if (action.type === 'end') this.syncPartyHp(campaignId, stored.state);
+    // Recharge rolls go to the DM only (this response and the DM event); they are not stored
+    const dto: TrackerDto = rolls.length ? { ...stored, rolls } : stored;
     this.notify(dto);
     return dto;
   }

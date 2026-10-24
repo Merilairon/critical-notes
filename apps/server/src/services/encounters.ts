@@ -1,6 +1,6 @@
 /** Encounters: creatures from the bestiary, NPC pages and custom entries, against the party's levels. */
 import { and, desc, eq, isNull } from 'drizzle-orm';
-import { abilityModifier, monsterCombatStats, type CampaignPolicy } from '@cn/fivetools';
+import { abilityModifier, monsterCombatStats, parseStatblockCombatFacts, type CampaignPolicy, type CombatFacts } from '@cn/fivetools';
 import {
   createEncounterInput,
   updateEncounterInput,
@@ -52,6 +52,12 @@ export class EncounterService {
       const dex = f.abilities?.['dex'];
       return { pageId: p.id, name: p.title, level, hpMax: f.hpMax ?? null, ac: f.ac ?? null, initBonus: typeof dex === 'number' ? abilityModifier(dex) : 0 };
     });
+  }
+
+  /** Legendary, Legendary Resistance and recharge facts of a statblock (null when it cannot be found). */
+  combatFacts(uid: string, policy: CampaignPolicy): CombatFacts | null {
+    const entity = this.reference.get(uid, policy);
+    return entity ? parseStatblockCombatFacts(entity.data) : null;
   }
 
   /** Names, XP and combat numbers for each line (monsters through the campaign's rules and homebrew). */
