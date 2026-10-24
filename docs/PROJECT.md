@@ -552,8 +552,9 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 **Description**: Write a revision in the same transaction as every page update (`PageService.update`, `updateAsPlayer`, template propagation, edition migration); carry the source from the request (`tokenScope` marks MCP calls). Both schemas plus migrations.
 **Depends on**: N1.1
 
-### [ ] Task N1.3: History endpoints
+### [x] Task N1.3: History endpoints
 **Owner**: Backend Architect · **QA**: API Tester, Application Security Engineer
+**Done:** 2026-10-24, Code Reviewer PASS, QA API Tester PASS (15 cases), QA Application Security Engineer PASS (about 300 requests incl. path variants, method override, cross-campaign, IDOR on the revision). `GET /pages/:pid/history`, `GET /history/:rev`, `POST /history/:rev/restore` (body `{revision}`, 409 with the current page when stale), GM only and checked before anything else (players get a uniform 403 even for hidden or missing pages: a deviation from the design's 404, logged in `docs/PLAN.md`), not on the MCP allowlist, audit line without content; history is in the sentinel crawl. Revision numbers may be below 1 (baseline collision rule) and are accepted; revision and `before` must be integers. Responses are `{items}` and `{page, restored, warnings}`. Revoking an MCP token keeps its name in the list until the token row is deleted. Merged to `main` 2026-10-24 (gate 948 + 373).
 **Description**: `GET /pages/:pid/history`, `GET /pages/:pid/history/:rev`, `POST /pages/:pid/history/:rev/restore` (creates a new revision). GM only; added to the sentinel crawl.
 **Depends on**: N1.2
 

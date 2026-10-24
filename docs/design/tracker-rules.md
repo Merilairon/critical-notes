@@ -1,6 +1,6 @@
 # Tracker rules spec (Task I3.1)
 
-Version 1.2, 2026-10-23. Owner: Game Designer. QA: Product Manager. Consumers: I3.2 (reducer), I3.3 (UI), I3.4 (tests).
+Version 1.3, 2026-10-23. Owner: Game Designer. QA: Product Manager. Consumers: I3.2 (reducer), I3.3 (UI), I3.4 (tests).
 Design only: no code. Rules are paraphrased in a few words and cited by heading (section 10 has the source table). This
 respects the PROJECT.md §4 "Data" rule (never commit or upload `5etools-data/`, `var/`, test traces or screenshots
 containing rules text): the doc copies no rules text and no 5etools text; it keeps only short field and trait names (for example the cost marker in an option name and the tag names) and counts.
@@ -123,12 +123,12 @@ A parse failure falls back to 3 and the DM edits the number. Custom combatant: t
 
 ### Delay (minimal v1: one mechanism, "move after")
 **Rule.** Delay is not in the SRD; it is a DMG optional rule in 2014 and discussed in the 2024 books; the source page is open **[CHECK 4]**. Mechanically: a creature gives up its place and acts later; its initiative changes permanently to the new spot.
-**v1 mechanism.** One action `moveAfter { id, afterId }`: the combatant takes the initiative of `afterId` and the position immediately after it. There is no "delayed" state, badge or "resume"; the interrupt-later-in-the-round variant is deferred. A delay is the DM pressing "move after..." on the active combatant and choosing a combatant later in the order, then `next`.
+**v1 mechanism.** One action `moveAfter { id, afterId }`: the combatant takes the initiative of `afterId` and the position immediately after it. There is no "delayed" state, badge or "resume"; the interrupt-later-in-the-round variant is deferred. A delay is the DM pressing "move after..." on the active combatant and choosing a combatant later in the order; that one action also hands the turn on (no separate `next`).
 - **Sort key** (replaces today's order): initiative desc, `tieRank` asc, `initBonus` desc, name, id. `moveAfter` sets mover.initiative = target.initiative, mover.tieRank = target.tieRank + 1, and adds 1 to the `tieRank` of every other combatant at that initiative with a `tieRank` greater than the target's, so the mover lands right after the target. The lair row keeps its large `tieRank`. `moveAfter` onto the lair row's own initiative is allowed.
 - **Rules of use:** the target must be a different combatant. If the mover is the active combatant, the target must come later in the current order (else a no-op rejected with a message); a non-active combatant may move anywhere (late arrival, fixing a mistake).
-- **If the mover is active:** its turn ends without ticking its conditions (it did not finish its turn; they tick on its next real turn end); `activeId` becomes the combatant that followed it in the old order. If it was the last in the order the move is rejected (nothing is later).
+- **If the mover is active:** its turn ends without ticking its conditions (it did not finish its turn; they tick on its next real turn end); `activeId` becomes the combatant that followed it in the old order **and that combatant's turn starts at once**, exactly as after `next` (its legendary uses reset, its spent recharge abilities roll, its readied action lapses, a dying character's death save is highlighted); the mover's own conditions do not tick. The merged I3.2 reducer rejects (HTTP 400) a move after itself, an unknown id, the active combatant to an earlier slot, or the active combatant past the end of the order (nothing is later).
 - **Round counter:** unchanged by the move. A wrap past the end of the (new) order increments the round as usual; the moved combatant acts once in the new spot this round if it is still ahead of the active turn, and in its new place every round after.
-- **`prev`:** uses the current order only; the previous position is not restored (limitation, documented). **`next`:** no special case.
+- **`prev`:** uses the current order only; the previous position is not restored (limitation, documented). **`next`:** no special case; the user does not press it after a delay by the active combatant.
 - **Player projection.** No new field and no badge. The changed initiative number and order show as they do today for visible combatants; hidden combatants stay absent. Players learn "delayed" only as order, as at a physical table.
 
 ## 7. Player projection summary
@@ -149,11 +149,11 @@ Leak checklist for I3.2/I3.4 (extend `apps/server/test/visibility.test.ts` with 
 
 ## 8. Reducer/API surface (proposals for I3.2)
 
-`deathSave`, `deathSaveAdjust`, `legendarySpend`, `legendaryUndo`, `legendaryResist`, `rechargeUsed`, `rechargeSet`, `lairAdd`, `moveAfter`, `ready`, `readyClear`, `setInLair`, and an extended `hp` (crit flag, overflow). Context gains `d6`/`die(sides)`. `add` takes optional `legendary`, `resistance`, `recharge`, `dying` flag, derived from the statblock. A pure helper `parseStatblockCombatFacts(monster)` in `packages/fivetools` returns `{ legendary, resistance, recharge }`; `packages/shared` stays free of the fivetools dependency.
+`deathSave`, `deathSaveAdjust`, `legendarySpend`, `legendaryUndo`, `legendaryResist`, `rechargeUsed`, `rechargeSet`, `lairAdd`, `moveAfter` (when the mover is active it also activates the next combatant, like `next`), `ready`, `readyClear`, `setInLair`, and an extended `hp` (crit flag, overflow). Context gains `d6`/`die(sides)`. `add` takes optional `legendary`, `resistance`, `recharge`, `dying` flag, derived from the statblock. A pure helper `parseStatblockCombatFacts(monster)` in `packages/fivetools` returns `{ legendary, resistance, recharge }`; `packages/shared` stays free of the fivetools dependency.
 
 ## 9. Scope summary
 
-In v1: death saves with the rules above (pips for PCs always shown), legendary pips and reset, resistance pips, lair row, recharge with auto-roll and toast, ready (no reaction tracking), `moveAfter`.
+In v1: death saves with the rules above (pips for PCs always shown), legendary pips and reset, resistance pips, lair row, recharge with auto-roll and toast, ready (no reaction tracking), `moveAfter` (hands the turn on when the active combatant moves).
 Optional/later: hide-death-saves DM switch (P2), recent-rolls list (P2), "legendary available" hint (P2), delayed-interrupt/resume, reaction tracking, per-day resistance persistence.
 Failure definition for playtest: a DM runs a boss fight with a dying PC and a legendary creature without paper; at most 2 clicks or 1 key per rule event; zero sentinel leaks (hard fail); counters never leave 0..3 or 0..perRound; no negative or doubled resets on wrap or `prev`.
 
@@ -197,6 +197,7 @@ Gate: the owner accepts the stated defaults in writing, or checks the books. I3.
 
 ## 13. Changelog
 
+- 1.3 (2026-10-24): Delay section, action list and scope summary match the merged I3.2 reducer: `moveAfter` on the active combatant hands the turn on and starts the next turn (resets, recharge rolls); invalid moves are rejected.
 - 1.2 (2026-10-23): re-QA edits: paraphrased the two book phrases and reworded the no-rules-text claim, §11 gate, temp-HP default flagged as a table convention for I3.3 help text.
 - 1.1 (2026-10-23): QA round 1. Per-rule SRD-first source table with "owner to fill" page cells; PROJECT.md §4 citation corrected; verification checklist; both rule versions stated in section 1; `legendary` and `resistance` split with lair variants and a manual `inLair`; Delay reduced to `moveAfter` with edge cases; projection decisions for readied, delayed and the lair row; optional items marked; open questions rewritten with options, consequences, recommendation and decider.
 - 1.0 (2026-10-23): first full spec.
