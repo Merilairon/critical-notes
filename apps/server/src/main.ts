@@ -97,6 +97,7 @@ const waitMs = Number(process.env.SHUTDOWN_BACKUP_WAIT_MS);
 shutdown.arm({
   backupWaitMs: Number.isInteger(waitMs) && waitMs > 0 && waitMs <= 8000 ? waitMs : undefined,
   server,
+  closeStreams: () => services.eventStreams.closeStreams(),
   stopScheduler: () => Promise.all([scheduler.stop(), trashPurger.stop()]).then(() => undefined),
   backupRunning: () => services.backups.isRunning(),
   abortBackup: () => services.backups.abortInFlightSync(),

@@ -1,6 +1,5 @@
 /** Encounters, initiative trackers (with a live event stream) and inventories of a campaign. */
 import { Hono } from 'hono';
-import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import {
   addInventoryItemInput,
@@ -17,13 +16,12 @@ import {
 } from '@cn/shared';
 import { requireUser, type AppEnv } from '../auth/session';
 import { forbidden, validate } from '../lib/http';
+import { sseResponse } from '../lib/sse';
 import type { CampaignService } from '../services/campaigns';
 import type { EncounterService } from '../services/encounters';
 import type { InventoryService } from '../services/inventory';
 import type { TrackerService } from '../services/trackers';
 import type { Viewer, VisibilityService } from '../services/visibility';
-
-const HEARTBEAT_MS = 25_000;
 
 const createTrackerInput = z.object({
   name: z.string().trim().min(1).max(120).default('Combat'),
@@ -147,22 +145,11 @@ export function playRoutes(deps: {
     if (view === 'dm') campaigns.requireDm(campaignId, uid(c));
     else campaigns.access(campaignId, uid(c));
     const first = view === 'dm' ? trackers.get(campaignId, id) : trackers.playerView(campaignId, id);
-    c.header('cache-control', 'no-store');
-    c.header('x-accel-buffering', 'no');
-    return streamSSE(c, async (stream) => {
-      await stream.writeSSE({ event: 'state', data: JSON.stringify(first) });
-      let close!: () => void;
-      const closed = new Promise<void>((resolve) => (close = resolve));
-      const unsubscribe = trackers.subscribe(
-        id,
-        (e) =>
-          void stream.writeSSE({ event: 'state', data: JSON.stringify(view === 'dm' ? e.dm : e.player) }).catch(close),
-      );
-      const heartbeat = setInterval(() => void stream.writeSSE({ event: 'ping', data: '' }).catch(close), HEARTBEAT_MS);
-      stream.onAbort(close);
-      await closed;
-      clearInterval(heartbeat);
-      unsubscribe();
+    return sseResponse(c, {
+      open: (ch) => {
+        ch.send({ event: 'state', data: JSON.stringify(first) });
+        return trackers.subscribe(id, (e) => void ch.send({ event: 'state', data: JSON.stringify(view === 'dm' ? e.dm : e.player) }));
+      },
     });
   });
 

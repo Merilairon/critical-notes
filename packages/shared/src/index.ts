@@ -13,3 +13,4 @@ export * from './members';
 export * from './migration';
 export * from './tokens';
 export * from './backups';
+export * from './events';

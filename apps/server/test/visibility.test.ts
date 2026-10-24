@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createFixture, createSignedInApp, TestClient, type Fixture, type TestApp } from './helpers';
+import { openEvents } from './events-helpers';
 import { callTool, makeToken, mcpClient } from './mcp-client';
 import { UNIDENTIFIED_ITEM_NAME, type InventoryDto } from '@cn/shared';
 
@@ -356,6 +357,62 @@ describe('what players may change', () => {
     expect((await player.patch(`${base()}/inventory/items/${ids['ring']}`, { name: 'Plain ring' })).status).toBe(403);
     expect((await dm.get(`${base()}/inventory`)).body.items.find((i: { id: string }) => i.id === ids['ring']).name).toBe('SENTINEL ring of lies');
   });
+});
+
+describe('sentinel crawl: the event stream', () => {
+  it('tells a player nothing about what stays hidden, and exactly what became visible to them', async () => {
+    const dmId = (await dm.get('/api/auth/me')).body.user.id as string;
+    /** Saves the DM's raw version of a page after `change` rewrote its blocks (block ids are kept). */
+    const edit = async (key: string, change: (content: Record<string, unknown>[]) => Record<string, unknown>[] | void, extra: object = {}) => {
+      const page = (await dm.get(`${base()}/pages/${ids[key]}`)).body;
+      const content = structuredClone(page.body.content as Record<string, unknown>[]);
+      const res = await dm.patch(`${base()}/pages/${ids[key]}`, { revision: page.revision, body: { type: 'doc', content: change(content) ?? content }, ...extra });
+      expect(res.status).toBe(200);
+    };
+    const secretBlock = { type: 'secret', attrs: { id: 'crawl-secret' }, content: [para('SENTINEL text of the new secret', { id: 'crawl-secret-child' })] };
+
+    const { res, reader } = await openEvents(app, player, campaignId);
+    expect(res.status).toBe(200);
+    await reader.until((f) => f.event === 'hello');
+
+    // Writes on everything hidden: none of it may produce a frame for the player
+    await edit('hidden', (c) => void c.push(para('SENTINEL more hidden text'), { type: 'secret', attrs: { id: 'hidden-secret', revealed: true }, content: [para('SENTINEL revealed on a hidden page')] }));
+    await edit('selectedOther', (c) => void c.push(para('SENTINEL for somebody else')), { title: 'SENTINEL selected, retitled', viewers: [dmId] });
+    await edit('spy', (c) => void c.push(para('SENTINEL spy notes')), { title: 'SENTINEL spy, retitled' });
+    await edit('town', (c) => void c.push(para('SENTINEL fresh DM paragraph', { id: 'crawl-dm', visibility: 'dm' }), secretBlock));
+    await edit('childOfHidden', (c) => void c.push(para('A visible edit')));
+    const hiddenNew = (await dm.post(`${base()}/pages`, { title: 'SENTINEL brand new hidden page', visibility: 'dm', body: doc(para('SENTINEL body')) })).body.id as string;
+    const nobody = (await dm.post(`${base()}/pages`, { title: 'SENTINEL for nobody', visibility: 'selected' })).body.id as string;
+    expect(nobody).toBeTruthy();
+    // Nothing yet
+    expect((await reader.settle(300)).map((f) => f.event)).toEqual(['hello']);
+
+    // What the player is entitled to: a page shared with everyone, and a block revealed on a page they can read
+    const handout = (await dm.post(`${base()}/pages`, { title: 'SENTINEL handout title', visibility: 'dm' })).body.id as string;
+    const shared = await dm.patch(`${base()}/pages/${handout}`, { revision: 1, visibility: 'all' });
+    expect(shared.status).toBe(200);
+    await edit('town', (c) => {
+      const b = c.find((n) => (n['attrs'] as { id?: string }).id === 'crawl-secret') as { attrs: Record<string, unknown> };
+      b.attrs['revealed'] = true;
+    });
+
+    const frames = await reader.settle(3000);
+    await reader.cancel();
+    const wire = frames.map((f) => f.raw).join('\n\n');
+    expect(wire).not.toMatch(SENTINEL);
+    // No hidden page id anywhere, not even without a marker string
+    for (const key of ['hidden', 'selectedOther', 'trashed', 'spy', 'pc', 'ring']) if (ids[key]) expect(wire).not.toContain(ids[key]);
+    for (const hiddenId of [hiddenNew, nobody]) expect(wire).not.toContain(hiddenId);
+    expect(wire).not.toContain('hidden-secret');
+    // Exactly the expected events, and an `id:` only on those
+    expect(frames.map((f) => [f.event, JSON.parse(f.data)])).toEqual([
+      ['hello', { replayed: false }],
+      ['page-shared', { pageId: handout }],
+      ['block-revealed', { pageId: ids['town'], blockIds: ['crawl-secret'] }],
+    ]);
+    expect(frames.filter((f) => f.id).map((f) => f.event)).toEqual(['page-shared', 'block-revealed']);
+    expect(reader.frames.filter((f) => f.id === undefined).every((f) => ['hello', 'ping'].includes(f.event))).toBe(true);
+  }, 20_000);
 });
 
 describe('invites and members', () => {

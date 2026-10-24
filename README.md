@@ -106,6 +106,8 @@ resolved from the repository root.
 | `PUBLIC_URL` | `http://localhost:4200` | The address people open; requests from other origins are refused |
 | `SECURE_COOKIES` | from `PUBLIC_URL` | `1` or `0` to override (for example behind a TLS-terminating proxy that forwards plain http) |
 | `TRUST_PROXY` | off | `1` behind a reverse proxy that overwrites `X-Forwarded-For`, so rate limits tell clients apart. Leave off when the port is reachable directly (the header could be spoofed); the app logs one warning if it sees the header while this is off |
+| `EVENTS_MAX_CONNECTIONS` | `500` | Live event streams (reveal notifications) open at once; over the limit a new stream gets `503` with `Retry-After` and the browser retries. One user keeps at most 6 (the oldest is closed) |
+| `EVENTS_MAX_PER_CAMPAIGN` | `100` | The same limit per campaign |
 | `WEB_DIST_DIR` | `./apps/web/dist/web/browser` | The built web app, served in production |
 
 ## Updating

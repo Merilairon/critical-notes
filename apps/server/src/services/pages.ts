@@ -61,6 +61,21 @@ export const EMPTY_DOC: BlockDoc = { type: 'doc', schemaVersion: 1, content: [{ 
 
 type PageRow = typeof pages.$inferSelect;
 
+/** What decides who sees a page, as stored (the sanitized body, not the request body). */
+export interface PageState {
+  visibility: PageVisibility;
+  viewers: string[];
+  deletedAt: number | null;
+  body: BlockDoc | null;
+}
+/** A committed page write, delivered to `PageService.onCommitted` (the reveal detector). `before` is null for a new page. */
+export interface PageChange {
+  campaignId: string;
+  pageId: string;
+  before: PageState | null;
+  after: PageState;
+}
+
 export function toSummary(p: PageRow): PageSummaryDto {
   return {
     id: p.id,
@@ -80,6 +95,62 @@ export class PageService {
     private readonly properties: PropertyService,
     private readonly indexer: PageIndexer,
   ) {}
+
+  // region Commit hook (docs/design/reveal.md 2.2)
+
+  /** Set by `createServices`: called with the changes of one flush, only after the outermost transaction committed. */
+  onCommitted?: (changes: PageChange[]) => void;
+  private batchDepth = 0;
+  private queue: PageChange[] = [];
+
+  /**
+   * Runs `fn` and delivers the changes of every page write made meanwhile in ONE flush after it returns. A caller that wraps page
+   * writes in its own `db.transaction` must call `batch` AROUND the transaction. If `fn` throws, nothing is delivered.
+   */
+  batch<T>(fn: () => T): T {
+    this.batchDepth++;
+    let ok = false;
+    try {
+      const result = fn();
+      ok = true;
+      return result;
+    } finally {
+      this.batchDepth--;
+      if (this.batchDepth === 0) {
+        if (ok) this.flushCommitted();
+        else this.queue = [];
+      }
+    }
+  }
+
+  /** Delivers the queued changes (a no-op inside a batch). */
+  flushCommitted(): void {
+    if (this.batchDepth > 0 || !this.queue.length) return;
+    if (this.db.$client.inTransaction) throw new Error('pages.batch() must wrap the transaction, not run inside it');
+    const changes = this.queue;
+    this.queue = [];
+    try {
+      this.onCommitted?.(changes);
+    } catch (e) {
+      console.error('Page commit hook failed', e);
+    }
+  }
+
+  private viewerIds(pageId: string): string[] {
+    return this.db.select({ userId: pageViewers.userId }).from(pageViewers).where(eq(pageViewers.pageId, pageId)).all().map((r) => r.userId);
+  }
+
+  private committed(change: PageChange) {
+    if (!this.onCommitted) return;
+    // A write inside someone else's transaction must run in a batch, or the event could describe a state that is rolled back
+    if (this.batchDepth === 0 && this.db.$client.inTransaction) throw new Error('A page write inside a transaction must run in pages.batch()');
+    const { before, after } = change;
+    if (before && before.visibility === after.visibility && before.deletedAt === after.deletedAt && JSON.stringify(before.body) === JSON.stringify(after.body) && [...before.viewers].sort().join() === [...after.viewers].sort().join()) return;
+    this.queue.push(change);
+    this.flushCommitted();
+  }
+
+  // endregion
 
   private sanitizeBody(body: unknown) {
     return sanitizeDoc(body, { newId: newBlockId }).doc as BlockDoc;
@@ -230,6 +301,7 @@ export class PageService {
     const facet = facetType ? this.validateFacet(campaignId, facetType, input.facet) : null;
     const id = newId();
     const now = Date.now();
+    const body = this.sanitizeBody(input.body ?? EMPTY_DOC);
     this.db.transaction((tx) => {
       tx.insert(pages)
         .values({
@@ -241,7 +313,7 @@ export class PageService {
           title: input.title,
           icon: input.icon ?? null,
           visibility: input.visibility,
-          body: this.sanitizeBody(input.body ?? EMPTY_DOC),
+          body,
           createdBy: userId,
           createdAt: now,
           updatedAt: now,
@@ -252,6 +324,7 @@ export class PageService {
       // Same connection, same transaction: an invalid value undoes the whole page
       if (input.props) this.properties.setValues(campaignId, id, input.props, (pid) => this.assertPageInCampaign(campaignId, pid));
     });
+    this.committed({ campaignId, pageId: id, before: null, after: { visibility: input.visibility, viewers: [], deletedAt: null, body } });
     this.reindex(campaignId, id);
     return this.get(campaignId, id);
   }
@@ -270,6 +343,8 @@ export class PageService {
       facet = this.validateFacet(campaignId, newFacetType, { ...base, ...(input.facet ?? {}) });
     }
     if (input.props) this.properties.setValues(campaignId, pageId, input.props, (id) => this.assertPageInCampaign(campaignId, id));
+    const storedBody = input.body !== undefined ? this.sanitizeBody(input.body) : undefined;
+    const viewersBefore = this.onCommitted ? this.viewerIds(pageId) : [];
 
     this.db.transaction((tx) => {
       const patch: Partial<typeof pages.$inferInsert> = { updatedAt: Date.now(), revision: current.revision + 1 };
@@ -277,7 +352,7 @@ export class PageService {
       if (input.icon !== undefined) patch.icon = input.icon;
       if (input.cover !== undefined) patch.cover = input.cover;
       if (input.visibility !== undefined) patch.visibility = input.visibility;
-      if (input.body !== undefined) patch.body = this.sanitizeBody(input.body);
+      if (storedBody !== undefined) patch.body = storedBody;
       if (input.type !== undefined) patch.type = input.type;
       tx.update(pages).set(patch).where(eq(pages.id, pageId)).run();
 
@@ -297,6 +372,17 @@ export class PageService {
         tx.delete(pageViewers).where(eq(pageViewers.pageId, pageId)).run();
         for (const userId of new Set(input.viewers)) tx.insert(pageViewers).values({ pageId, userId }).run();
       }
+    });
+    this.committed({
+      campaignId,
+      pageId,
+      before: { visibility: current.visibility as PageVisibility, viewers: viewersBefore, deletedAt: current.deletedAt, body: current.body as BlockDoc | null },
+      after: {
+        visibility: (input.visibility ?? current.visibility) as PageVisibility,
+        viewers: input.viewers !== undefined ? [...new Set(input.viewers)] : viewersBefore,
+        deletedAt: current.deletedAt,
+        body: storedBody ?? (current.body as BlockDoc | null),
+      },
     });
     this.reindex(campaignId, pageId);
     return this.get(campaignId, pageId);

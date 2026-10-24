@@ -12,6 +12,8 @@
 
 export interface ShutdownDeps {
   server: { close(cb?: (err?: Error) => void): unknown; closeIdleConnections?(): void; closeAllConnections?(): void };
+  /** Tells every open event stream to reconnect (`bye: restart`) and ends it. Called first: an SSE connection is never idle. */
+  closeStreams?: () => void;
   /** Stops the scheduler; resolves when its run in progress (if any) has ended. */
   stopScheduler: () => Promise<void>;
   /** True while this process runs a backup, from any trigger. */
@@ -46,6 +48,11 @@ export function createShutdown(opts: ShutdownOptions = {}) {
     const log = d.log ?? ((m: string) => console.log(m));
     const deadline = Date.now() + (d.backupWaitMs ?? BACKUP_WAIT_MS);
     let drained = false;
+    try {
+      d.closeStreams?.();
+    } catch {
+      // best effort; the drain timer cuts what is left
+    }
     const drainTimer = setTimeout(() => {
       d.server.closeAllConnections?.();
       drained = true;

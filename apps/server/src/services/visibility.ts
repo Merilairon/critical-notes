@@ -54,6 +54,33 @@ export class VisibilityService {
     return new Set(live.filter((p) => p.visibility === 'all' || (p.visibility === 'selected' && selected.has(p.id)) || own.has(p.id)).map((p) => p.id));
   }
 
+  /**
+   * Whether the viewer may see one page right now: the same answer as `visiblePageIds(...).has(pageId)`, in one or two indexed
+   * lookups instead of loading the whole campaign (the event stream asks once per recipient per event).
+   */
+  canSee(campaignId: string, viewer: Viewer, pageId: string): boolean {
+    const page = this.db
+      .select({ visibility: pages.visibility })
+      .from(pages)
+      .where(and(eq(pages.id, pageId), eq(pages.campaignId, campaignId), isNull(pages.deletedAt)))
+      .get();
+    if (!page) return false;
+    if (viewer.gm || page.visibility === 'all') return true;
+    if (page.visibility === 'selected') {
+      const row = this.db
+        .select({ id: pageViewers.pageId })
+        .from(pageViewers)
+        .where(and(eq(pageViewers.pageId, pageId), eq(pageViewers.userId, viewer.userId)))
+        .get();
+      if (row) return true;
+    }
+    return !!this.db
+      .select({ id: characterFacets.pageId })
+      .from(characterFacets)
+      .where(and(eq(characterFacets.pageId, pageId), eq(characterFacets.playerUserId, viewer.userId)))
+      .get();
+  }
+
   /** Game masters edit everything; players only the characters assigned to them. */
   canEdit(campaignId: string, viewer: Viewer, pageId: string): boolean {
     return viewer.gm || this.ownCharacterIds(campaignId, viewer.userId).has(pageId);
