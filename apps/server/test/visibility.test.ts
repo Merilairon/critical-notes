@@ -1,6 +1,9 @@
+import { eq } from 'drizzle-orm';
+import { pageRevisions } from '../src/db/schema';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createFixture, createSignedInApp, TestClient, type Fixture, type TestApp } from './helpers';
 import { openEvents } from './events-helpers';
+import { isAllowed } from '../src/mcp/api';
 import { callTool, makeToken, mcpClient } from './mcp-client';
 import { UNIDENTIFIED_ITEM_NAME, type InventoryDto } from '@cn/shared';
 
@@ -20,6 +23,7 @@ const base = () => `/api/campaigns/${campaignId}`;
 const para = (text: string, attrs: Record<string, unknown> = {}) => ({ type: 'paragraph', attrs, content: [{ type: 'text', text }] });
 const doc = (...content: unknown[]) => ({ type: 'doc', content });
 const ids: Record<string, string> = {};
+let histoRevision = 0;
 /** A query block whose columns and default sort name DM-only keys (the key names are secret too). */
 const hiddenColumnsQuery = (id: string) => ({
   type: 'query',
@@ -107,6 +111,14 @@ beforeAll(async () => {
   await patch('pc', { body: doc(para('My backstory'), para('SENTINEL dm note about Pat', { visibility: 'dm' }), hiddenColumnsQuery('qry_pc')) });
   await create('board', { title: 'Board', visibility: 'all', body: doc(hiddenColumnsQuery('qry_board')) });
 
+  // History: a visible page that once held a DM-only block and a DM-only property, then was edited so the live page no longer
+  // contains the sentinel (the revision, not the live page, is what would leak). The first row is backdated so the second
+  // save is not folded into it (2-minute coalescing).
+  await create('histo', { title: 'Chronicle', visibility: 'all', body: doc(para('Public text'), para('SENTINEL old dm block', { visibility: 'dm' })), props: { sentinel_stash: 'SENTINEL old stash' } });
+  fx.db.update(pageRevisions).set({ createdAt: Date.now() - 60 * 60_000 }).where(eq(pageRevisions.pageId, ids['histo']!)).run();
+  await patch('histo', { body: doc(para('Public text')), props: { sentinel_stash: null } });
+  histoRevision = (await dm.get(`${base()}/pages/${ids['histo']}`)).body.revision;
+
   // House rules, a campaign template, a tracker
   await dm.patch(base(), { houseRules: doc(para('Flanking is on.'), para('SENTINEL house secret', { visibility: 'dm' })) });
   await dm.post('/api/templates', { kind: 'block', scope: 'campaign', campaignId, name: 'SENTINEL template', definition: { content: [para('x')] } });
@@ -161,6 +173,15 @@ beforeAll(async () => {
 afterAll(() => fx.cleanup());
 
 describe('sentinel crawl: nothing DM-only reaches a player', () => {
+  it('keeps the sentinel in history for the GM only', async () => {
+    const list = await dm.get(`${base()}/pages/${ids['histo']}/history`);
+    expect(list.status).toBe(200);
+    expect(JSON.stringify(list.body)).not.toMatch(SENTINEL); // the list has no content
+    const first = await dm.get(`${base()}/pages/${ids['histo']}/history/1`);
+    expect(JSON.stringify(first.body)).toMatch(SENTINEL);
+    expect(JSON.stringify((await player.get(`${base()}/pages/${ids['histo']}`)).body)).not.toMatch(SENTINEL);
+  });
+
   it('finds no marker in anything a player can request', async () => {
     const bodies: string[] = [];
     // Only what the server answers counts (the requests themselves may search for the marker)
@@ -191,6 +212,19 @@ describe('sentinel crawl: nothing DM-only reaches a player', () => {
     expect((await get(`${base()}/trash`)).status).toBe(403);
     expect((await player.delete(`${base()}/pages/${ids['trashed']}/purge`)).status).toBe(403);
     expect((await get(`${base()}/pages/${ids['trashed']}`)).status).toBe(404);
+    // History holds what the live page no longer shows (task N1.3): the GM check comes first, so a player gets the same refusal
+    // for a visible page, a hidden one, their own character and a page that does not exist, and never a body
+    for (const key of ['histo', 'town', 'hidden', 'selectedOther', 'pc', 'trashed']) {
+      for (const path of [`${base()}/pages/${ids[key]}/history`, `${base()}/pages/${ids[key]}/history?limit=1000&before=x`, `${base()}/pages/${ids[key]}/history/1`, `${base()}/pages/${ids[key]}/history/abc`]) {
+        expect([path, (await get(path)).status]).toEqual([path, 403]);
+      }
+      const restore = await post(`${base()}/pages/${ids[key]}/history/1/restore`, { revision: 1 });
+      expect([key, restore.status]).toEqual([key, 403]);
+      expect((await post(`${base()}/pages/${ids[key]}/history/1/restore`, {})).status).toBe(403); // not a 400 that says what is wanted
+    }
+    expect((await get(`${base()}/pages/does-not-exist/history`)).status).toBe(403);
+    // The page did not change
+    expect((await dm.get(`${base()}/pages/${ids['histo']}`)).body.revision).toBe(histoRevision);
     // Pages a player cannot see answer like pages that do not exist
     for (const key of ['hidden', 'selectedOther']) {
       expect((await get(`${base()}/pages/${ids[key]}`)).status).toBe(404);
@@ -256,6 +290,10 @@ describe('sentinel crawl: nothing DM-only reaches a player', () => {
     const templates = await read('list_templates', { campaignId });
     for (const tpl of templates.data as { id: string }[]) await read('get_template', { templateId: tpl.id });
     expect((await read('list_encounters', { campaignId })).isError).toBe(true);
+    // A player's token has no way to history: no tool and no route on the allowlist (N1.5 adds them for GM tokens only)
+    for (const [m, u] of [['GET', `/api/campaigns/${campaignId}/pages/${ids['histo']}/history`], ['GET', `/api/campaigns/${campaignId}/pages/${ids['histo']}/history/1`], ['POST', `/api/campaigns/${campaignId}/pages/${ids['histo']}/history/1/restore`]] as const) {
+      expect(isAllowed(m, u!)).toBe(false);
+    }
     const trash = await read('list_trash', { campaignId });
     expect(trash.isError).toBe(true);
     const tools = (await mcp.listTools()).tools;
@@ -268,7 +306,7 @@ describe('sentinel crawl: nothing DM-only reaches a player', () => {
 
   it('still shows players what is meant for them', async () => {
     const tree = (await player.get(`${base()}/pages`)).body.pages as { id: string; title: string; parentId: string | null }[];
-    expect(tree.map((p) => p.title).sort()).toEqual(['Board', 'Cellar', 'Grik', 'Letter for Pat', 'Pat the Brave', 'Town']);
+    expect(tree.map((p) => p.title).sort()).toEqual(['Board', 'Cellar', 'Chronicle', 'Grik', 'Letter for Pat', 'Pat the Brave', 'Town']);
     expect(tree.find((p) => p.title === 'Cellar')!.parentId).toBeNull(); // its parent is hidden
     const town = (await player.get(`${base()}/pages/${ids['town']}`)).body;
     const text = JSON.stringify(town.body);

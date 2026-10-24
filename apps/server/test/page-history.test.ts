@@ -679,3 +679,140 @@ describe('only game masters have anything to do with the table', () => {
     expect(JSON.stringify(dmView)).not.toMatch(/contentHash|content_hash|restoredFrom|tokenId/);
   });
 });
+
+describe('history endpoints (task N1.3)', () => {
+  const hp = (id: string) => `${base()}/pages/${id}/history`;
+  async function joinAs(role: 'player' | 'codm', username: string) {
+    const inv = await dm.post(`${base()}/invites`, { role });
+    const client = new TestClient(app);
+    expect((await client.post('/api/auth/register', { token: inv.body.token, username, displayName: username, password: 'a long enough password' })).status).toBe(201);
+    return { client, userId: (await client.get('/api/auth/me')).body.user.id as string };
+  }
+
+  it('lists, reads and restores for the GM; the list has no content, limit is capped and validated', async () => {
+    const p = await newPage({ title: 'Ledger', body: doc(para('first')) });
+    await edit(p.id, { title: 'Ledger 2', body: doc(para('second')) });
+    const list = await dm.get(hp(p.id));
+    expect(list.status).toBe(200);
+    expect(list.body.items.map((r: { title: string }) => r.title)).toEqual(['Ledger 2', 'Ledger']);
+    expect(list.body.items[0]).not.toHaveProperty('body');
+    expect((await dm.get(`${hp(p.id)}?before=2&limit=1`)).body.items.map((r: { revision: number }) => r.revision)).toEqual([1]);
+    expect((await dm.get(`${hp(p.id)}?limit=101`)).status).toBe(400);
+    expect((await dm.get(`${hp(p.id)}?limit=0`)).status).toBe(400);
+    const one = await dm.get(`${hp(p.id)}/1`);
+    expect(one.status).toBe(200);
+    expect(JSON.stringify(one.body.body)).toContain('first');
+    expect((await dm.get(`${hp(p.id)}/99`)).status).toBe(404);
+    expect((await dm.get(`${hp(p.id)}/x`)).status).toBe(400);
+    expect((await dm.get(hp('nope'))).status).toBe(404);
+
+    const live = (await dm.get(`${base()}/pages/${p.id}`)).body;
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const res = await dm.post(`${hp(p.id)}/1/restore`, { revision: live.revision });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ restored: true, warnings: [], page: { title: 'Ledger', revision: live.revision + 1 } });
+    expect(rows(p.id).at(-1)).toMatchObject({ cause: 'restore', restoredFrom: 1, source: 'web', authorUserId: dmId });
+    const line = info.mock.calls.map((c) => String(c[0])).find((l) => l.includes('page.history_restored'))!;
+    expect(JSON.parse(line)).toMatchObject({ event: 'page.history_restored', campaignId, pageId: p.id, actor: dmId, fromRevision: 1, toRevision: live.revision + 1 });
+    expect(line).not.toMatch(/Ledger|first|second/);
+  });
+
+  it('answers 409 with the current page when the revision is stale, and restoring the live content writes nothing', async () => {
+    const p = await newPage({ title: 'Race' });
+    await edit(p.id, { title: 'Race 2' });
+    const stale = await dm.post(`${hp(p.id)}/1/restore`, { revision: 1 });
+    expect(stale.status).toBe(409);
+    expect(stale.body.details.current.title).toBe('Race 2');
+    expect((await dm.post(`${hp(p.id)}/1/restore`, {})).status).toBe(400);
+    expect((await dm.post(`${hp(p.id)}/1/restore`, { revision: '2' })).status).toBe(400);
+    const live = (await dm.get(`${base()}/pages/${p.id}`)).body;
+    const before = rows(p.id).length;
+    const noop = await dm.post(`${hp(p.id)}/${live.revision}/restore`, { revision: live.revision });
+    expect(noop.body.restored).toBe(false);
+    expect(rows(p.id)).toHaveLength(before);
+  });
+
+  it('refuses players and a demoted co-DM before looking at the page; a co-DM may', async () => {
+    const p = await newPage({ title: 'Guarded', visibility: 'all' });
+    await edit(p.id, { title: 'Guarded 2' });
+    for (const path of [hp(p.id), `${hp(p.id)}/1`, hp('nope'), `${hp(p.id)}/zzz`]) expect([path, (await player.get(path)).status]).toEqual([path, 403]);
+    expect((await player.post(`${hp(p.id)}/1/restore`, { revision: 2 })).status).toBe(403);
+    expect((await player.post(`${hp(p.id)}/1/restore`, {})).status).toBe(403);
+    const co = await joinAs('codm', 'cody');
+    expect((await co.client.get(hp(p.id))).status).toBe(200);
+    expect((await co.client.post(`${hp(p.id)}/1/restore`, { revision: 2 })).status).toBe(200);
+    expect((await dm.patch(`${base()}/members/${co.userId}`, { role: 'player' })).status).toBe(200);
+    expect((await co.client.get(hp(p.id))).status).toBe(403);
+    expect((await co.client.get(`${hp(p.id)}/1`)).status).toBe(403);
+  });
+
+  it('after a member is removed, restoring an older revision gives them no access back', async () => {
+    const { client, userId } = await joinAs('player', 'rex');
+    const pc = await newPage({ type: 'pc', title: 'Rexa', visibility: 'all', facet: { playerUserId: userId, hpMax: 10 } });
+    await edit(pc.id, { title: 'Rexa II', facet: { hpMax: 12 } });
+    expect((await client.patch(`${base()}/pages/${pc.id}`, { revision: (await client.get(`${base()}/pages/${pc.id}`)).body.revision, title: 'Mine' })).status).toBe(200);
+    expect((await dm.delete(`${base()}/members/${userId}`)).status).toBe(204);
+    expect(services.visibility.ownCharacterIds(campaignId, userId).size).toBe(0);
+    const live = (await dm.get(`${base()}/pages/${pc.id}`)).body;
+    expect(live.facet.playerUserId).toBeNull();
+    const res = await dm.post(`${hp(pc.id)}/1/restore`, { revision: live.revision });
+    expect(res.status).toBe(200);
+    expect(res.body.page.facet).toMatchObject({ playerUserId: null, hpMax: 10 });
+    expect(services.visibility.ownCharacterIds(campaignId, userId).size).toBe(0);
+    expect((await client.get(`${base()}/pages/${pc.id}`)).status).toBe(404);
+  });
+
+  it('opens and restores revisions below 1, and accepts only strict integers', async () => {
+    const p = await newPage({ title: 'Neg', body: doc(para('old')) });
+    await edit(p.id, { title: 'Neg 2' });
+    fx.db.update(pageRevisions).set({ revision: -1 }).where(and(eq(pageRevisions.pageId, p.id), eq(pageRevisions.revision, 1))).run();
+    expect((await dm.get(hp(p.id))).body.items.map((r: { revision: number }) => r.revision)).toEqual([2, -1]);
+    expect((await dm.get(`${hp(p.id)}?before=0`)).body.items.map((r: { revision: number }) => r.revision)).toEqual([-1]);
+    expect((await dm.get(`${hp(p.id)}/-1`)).body.title).toBe('Neg');
+    const live = (await dm.get(`${base()}/pages/${p.id}`)).body;
+    const res = await dm.post(`${hp(p.id)}/-1/restore`, { revision: live.revision });
+    expect(res.status).toBe(200);
+    expect(res.body.page.title).toBe('Neg');
+    for (const bad of ['1e0', '01x', '+1', '0x1', '%201', '1.5', '-']) expect([bad, (await dm.get(`${hp(p.id)}/${bad}`)).status]).toEqual([bad, 400]);
+    for (const bad of ['1e0', '+1', '0x1', '%201', '1.5', 'x']) expect([bad, (await dm.get(`${hp(p.id)}?before=${bad}`)).status]).toEqual([bad, 400]);
+    for (const bad of ['1e0', '+1', '0x1', '%201', '0', '-1']) expect([bad, (await dm.get(`${hp(p.id)}?limit=${bad}`)).status]).toEqual([bad, 400]);
+    expect((await dm.post(`${hp(p.id)}/1/restore`, { revision: 1.5 })).status).toBe(400);
+  });
+
+  it('skips a property whose definition was deleted, with a warning', async () => {
+    const def = (await dm.post(`${base()}/properties`, { label: 'Gone prop', type: 'text' })).body;
+    const p = await newPage({ title: 'Props', props: { gone_prop: 'v' } });
+    await edit(p.id, { title: 'Props 2' });
+    expect((await dm.delete(`${base()}/properties/${def.id}`)).status).toBeLessThan(300);
+    const live = (await dm.get(`${base()}/pages/${p.id}`)).body;
+    const res = await dm.post(`${hp(p.id)}/1/restore`, { revision: live.revision });
+    expect(res.status).toBe(200);
+    expect(res.body.warnings).toEqual([expect.stringMatching(/"gone_prop" no longer exists/)]);
+    expect(res.body.page.props).not.toHaveProperty('gone_prop');
+  });
+
+  it('clears a page-link property that points at a purged page, with a warning', async () => {
+    await dm.post(`${base()}/properties`, { label: 'Ally link', type: 'pageLink' });
+    const target = await newPage({ title: 'Doomed' });
+    const p = await newPage({ title: 'Linker', props: { ally_link: target.id } });
+    await edit(p.id, { title: 'Linker 2', props: { ally_link: null } });
+    expect((await dm.delete(`${base()}/pages/${target.id}`)).status).toBe(200);
+    expect((await dm.delete(`${base()}/pages/${target.id}/purge`)).status).toBe(200);
+    const live = (await dm.get(`${base()}/pages/${p.id}`)).body;
+    const res = await dm.post(`${hp(p.id)}/1/restore`, { revision: live.revision });
+    expect(res.status).toBe(200);
+    expect(res.body.warnings).toEqual([expect.stringMatching(/Ally link.*no longer exists/)]);
+    expect(res.body.page.props['ally_link'] ?? null).toBeNull();
+  });
+
+  it('lists tokenName null once the token is gone', async () => {
+    const token = await makeToken(dm, 'write', 'Scribe');
+    const tokenId = fx.db.select().from(apiTokens).where(eq(apiTokens.tokenHash, hashToken(token))).get()!.id;
+    const mcp = await mcpClient(app, token);
+    const page = (await callTool(mcp, 'create_page', { campaignId, title: 'By Scribe', markdown: 'Hi' })).data;
+    expect((await dm.get(hp(page.id))).body.items[0]).toMatchObject({ source: 'mcp', tokenName: 'Scribe' });
+    expect((await dm.delete(`/api/auth/tokens/${tokenId}`)).status).toBe(204);
+    fx.db.delete(apiTokens).where(eq(apiTokens.id, tokenId)).run();
+    expect((await dm.get(hp(page.id))).body.items[0]).toMatchObject({ source: 'mcp', tokenName: null });
+  });
+});

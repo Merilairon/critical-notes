@@ -34,6 +34,7 @@ import type { ReferenceService } from '../reference/service';
 import type { CampaignService } from '../services/campaigns';
 import type { HomebrewService } from '../services/homebrew';
 import type { PageService } from '../services/pages';
+import { MAX_HISTORY_PAGE, type PageHistoryService } from '../services/page-history';
 import type { TemplateService } from '../services/templates';
 import type { VisibilityService } from '../services/visibility';
 import { MAX_ZIP_BYTES, type CampaignTransfer } from '../services/campaign-transfer';
@@ -58,6 +59,7 @@ const queryInput = z.object({
 export function campaignRoutes(deps: {
   campaigns: CampaignService;
   pages: PageService;
+  pageHistory: PageHistoryService;
   homebrew: HomebrewService;
   reference: ReferenceService;
   properties: PropertyService;
@@ -71,6 +73,7 @@ export function campaignRoutes(deps: {
   const {
     campaigns,
     pages,
+    pageHistory,
     homebrew,
     reference,
     properties,
@@ -243,6 +246,51 @@ export function campaignRoutes(deps: {
     campaigns.touch(campaignId);
     return c.json(page);
   });
+
+  // region page history (task N1.3; docs/design/page-history.md). GM only: the check runs before validation, the page lookup and
+  // any read of `page_revisions`, so a player learns nothing about history, or about a page beyond what they already see.
+  app.use('/:campaignId/pages/:pageId/history', async (c, next) => {
+    campaigns.requireDm(c.req.param('campaignId'), uid(c));
+    await next();
+  });
+  app.use('/:campaignId/pages/:pageId/history/*', async (c, next) => {
+    campaigns.requireDm(c.req.param('campaignId'), uid(c));
+    await next();
+  });
+
+  // Strict integers only ('1e0', '01', '+1', '0x1', ' 1' are refused). Revisions below 1 exist: a lazy baseline that collides
+  // takes min(revision) - 1.
+  const INT = /^-?\d+$/;
+  const strictInt = (raw: unknown) => (typeof raw === 'string' && INT.test(raw) && Number.isSafeInteger(Number(raw)) ? Number(raw) : raw);
+  const historyListQuery = z.object({
+    before: z.preprocess(strictInt, z.number().int()).optional(),
+    limit: z.preprocess((v) => (typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : v), z.number().int().min(1).max(MAX_HISTORY_PAGE)).optional(),
+  });
+  const revisionParam = (raw: string) => {
+    if (!INT.test(raw) || !Number.isSafeInteger(Number(raw))) throw badRequest('Invalid revision');
+    return Number(raw);
+  };
+  const restoreInput = z.object({ revision: z.number().int() });
+
+  app.get('/:campaignId/pages/:pageId/history', validate('query', historyListQuery), (c) =>
+    c.json({ items: pageHistory.list(c.req.param('campaignId'), c.req.param('pageId'), c.req.valid('query')) }),
+  );
+
+  app.get('/:campaignId/pages/:pageId/history/:rev', (c) =>
+    c.json(pageHistory.get(c.req.param('campaignId'), c.req.param('pageId'), revisionParam(c.req.param('rev')))),
+  );
+
+  /** Brings back the content of a revision as a new revision (`revision` is the page's current one: 409 when it moved on). */
+  app.post('/:campaignId/pages/:pageId/history/:rev/restore', validate('json', restoreInput), (c) => {
+    const campaignId = c.req.param('campaignId');
+    const pageId = c.req.param('pageId');
+    const rev = revisionParam(c.req.param('rev'));
+    const out = pageHistory.restore(campaignId, pageId, rev, c.req.valid('json').revision, writeContext(c, 'restore', false, { restoredFrom: rev }));
+    if (out.restored) campaigns.touch(campaignId);
+    audit('page.history_restored', { campaignId, pageId, actor: uid(c), fromRevision: rev, toRevision: out.page.revision, restored: out.restored });
+    return c.json(out);
+  });
+  // endregion
 
   app.post('/:campaignId/pages/:pageId/move', validate('json', movePageInput), (c) => {
     const campaignId = c.req.param('campaignId');
