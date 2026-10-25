@@ -17,9 +17,11 @@ Range.prototype.getBoundingClientRect ??= () => NO_RECT as DOMRect;
 const para = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] });
 const DOC = { type: 'doc', schemaVersion: 1, content: [para('One'), para('Two'), para('Three')] } as unknown as BlockDoc;
 
-@Component({ imports: [BlockEditor], template: `<main><cn-block-editor [doc]="doc()" /></main>` })
+@Component({ imports: [BlockEditor], template: `<main><cn-block-editor [doc]="doc()" [beforeReveal]="before" [commit]="commit" /></main>` })
 class Host {
+  commit: (() => Promise<boolean>) | null = null;
   readonly doc = signal<BlockDoc>(DOC);
+  before: (() => Promise<void>) | null = null;
 }
 
 const settle = () => new Promise<void>((r) => setTimeout(r));
@@ -303,5 +305,108 @@ describe('block options menu: moving different kinds of block', () => {
     await t.flush();
     expect(t.status()).toBe('');
   }, 10000);
+});
+
+describe('Reveal now', () => {
+  const withId = (id: string, text: string) => ({ ...para(text), attrs: { id } });
+  const secret = (revealed = false) => ({ type: 'secret', attrs: { id: 's1', revealed }, content: [withId('c1', 'Hidden'), withId('c2', 'Also hidden')] });
+  const ids = (node: { attrs?: { id?: string }; content?: unknown[] }): string[] => [
+    ...(node.attrs?.id ? [node.attrs.id] : []),
+    ...((node.content ?? []) as (typeof node)[]).flatMap(ids),
+  ];
+  const labels = (t: Awaited<ReturnType<typeof mount>>) => t.items().map((i) => i.textContent?.trim());
+  const openMenu = async (t: Awaited<ReturnType<typeof mount>>, index: number) => {
+    await t.select(index);
+    t.key(t.el.querySelector('.tiptap')!, '.', { ctrlKey: true });
+    await t.flush();
+  };
+
+  it('reveals a secret in one click, keeps every block id (children too) and asks the host to save now', async () => {
+    const t = await mount();
+    await t.load([secret(), withId('p9', 'After')]);
+    const before = ids(t.editor.editor.getJSON() as never);
+    expect(before.sort()).toEqual(['c1', 'c2', 'p9', 's1']);
+    const docs: BlockDoc[] = [];
+    let saves = 0;
+    t.editor.changed.subscribe((d) => docs.push(d));
+    t.editor.saveNow.subscribe(() => saves++);
+    await t.select(0);
+    await t.act('Reveal now');
+    expect(saves).toBe(1);
+    const saved = docs.at(-1) as unknown as { content: { attrs: { revealed: boolean } }[] };
+    expect(saved.content[0]!.attrs.revealed).toBe(true);
+    expect(ids(saved as never).sort()).toEqual(before);
+    expect(t.status()).toBe('Revealed to players');
+    expect(t.el.querySelector('.cn-reveal-notice')!.textContent).toContain('Revealed to players');
+  });
+
+  it('is offered for a hidden secret and a hidden DM-only block, with help text naming the same-save gap', async () => {
+    const t = await mount();
+    const dm = { ...withId('d1', 'Dm'), attrs: { id: 'd1', visibility: 'dm', revealed: false } };
+    await t.load([para('Plain'), dm, secret()]);
+    await openMenu(t, 0);
+    expect(labels(t)).not.toContain('Reveal now');
+    t.key(t.menu()!, 'Escape');
+    await t.flush();
+    await openMenu(t, 1);
+    expect(t.items().find((i) => i.textContent?.includes('Reveal now'))!.getAttribute('title')).toContain('same save');
+    t.key(t.menu()!, 'Escape');
+    await t.flush();
+    await openMenu(t, 2);
+    expect(labels(t)).toContain('Reveal now');
+  });
+
+  it('is not offered once revealed', async () => {
+    const t = await mount();
+    await t.load([secret(true), para('After')]);
+    await openMenu(t, 0);
+    expect(labels(t)).not.toContain('Reveal now');
+  });
+
+  it('Undo hides it again with another save, ids unchanged', async () => {
+    const t = await mount();
+    await t.load([secret(), withId('p9', 'After')]);
+    let saves = 0;
+    t.editor.saveNow.subscribe(() => saves++);
+    await t.select(0);
+    await t.act('Reveal now');
+    t.el.querySelector<HTMLButtonElement>('.cn-reveal-notice button')!.click();
+    await t.flush();
+    expect((t.editor.editor.getJSON().content![0]!.attrs as { revealed: boolean }).revealed).toBe(false);
+    expect(ids(t.editor.editor.getJSON() as never).sort()).toEqual(['c1', 'c2', 'p9', 's1']);
+    expect(saves).toBe(2);
+    expect(t.el.querySelector('.cn-reveal-notice')).toBeNull();
+  });
+
+  it('a failed save reverts the local reveal and says so in plain sight', async () => {
+    const t = await mount();
+    t.host.commit = async () => false;
+    t.fixture.changeDetectorRef.detectChanges();
+    await t.load([secret(), withId('p9', 'After')]);
+    await t.select(0);
+    await t.act('Reveal now');
+    expect((t.editor.editor.getJSON().content![0]!.attrs as { revealed: boolean }).revealed).toBe(false);
+    const notice = t.el.querySelector('.cn-reveal-notice')!;
+    expect(notice.textContent).toContain('Not saved');
+    expect(notice.textContent).not.toContain('Revealed to players');
+    expect(notice.querySelector('[role="alert"]')).not.toBeNull();
+    // Announced once: by the alert, not also by the polite status line
+    expect(t.status()).toBe('');
+    // The menu offers Reveal now again, as the server still has it hidden
+    await openMenu(t, 0);
+    expect(labels(t)).toContain('Reveal now');
+  });
+
+  it('saves pending edits first, then the reveal', async () => {
+    const t = await mount();
+    const order: string[] = [];
+    t.host.before = async () => void order.push('flush');
+    t.fixture.changeDetectorRef.detectChanges();
+    await t.load([secret(), withId('p9', 'After')]);
+    t.editor.saveNow.subscribe(() => order.push('reveal'));
+    await t.select(0);
+    await t.act('Reveal now');
+    expect(order).toEqual(['flush', 'reveal']);
+  });
 });
 

@@ -503,6 +503,12 @@ body {
   color: var(--muted);
   font-size: 0.7rem;
 }
+@media (pointer: coarse), (max-width: 639.98px) {
+  .cn-block-menu button {
+    min-height: 44px;
+    align-items: center;
+  }
+}
 .cn-block-menu hr {
   margin: 0.25rem 0;
   border-color: var(--line);

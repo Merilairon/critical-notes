@@ -1,6 +1,6 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import type { OnDestroy} from '@angular/core';
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, input, signal, untracked, viewChild } from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import { Router, RouterLink } from '@angular/router';
 import {
@@ -83,6 +83,8 @@ export class PageEditor implements OnDestroy {
   protected readonly breadcrumbs = computed(() => (this.page() ? this.store.ancestors(this.page()!.id) : []));
   protected readonly children = computed(() => (this.page() ? (this.store.childrenOf().get(this.page()!.id) ?? []) : []));
 
+  protected readonly shareUndo = signal<{ pageId: string; visibility: PageVisibility; viewers: string[]; text: string } | null>(null);
+  private shareTimer: ReturnType<typeof setTimeout> | undefined;
   private pending: Omit<UpdatePageInput, 'revision'> = {};
   private timer: ReturnType<typeof setTimeout> | undefined;
   private saving: Promise<void> | null = null;
@@ -105,6 +107,7 @@ export class PageEditor implements OnDestroy {
   }
 
   private async load(id: string) {
+    this.clearShare();
     this.notFound.set(false);
     this.previewing.set(false);
     this.playerView.set(null);
@@ -172,6 +175,70 @@ export class PageEditor implements OnDestroy {
       }
     })();
     await this.saving;
+  }
+
+  /** Saves pending edits first, so a reveal save carries only the reveal (the live-event detector ignores a block edited in the same save). */
+  protected readonly beforeReveal = () => this.flush();
+
+  /** A one-click action (reveal) saves now instead of after the debounce; true only when the save succeeded. */
+  protected readonly commit = async (): Promise<boolean> => {
+    await this.flush();
+    return this.status() === 'saved';
+  };
+
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private shareFocused = false;
+
+  private clearShare() {
+    clearTimeout(this.shareTimer);
+    this.shareUndo.set(null);
+  }
+
+  protected onShareFocus(inside: boolean) {
+    this.shareFocused = inside;
+  }
+
+  /** Handout "Share now": visible to all players, or to chosen players, with an Undo shown once the save worked. */
+  protected async shareNow(to: 'all' | 'selected') {
+    const p = this.page();
+    if (!p) return;
+    this.clearShare();
+    await this.flush();
+    const prev = { pageId: p.id, visibility: p.visibility, viewers: [...p.viewers] };
+    if (!(await this.saveVisibility(p.id, to, to === 'all' ? [] : p.viewers, prev))) return;
+    this.shareUndo.set({ ...prev, text: to === 'all' ? 'Shared with all players' : 'Shared with chosen players: pick who below' });
+    // The auto-dismiss waits while the notice has keyboard focus
+    const tick = () => {
+      if (this.shareFocused) this.shareTimer = setTimeout(tick, 5000);
+      else this.shareUndo.set(null);
+    };
+    this.shareTimer = setTimeout(tick, 15000);
+  }
+
+  /** Saves a visibility change at once. If the save fails (error or conflict) the page model goes back to `back`, so the screen never shows a share the server does not have. */
+  private async saveVisibility(pageId: string, visibility: PageVisibility, viewers: string[], back: { visibility: PageVisibility; viewers: string[] }): Promise<boolean> {
+    this.queue({ visibility, viewers }, true);
+    await this.flush();
+    if (this.page()?.id !== pageId) return false;
+    if (this.status() === 'saved') return true;
+    const { visibility: _v, viewers: _w, ...rest } = this.pending;
+    this.pending = rest;
+    const p = this.page();
+    if (p) this.page.set({ ...p, visibility: back.visibility, viewers: back.viewers });
+    const summary = this.page();
+    if (summary) this.store.patchSummary(summary);
+    return false;
+  }
+
+  protected async undoShare() {
+    const u = this.shareUndo();
+    this.clearShare();
+    this.shareFocused = false;
+    if (!u || this.page()?.id !== u.pageId) return;
+    const now = this.page();
+    if (now) void this.saveVisibility(u.pageId, u.visibility, u.viewers, { visibility: now.visibility, viewers: [...now.viewers] });
+    // The focused Undo button is gone: focus moves to the share buttons
+    setTimeout(() => this.host.nativeElement.querySelector<HTMLElement>('[aria-label="Share this handout"] button, textarea[aria-label="Page title"]')?.focus());
   }
 
   protected onBody(doc: BlockDoc) {
@@ -296,6 +363,7 @@ export class PageEditor implements OnDestroy {
   }
 
   ngOnDestroy() {
+    clearTimeout(this.shareTimer);
     void this.flush();
   }
 }
