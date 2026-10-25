@@ -601,8 +601,9 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 **Description**: One-click "Reveal now" on secrets and DM-only blocks (sets `revealed`, saves), and "Share now" on handout pages (visibility to all or chosen players).
 **Depends on**: N3.2
 
-### [ ] Task N3.4: Players see it live
+### [x] Task N3.4: Players see it live
 **Owner**: Frontend Developer · **QA**: Evidence Collector
+**Done:** 2026-10-25, Code Reviewer PASS (5 rounds), QA Evidence Collector: 3 of the 4 final items PASS, accepted with a documented limitation (below). Web client for `GET /api/campaigns/:cid/events`: its own SSE parser (64 KB frame cap) over fetch streaming (not `EventSource`, which never retries after a non-200), `Last-Event-ID`, full-jitter backoff 1-30 s with a `Retry-After` floor, 60 s silence watchdog, immediate reconnect on the browser `online` event and when a hidden tab becomes visible after 30 s of silence (old connection aborted first, never two streams), evicted-stream pause with Resume, polling fallback after 2 min of failure; `LiveService` refetches the tree and the open page after every connect; toasts only after a successful refetch, collapse within 3 s, `New` pill and block highlight (also on character pages) that clear after 2 s in view, no auto-scroll; a player mid-edit gets a 'Reload' toast (the save of a stale edit gets a 409, so the banner and the typed text stay); GMs only refetch. **Known limitation (owner informed, follow-up N3.6):** if the player was offline and had received no event yet, there is no event id to replay from, so the open page refreshes silently after reconnect and a reveal on a page that was not open is not announced (the summary toast covers new pages only). Not tested: iOS/Android devices, screen readers, server restart, two server processes, the Undo-toast collision on a phone. Merged to `main` 2026-10-25 (conflicts with N3.3 resolved by the Git Workflow Master; gate 951 + 434, `pnpm e2e` 104 passed, 8 skipped).
 **Description**: A toast and a "New" badge on the page for players; the open page refreshes the revealed block.
 **Depends on**: N3.2
 
@@ -610,6 +611,12 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 **Owner**: Test Automation Engineer · **QA**: Reality Checker
 **Description**: Two browser contexts: the DM reveals; the player sees it within 2 seconds without reloading.
 **Depends on**: N3.3, N3.4
+
+### [ ] Task N3.6: Say what changed after a long offline gap (follow-up of N3.4)
+**Owner**: Frontend Developer · **QA**: Evidence Collector
+**Description**: When the stream reconnects without a usable `Last-Event-ID` (no event received before the gap, or the server ring has moved on) the client refetches silently. Compare the refetched open page with the previous one (block ids newly present, which the client already can compute) and toast 'New details on this page | Show' for it; for other pages keep the existing 'You have {n} new pages' summary, and decide with the Narrative Designer whether a 'something changed on {n} pages you can see' summary is wanted for block reveals on pages that are not open (needs a per-page revision comparison). Never put content or secret counts in the toast.
+**Acceptance Criteria**: offline reveal on the open page shows a toast after reconnect; no toast when nothing changed; no duplicate toast when events are replayed; a unit test per case
+**Depends on**: N3.4
 
 ### 6.4 Epic I3: Tracker additions
 

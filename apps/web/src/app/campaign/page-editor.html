@@ -30,6 +30,9 @@
         <span class="w-12 shrink-0 text-center text-3xl" aria-hidden="true">{{ p.icon ?? icons[p.type] }}</span>
         <h1 tabindex="-1" class="min-w-0 flex-1 basis-40 py-0.5 font-display text-2xl font-bold [overflow-wrap:anywhere] outline-none sm:text-3xl">{{ p.title }}</h1>
       }
+      @if (live?.isNew(p.id)) {
+        <span class="mt-2 inline-flex shrink-0 items-center rounded-full border-2 border-accent bg-accent px-2 py-0.5 text-xs font-bold text-accent-ink sm:mt-3">New</span>
+      }
       <span class="order-last w-full text-xs text-muted sm:order-none sm:mt-3 sm:w-auto sm:shrink-0" aria-live="polite">
         @switch (status()) {
           @case ('saving') { Saving… }
@@ -179,9 +182,9 @@
 
       <section class="mt-4">
         @if (canEdit()) {
-          <cn-block-editor [doc]="loadedDoc()" [pageId]="p.id" [beforeReveal]="beforeReveal" [commit]="commit" (changed)="onBody($event)" />
+          <cn-block-editor [doc]="loadedDoc()" [pageId]="p.id" [highlightIds]="newBlockIds()" [beforeReveal]="beforeReveal" [commit]="commit" (seen)="live?.clearBlocks(p.id, $event)" (changed)="onBody($event)" />
         } @else {
-          <cn-block-view [doc]="$any(p.body)" [pageId]="p.id" />
+          <cn-block-view [doc]="$any(p.body)" [pageId]="p.id" [highlightIds]="newBlockIds()" (seen)="live?.clearBlocks(p.id, $event)" />
         }
       </section>
     </div>
