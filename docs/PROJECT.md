@@ -644,11 +644,36 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 **Description**: Implement both views and the column picker in the query block (`apps/web/src/app/editor/views/`); the server already projects query rows for players.
 **Depends on**: I2.1
 
-### [ ] Task I2.3: Query performance budget
+### [x] Task I2.3: Query performance budget
 **Owner**: Performance Benchmarker · **QA**: Backend Architect
+**Done:** 2026-10-24, QA Backend Architect: PASS (4 small edits). Report `docs/qa/query-benchmark.md`, script `pnpm --filter @cn/server bench:query --runs 60 --cold-runs 5` (not run by `pnpm test`). At 2,000 pages (about 8.7 KB bodies, 17.5 MB per request, 8,001 history rows) every scenario is under 300 ms: p50 105 to 205 ms as DM and as player; cold start 150 to 250 ms. History adds no query cost. Most of the time is reading and parsing every page body (about 80 ms of about 110 ms); a sort on tags is slowest (about 85 ms of sorting, from a collator built on every comparison). The 300 ms budget lasts to about 7,000 pages for the cheap queries, about 3,500 pages for a sort on tags. Queries run synchronously and block the event loop (about 110 ms per query block), so several query blocks on a page or several users add up. Follow-ups below; nothing was optimised in this task. Merged to `main` 2026-10-24.
 **Description**: Measure a query block on a 2,000-page campaign (queries run in memory: PLAN deviation (d)); target under 300 ms on the server.
 **Acceptance Criteria**: `docs/qa/query-benchmark.md`; if over budget, a follow-up task is filed
 **Depends on**: I2.2
+
+### [ ] Task I2.4: Query reads no page bodies
+**Owner**: Backend Architect · **QA**: Performance Benchmarker
+**Description**: `PageService.livePages()` is `select *`, so every query (and the page tree and other callers around pages.ts 454, 602 and 657) reads and parses every body; a query result never contains one (I2.3: about 80 of 110 ms at 2,000 pages). Select only the summary columns (a body-less `livePageSummaries()` for `queryable()` and `tree()`; keep the full select where a body is needed; check each caller first). No behaviour change.
+**Acceptance Criteria**: `bench:query` shows every scenario under 80 ms p50 at 2,000 pages, recorded in `docs/qa/query-benchmark.md`; the existing query, visibility and tree tests pass
+**Depends on**: I2.3
+
+### [ ] Task I2.5: Cheaper query sorting
+**Owner**: Backend Architect · **QA**: Performance Benchmarker
+**Description**: In `packages/blocks/src/query.ts`, build one module-level `Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })` and reuse it; compute each page's sort key once before sorting so `fieldValue` is not called twice per comparison and tags are joined once (do not lowercase tags: `sensitivity: 'base'` also ignores accents); use the same collator for the title tie-break. Same order as today (tests with accents, numbers in strings, empty values last both ways, tags).
+**Acceptance Criteria**: a sort on `tags` at 2,000 pages under 15 ms in the stage profile (was 85 ms), title sort under 5 ms, ordering-equivalence tests pass
+**Depends on**: I2.3
+
+### [ ] Task I2.6: Page-link sort by target title (needs a decision)
+**Owner**: Product Manager (decision), then Backend Architect · **QA**: Code Reviewer
+**Description**: Sorting a query on a page-link facet or `pageLink` property orders by the target page's id (a UUID), which no reader expects. Decide whether it should sort by the target's title (needs a title map in `runQuery`; for players a hidden target sorts as empty). This is a behaviour change.
+**Acceptance Criteria**: the decision is recorded in §7; if yes, implemented with tests for DM and player
+**Depends on**: I2.5
+
+### [ ] Task I2.7: Query scale (only if campaigns exceed about 5,000 pages)
+**Owner**: Backend Architect · **QA**: Performance Benchmarker
+**Description**: Do not build before I2.4 and I2.5 are measured. Cache `queryable()` per campaign, invalidated by page writes (the event bus already announces them), or compile the filter to SQL (the original deviation (d) idea, with the Postgres work). Queries are synchronous (about 110 ms of loop time each today), so concurrent users and pages with several query blocks delay saves and live updates. `inArray` over all ids also hits SQLite's 32,766 bound-variable limit near 32,000 pages.
+**Acceptance Criteria**: `bench:query --pages 5000` p50 under 150 ms
+**Depends on**: I2.4, I2.5
 
 ### 6.6 Release gate and waves
 
@@ -662,7 +687,7 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 | 1 | I1.1, N1.1, N3.1, I3.1, I2.1 |
 | patch | I1.3 (data-loss fix, as soon as scheduled; then I1.4, I1.5 with the next release) |
 | 2 | I1.2, N1.2, N3.2, I3.2, I2.2 (all done 2026-10-24) |
-| 3 | N1.3, N3.3, N3.4, I3.3, I2.3 |
+| 3 | N1.3, N3.3, N3.4, I3.3, I2.3 (I2.3 and N1.3 done 2026-10-24) |
 | 4 | N1.4, N1.5, N3.5, I3.4 |
 | 5 | N1.6, then G2.1 |
 
