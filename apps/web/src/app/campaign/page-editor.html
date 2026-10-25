@@ -40,7 +40,7 @@
     </header>
 
     @if (status() === 'conflict') {
-      <div class="mt-2 flex items-center gap-3 rounded-md border border-accent/50 bg-accent/5 px-3 py-2 text-sm" role="alert">
+      <div class="mt-2 flex items-center gap-3 rounded-md border border-accent/50 bg-accent/5 px-3 py-2 text-sm" role="alert" aria-live="assertive">
         Someone else changed this page. Your last change was not saved.
         <button type="button" class="cn-btn rounded border-accent px-2 py-0.5 text-sm font-normal text-accent" (click)="reloadAfterConflict()">Reload page</button>
       </div>
@@ -93,6 +93,22 @@
         <button type="button" class="cn-btn px-2 py-1 text-sm font-normal text-muted" (click)="addSubpage()">+ Subpage</button>
         <button type="button" class="cn-btn px-2 py-1 text-sm font-normal text-muted hover:text-accent" [attr.aria-disabled]="deleting() || null" [attr.aria-busy]="deleting() || null" (click)="remove()">Delete</button>
       </div>
+    </div>
+    @if (p.type === 'handout' && p.visibility !== 'all') {
+      <div class="mt-2 flex flex-wrap items-center gap-2 text-sm" role="group" aria-label="Share this handout">
+        <button type="button" class="cn-btn px-2 py-1 text-sm" title="Players see this page right away" (click)="shareNow('all')">Share now</button>
+        @if (p.visibility === 'dm') {
+          <button type="button" class="cn-btn px-2 py-1 text-sm font-normal" (click)="shareNow('selected')">Share with chosen players…</button>
+        }
+      </div>
+    }
+    <div role="status" aria-live="polite">
+      @if (shareUndo(); as u) {
+        <div class="mt-2 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-panel px-3 py-2 text-sm" (focusin)="onShareFocus(true)" (focusout)="onShareFocus(false)">
+          <span class="min-w-0">{{ u.text }}</span>
+          <button type="button" class="cn-btn ml-auto px-2 py-0.5 text-sm font-normal touch:min-h-[44px] touch:min-w-[44px]" (click)="undoShare()">Undo</button>
+        </div>
+      }
     </div>
     @if (p.visibility === 'selected') {
       <div class="mt-2 flex flex-wrap items-center gap-3 text-sm" role="group" aria-label="Players who see this page">
@@ -163,7 +179,7 @@
 
       <section class="mt-4">
         @if (canEdit()) {
-          <cn-block-editor [doc]="loadedDoc()" [pageId]="p.id" (changed)="onBody($event)" />
+          <cn-block-editor [doc]="loadedDoc()" [pageId]="p.id" [beforeReveal]="beforeReveal" [commit]="commit" (changed)="onBody($event)" />
         } @else {
           <cn-block-view [doc]="$any(p.body)" [pageId]="p.id" />
         }

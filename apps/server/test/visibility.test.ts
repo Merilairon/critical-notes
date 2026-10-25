@@ -473,6 +473,17 @@ describe('what players may change', () => {
     expect(JSON.stringify(asDm.body)).toContain(`"pageId":"${ids['hidden']}"`);
   });
 
+  it('a player cannot reveal: a submitted new block with revealed:true is stored unrevealed', async () => {
+    const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+    const forged = { type: 'secret', attrs: { id: 'forged1', revealed: true }, content: [para('Forged secret', { revealed: true })] };
+    const res = await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, body: { ...mine.body, content: [...mine.body.content, forged] } });
+    expect(res.status).toBe(200);
+    const stored = (await dm.get(`${base()}/pages/${ids['pc']}`)).body.body.content as { attrs?: { revealed?: boolean }; content?: { attrs?: { revealed?: boolean } }[] }[];
+    const added = stored.find((b) => JSON.stringify(b).includes('Forged secret'))!;
+    expect(added.attrs?.revealed).toBeFalsy();
+    expect(added.content![0]!.attrs?.revealed).toBeFalsy();
+  });
+
   it('does not strip the DM’s hidden columns when a player saves their page', async () => {
     const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
     const res = await player.patch(`${base()}/pages/${ids['pc']}`, {

@@ -67,6 +67,13 @@ function restoreHiddenLinks(before: BlockNode, n: BlockNode, ctx: ProjectContext
   return { ...n, content };
 }
 
+/** A player cannot reveal anything: a block they author never arrives revealed (children included). */
+function clearRevealed(node: BlockNode): BlockNode {
+  const attrs = node.attrs?.revealed ? { ...node.attrs, revealed: false } : node.attrs;
+  const out = attrs === node.attrs ? node : { ...node, attrs };
+  return out.content ? { ...out, content: out.content.map(clearRevealed) } : out;
+}
+
 function mergeLevel(stored: BlockNode[], submitted: BlockNode[], ctx: ProjectContext): BlockNode[] {
   // Blocks the player never saw, keyed by the id of the visible block they followed ('' = the start)
   const anchored = new Map<string, BlockNode[]>();
@@ -101,9 +108,17 @@ function mergeLevel(stored: BlockNode[], submitted: BlockNode[], ctx: ProjectCon
     // Containers the player edited keep their hidden children too
     let merged = n;
     if (before && JSON.stringify(projectNodes([before], ctx)) === JSON.stringify([n])) merged = before;
-    else if (before?.content) merged = isBlockList(before.content) ? { ...n, content: mergeLevel(before.content, n.content ?? [], ctx) } : restoreHiddenLinks(before, n, ctx);
+    else if (before?.content && isBlockList(before.content)) merged = { ...n, content: mergeLevel(before.content, n.content ?? [], ctx) };
+    else if (before) {
+      // No stored blocks to match against (inline content, or an empty container): everything the player added is new, so it starts unrevealed
+      const restored = before.content ? restoreHiddenLinks(before, n, ctx) : n;
+      merged = restored.content ? { ...restored, content: restored.content.map(clearRevealed) } : restored;
+    }
     // Block types put back what their own projection took out (a query block's DM-only columns)
     if (before && merged !== before) merged = blockType(n.type)?.restoreHidden?.(before, merged, ctx) ?? merged;
+    // Players cannot change `revealed`: a stored block keeps its flag, a new block starts unrevealed
+    if (!before) merged = clearRevealed(merged);
+    else if (!!merged.attrs?.revealed !== !!before.attrs?.revealed) merged = { ...merged, attrs: { ...merged.attrs, revealed: !!before.attrs?.revealed } };
     out.push(merged);
     if (id && anchored.has(id) && !placed.has(id)) {
       out.push(...anchored.get(id)!);
@@ -130,7 +145,7 @@ function mergeLevel(stored: BlockNode[], submitted: BlockNode[], ctx: ProjectCon
  * edited those blocks.
  */
 export function mergePlayerEdit(stored: BlockDocument | null, submitted: BlockDocument, ctx: ProjectContext): BlockDocument {
-  if (!stored?.content?.length) return submitted;
+  if (!stored?.content?.length) return { ...submitted, content: submitted.content?.map(clearRevealed) };
   // The player never held an id of a block they cannot see, so any submitted block carrying one (at any depth) gets a new id on save
   const hiddenIds = new Set<string>();
   const collectAll = (node: BlockNode) => {

@@ -120,6 +120,16 @@ const BlockMenuShortcut = Extension.create<{ open: () => boolean }>({
     }
     <tiptap-editor [editor]="editor" class="cn-editor cn-prose block" />
     <div class="sr-only" role="status">{{ status() }}</div>
+    @if (notice(); as n) {
+      <div class="cn-reveal-notice sticky bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-20 mt-2 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-panel px-3 py-2 text-sm shadow-xl" role="group" aria-label="Reveal confirmation" (focusin)="noticeFocused = true" (focusout)="noticeFocused = false">
+        <span class="min-w-0" [class.text-accent]="n.failed" [attr.role]="n.failed ? 'alert' : null">{{ n.text }}</span>
+        @if (n.failed) {
+          <button type="button" class="cn-btn ml-auto min-h-6 px-2 py-0.5 text-sm font-normal touch:min-h-[44px] touch:min-w-[44px]" (click)="clearNotice()">Dismiss</button>
+        } @else {
+          <button type="button" class="cn-btn ml-auto min-h-6 px-2 py-0.5 text-sm font-normal touch:min-h-[44px] touch:min-w-[44px]" (click)="undoReveal()">Undo</button>
+        }
+      </div>
+    }
     @if (templateAt() !== null && store?.id(); as campaignId) {
       <cn-template-insert [campaignId]="campaignId" (inserted)="insertTemplate($event)" (closed)="templateAt.set(null)" />
     }
@@ -135,6 +145,9 @@ const BlockMenuShortcut = Extension.create<{ open: () => boolean }>({
             <button type="button" tabindex="-1" role="menuitemcheckbox" [attr.aria-checked]="!!m.node.attrs['revealed']" (click)="toggleAttr(m, 'revealed')">
               @if (m.node.attrs['revealed']) {<span aria-hidden="true">✓ </span>}Revealed to players <kbd aria-hidden="true">Ctrl⇧R</kbd>
             </button>
+          }
+          @if (canRevealNow(m.node)) {
+            <button type="button" tabindex="-1" role="menuitem" [attr.title]="revealHint" (click)="revealNow(m)">Reveal now</button>
           }
           <hr />
         }
@@ -165,6 +178,16 @@ export class BlockEditor implements OnDestroy {
   readonly label = input('Page content');
   readonly pageId = input<string | null>(null);
   readonly changed = output<BlockDoc>();
+  /** The host should save now (a reveal is one click, not a debounced edit). Emitted after `changed`. */
+  readonly saveNow = output<void>();
+  /** Awaited before a reveal: saves pending edits first, so the reveal save changes only the reveal flag. */
+  readonly beforeReveal = input<(() => Promise<void>) | null>(null);
+  /** Saves now and resolves true when the save worked (the reveal notice appears only then). */
+  readonly commit = input<(() => Promise<boolean>) | null>(null);
+  protected readonly revealHint = 'Players see it right away. If you edit this same block in the same save as the reveal, they get no live notice.';
+  /** Confirmation (with Undo) after "Reveal now". */
+  protected readonly notice = signal<{ text: string; blockId: string; failed: boolean } | null>(null);
+  private noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
   private readonly editorContext = inject(EDITOR_CONTEXT) as { pageId: WritableSignal<string | null> };
   readonly pageIdSignal = this.editorContext.pageId;
@@ -270,6 +293,7 @@ export class BlockEditor implements OnDestroy {
       untracked(() => {
         if (doc === this.loadedFrom) return;
         this.loadedFrom = doc;
+        this.clearNotice();
         this.editor.commands.setContent((doc as JSONContent | null) ?? { type: 'doc', content: [{ type: 'paragraph' }] }, { emitUpdate: false });
       });
     });
@@ -438,6 +462,86 @@ export class BlockEditor implements OnDestroy {
     this.announce(attr === 'visibility' ? (on ? 'Block marked DM only' : 'Block no longer DM only') : on ? 'Block revealed to players' : 'Block hidden from players');
   }
 
+  /** Secrets and DM-only blocks that players cannot see yet. */
+  protected canRevealNow(node: PMNode): boolean {
+    return (node.type.name === 'secret' || node.attrs['visibility'] === 'dm') && !node.attrs['revealed'];
+  }
+
+  /** The block with this `attrs.id` (ids survive saves, so a reveal finds its block again after an await). */
+  private findBlock(id: string): { pos: number; node: PMNode } | null {
+    let found: { pos: number; node: PMNode } | null = null;
+    this.editor.state.doc.descendants((node, pos) => {
+      if (found) return false;
+      if (node.attrs['id'] === id) found = { pos, node };
+      return !found;
+    });
+    return found;
+  }
+
+  private setRevealed(id: string, revealed: boolean): boolean {
+    const hit = this.findBlock(id);
+    if (!hit) return false;
+    // Only the flag changes: every attrs.id (the block's and its children's) stays, or the server's detector sees a changed block
+    this.editor.chain().command(({ tr }) => {
+      tr.setNodeMarkup(hit.pos, undefined, { ...hit.node.attrs, revealed });
+      return true;
+    }).run();
+    return true;
+  }
+
+  /** One click: reveals the block and saves through the normal page save, with an Undo. */
+  protected async revealNow(m: MenuState) {
+    const id = this.editor.state.doc.nodeAt(m.pos)?.attrs['id'] as string | undefined;
+    this.closeMenu();
+    if (!id || !this.canRevealNow(m.node)) return;
+    const page = this.pageId();
+    await this.beforeReveal()?.();
+    // The page or the block may have changed while the pending edits were saved
+    const hit = this.findBlock(id);
+    if (page !== this.pageId() || !hit || !this.canRevealNow(hit.node)) return;
+    this.setRevealed(id, true);
+    this.saveNow.emit();
+    if ((await this.commit()?.()) === false) {
+      // The server still has it hidden: show that, here and on the block
+      if (page === this.pageId()) this.setRevealed(id, false);
+      return this.showNotice('Not saved. The block is still hidden from players.', id, true);
+    }
+    if (page === this.pageId() && this.findBlock(id)?.node.attrs['revealed']) this.showNotice('Revealed to players', id);
+  }
+
+  protected async undoReveal() {
+    const id = this.notice()?.blockId;
+    const page = this.pageId();
+    this.clearNotice();
+    if (!id || !this.setRevealed(id, false)) return;
+    this.saveNow.emit();
+    this.editor.view.focus();
+    if ((await this.commit()?.()) === false) {
+      if (page === this.pageId()) this.setRevealed(id, true);
+      return this.showNotice('Not saved. The block is still revealed to players.', id, true);
+    }
+    this.announce('Hidden from players again');
+  }
+
+  private showNotice(text: string, blockId: string, failed = false) {
+    this.notice.set({ text, blockId, failed });
+    // A failure is announced once, by the notice's own role="alert"
+    if (!failed) this.announce(text);
+    this.armNotice();
+  }
+
+  /** Auto-dismiss after 15 s; waits while the notice has keyboard focus. */
+  private armNotice() {
+    clearTimeout(this.noticeTimer);
+    this.noticeTimer = setTimeout(() => (this.noticeFocused ? this.armNotice() : this.notice.set(null)), 15000);
+  }
+  protected noticeFocused = false;
+
+  protected clearNotice() {
+    clearTimeout(this.noticeTimer);
+    this.notice.set(null);
+  }
+
   protected turnInto(m: MenuState, type: 'paragraph' | 'heading') {
     this.editor.chain().focus().setTextSelection(m.pos + 1)[type === 'heading' ? 'setHeading' : 'setParagraph']({ level: 2 } as never).run();
     this.menu.set(null);
@@ -523,6 +627,7 @@ export class BlockEditor implements OnDestroy {
 
   ngOnDestroy() {
     clearTimeout(this.statusTimer);
+    clearTimeout(this.noticeTimer);
     this.editor.destroy();
     this.handle.remove();
   }

@@ -208,6 +208,44 @@ describe('mergePlayerEdit', () => {
     expect(lines(projectDoc(merged, ctx), 'player')).toEqual(['Intro (edited)', 'Backstory', 'Visible tip', 'New tip', 'Added by the player']);
   });
 
+  it('players cannot reveal: new blocks (children too) arrive unrevealed and stored flags are kept', () => {
+    const seen = projectDoc(stored, ctx)!;
+    const secret = { type: 'secret', attrs: { id: 'new1', revealed: true }, content: [p('Mine', { revealed: true })] };
+    const merged = mergePlayerEdit(stored, { ...seen, content: [...seen.content!, secret] }, ctx);
+    const added = merged.content!.find((b) => b.attrs?.id === 'new1')!;
+    expect(added.attrs?.revealed).toBe(false);
+    expect(added.content![0]!.attrs?.revealed).toBeFalsy();
+    // Re-submitting the id of a block the player never saw gives a copy that is also unrevealed
+    const hidden = stored.content!.find((b) => b.type === 'secret')!;
+    const copy = mergePlayerEdit(stored, { ...seen, content: [...seen.content!, { ...hidden, attrs: { ...hidden.attrs, revealed: true } }] }, ctx);
+    expect(copy.content!.filter((b) => b.type === 'secret').every((b) => !b.attrs?.revealed)).toBe(true);
+    // No stored content: still cleared
+    expect(mergePlayerEdit(null, { type: 'doc', content: [secret] } as never, ctx).content![0]!.attrs?.revealed).toBe(false);
+  });
+
+  it('clears revealed on new children of a stored container with no blocks, and keeps the stored flag of an already revealed block', () => {
+    // Built by hand (sanitizeDoc would not allow an empty container): ids and flags exactly as given
+    const raw = {
+      type: 'doc',
+      content: [
+        { type: 'callout', attrs: { id: 'k1' }, content: [] },
+        { type: 'paragraph', attrs: { id: 'r1', visibility: 'dm', revealed: true }, content: [{ type: 'text', text: 'Shown' }] },
+      ],
+    } as unknown as BlockDocument;
+    const submitted = {
+      type: 'doc',
+      content: [
+        { type: 'callout', attrs: { id: 'k1' }, content: [{ type: 'secret', attrs: { id: 'n1', revealed: true }, content: [p('x', { revealed: true })] }] },
+        { type: 'paragraph', attrs: { id: 'r1', visibility: 'dm', revealed: true }, content: [{ type: 'text', text: 'Shown (edited)' }] },
+      ],
+    } as unknown as BlockDocument;
+    const merged = mergePlayerEdit(raw, submitted, ctx);
+    const child = merged.content![0]!.content![0]!;
+    expect(child.attrs?.revealed).toBe(false);
+    expect(child.content![0]!.attrs?.revealed).toBeFalsy();
+    expect(merged.content![1]!.attrs?.revealed).toBe(true);
+  });
+
   it('never loses hidden blocks when the player deletes their neighbours', () => {
     const merged = mergePlayerEdit(stored, { type: 'doc', content: [p('Only this')] }, ctx);
     expect(lines(merged, 'dm')).toEqual(['Only this', 'DM: he is cursed', 'Hidden tip', 'True parentage']);
