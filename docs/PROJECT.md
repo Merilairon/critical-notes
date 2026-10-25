@@ -537,6 +537,12 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 **Depends on**: I1.4
 **Note**: if this proves to need a stable link identity in the document format, stop and raise it with the Software Architect instead of widening the diff.
 
+### [ ] Task I1.6: Keep a block's id when one common attribute is invalid (found by N3.4 QA)
+**Owner**: Minimal Change Engineer · **QA**: Application Security Engineer
+**Description**: In `packages/blocks/src/sanitize.ts`, `blockAttrs` parses the common attributes (`id`, `visibility`, `revealed`) as one object, so one invalid value (for example `visibility: 'all'`; the valid values are `inherit` and `dm`) drops all three: the block is given a new id and `visibility: 'inherit'`. For an API or AI-assistant client this silently re-ids the block, so a reveal never produces a live event and block references go stale. Parse each attribute separately and fall back per field, so the id survives. Repro: PATCH a block with `attrs: {id: 'bX', visibility: 'all'}` and read it back.
+**Acceptance Criteria**: the repro keeps `id: 'bX'` and falls back to `visibility: 'inherit'`; a unit test per attribute; the I1.x merge tests, the sentinel crawl and the N3.2 detector tests stay green
+**Depends on**: I1.5
+
 ### 6.2 Epic N1: Page history
 
 ### [x] Task N1.1: History design
@@ -589,8 +595,9 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 **Acceptance Criteria**: a player gets an event only for pages they can now see; sentinel crawl reads the stream
 **Depends on**: N3.1
 
-### [ ] Task N3.3: "Reveal now" for the DM
+### [x] Task N3.3: "Reveal now" for the DM
 **Owner**: Frontend Developer · **QA**: Evidence Collector
+**Done:** 2026-10-25, Code Reviewer PASS (3 rounds), QA Application Security Engineer PASS (26 adversarial cases), QA Evidence Collector PASS (2 rounds, 71 browser checks). 'Reveal now' in the block menu (Ctrl+.) for top-level secret and DM-only blocks, with a 15 s Undo notice; 'Share now' and 'Share with chosen players' on handout pages with Undo; notices appear only after a successful save, and a failed save reverts the local state (block flag, page visibility and viewers) and says 'Not saved'. Reveal keeps every block's `attrs.id`. Server change in this task: in `mergePlayerEdit` a player's new blocks always start with `revealed:false` (children included), and a stored block keeps its stored flag, so a player can never set `revealed` (reveal.md T9). Unit tests only for the reveal flow itself; the two-browser end-to-end test is N3.5. Merged to `main` 2026-10-25 (gate 951 + 386, `pnpm e2e` 104 passed, 8 skipped).
 **Description**: One-click "Reveal now" on secrets and DM-only blocks (sets `revealed`, saves), and "Share now" on handout pages (visibility to all or chosen players).
 **Depends on**: N3.2
 
