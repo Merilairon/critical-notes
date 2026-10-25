@@ -690,6 +690,40 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 **Acceptance Criteria**: `bench:query --pages 5000` p50 under 150 ms
 **Depends on**: I2.4, I2.5
 
+### 6.5b Epic H1: Test health and follow-ups found during waves 2 and 3
+
+Filed 2026-10-25 from the QA reports; none blocks a 1.3 task, all should be done or consciously deferred before G2.1.
+
+### [ ] Task H1.1: Make the load-sensitive tests reliable
+**Owner**: Test Automation Engineer · **QA**: Reality Checker
+**Description**: These server tests fail now and then when the whole suite runs in parallel and pass alone: `backup-routes.test.ts` ("a stalled reader is cut off after the idle time"), `restore-crash.test.ts` (about 36 s under load), `transfer.test.ts` ("imports as a new campaign"), `homebrew.test.ts` and the homebrew test in `mcp.test.ts` (20 s timeouts). They have each failed in more than one full run in waves 2 and 3. Find the cause of each (shared timers, CPU load, real sleeps, a seed that is too big) and remove it without raising timeouts as the only fix; use injected clocks or smaller fixtures. Also look at the one `pnpm e2e` run that failed with many specs timing out after about a minute and passed on the rerun (I3.3, cause not found).
+**Acceptance Criteria**: `pnpm -s test` run 5 times in a row on a loaded machine with no failure; the cause of each flake is written in the task note; no test timeout raised without a reason
+**Depends on**: none
+
+### [ ] Task H1.2: Run the restore drill against the built bundle in the release gate
+**Owner**: DevOps Automator · **QA**: Reality Checker
+**Description**: `restore-drill.test.ts` has one test, "the same drill passes against the built bundle (dist/)", which is skipped unless `apps/server/dist/` exists, so it is skipped in normal runs. Make the release gate (G2.1, `RELEASE.md`) build first and run it, and say so in the gate checklist.
+**Acceptance Criteria**: `docs/RELEASE.md` and G2.1 list the step; one documented run with the bundle built shows the test passing, not skipped
+**Depends on**: none
+
+### [ ] Task H1.3: Keyboard check of the Properties panel
+**Owner**: Accessibility Auditor · **QA**: Evidence Collector
+**Description**: During the I2.2 browser QA a custom property ("Mood") disappeared while a script kept sending Tab, arrow and Enter keys with focus on the Properties panel. Find out whether a stray Enter can delete a custom property without a confirmation, and whether a mouse click can. Deleting a property definition drops its values on every page, so it needs the app's own confirmation dialog (as the other destructive actions have since 1.1.1) and an Undo or trash path if one exists.
+**Acceptance Criteria**: the finding in `docs/qa/` or the task note; if a property can be removed without confirmation, a fix with a test; keyboard-only operation of the panel documented
+**Depends on**: none
+
+### [ ] Task H1.4: Re-check the tracker stream membership while it is open
+**Owner**: Realtime Collaboration Engineer · **QA**: Application Security Engineer
+**Description**: The tracker's event stream (`/trackers/:id/events`) checks campaign membership only when it connects, so a member who is removed keeps receiving tracker state until the connection ends. The campaign event stream from N3.2 already re-checks session and membership on every heartbeat and delivery. The shared `lib/sse.ts` has an `onHeartbeat` hook for this. Re-check session, user state, membership and (for the player view) role on each heartbeat and each delivery, close with `bye`, and keep the tracker's DM/player projection as it is.
+**Acceptance Criteria**: tests for a removed member, a disabled user, a logged-out session and a demoted co-DM on the tracker stream; the sentinel crawl stays green
+**Depends on**: none
+
+### [ ] Task H1.5: Tidy the tracker's death-save edge cases
+**Owner**: Backend Architect · **QA**: API Tester
+**Description**: Small gaps found in the I3.2 QA and the I3.3 design review, none leaks anything: `deathSaveAdjust` with failures on a stable combatant keeps `status: 'stable'` with the failures counted (the UI offers Clear counts); `deathSave` and `update {hp: 0}` on a monster that does not make death saves still create a `dying` object (never shown to players); `update` can set `hp` and `ac` on the lair row (the UI hides those controls, the reducer does not refuse); `hp` below 0 is allowed by `update`. Decide each with the Game Designer (refuse, ignore or keep) and add a test per decision.
+**Acceptance Criteria**: each of the four cases has a decision in `docs/design/tracker-rules.md` and a test
+**Depends on**: none
+
 ### 6.6 Release gate and waves
 
 ### [ ] Task G2.1: Release 1.3 certification
