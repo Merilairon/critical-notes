@@ -1570,3 +1570,99 @@ details[open] > summary > .cn-chevron {
     outline-offset: -2px;
   }
 }
+
+/* ---------- Tracker rule panels (docs/design/tracker-ui.md section 1.1) ---------- */
+.cn-trk-panel {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--bg);
+}
+.cn-trk-pair {
+  display: grid;
+  gap: 0 0.5rem;
+  /* One column: DOM order equals visual order at every width (design 13.2) */
+  grid-template-columns: minmax(0, 1fr);
+}
+.cn-trk-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.cn-trk-step {
+  min-width: 2rem;
+  padding-inline: 0;
+}
+.cn-trk-pip {
+  display: inline-grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid var(--ink);
+  font-size: 0.8rem;
+  line-height: 1;
+  flex: none;
+}
+.cn-trk-pip--round {
+  border-radius: 50%;
+}
+.cn-trk-pip--square {
+  border-radius: 0.15rem;
+}
+.cn-trk-pip--diamond {
+  transform: rotate(45deg);
+  border-radius: 0.1rem;
+  margin-inline: 0.15rem;
+}
+.cn-trk-pip--diamond > span {
+  transform: rotate(-45deg);
+}
+.cn-trk-pip[data-on='true'] {
+  background: var(--ink);
+  color: var(--bg);
+}
+.cn-trk-pip--square[data-on='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.cn-trk-pip--big {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+.cn-trk-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--control);
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  line-height: 1.1rem;
+  overflow-wrap: anywhere;
+}
+.cn-trk-status {
+  position: static;
+}
+.cn-trk-row-btn {
+  min-height: 2rem;
+}
+@media (pointer: coarse), (max-width: 639.98px) {
+  .cn-trk-step {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .cn-trk-tap {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .cn-trk-row-btn {
+    min-height: 44px;
+  }
+  .cn-trk-hp {
+    font-size: 1rem;
+  }
+}

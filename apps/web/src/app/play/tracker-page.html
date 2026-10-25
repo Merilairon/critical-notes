@@ -7,29 +7,78 @@
       <a class="rounded-md border border-line px-3 py-1.5 text-sm hover:border-accent" [routerLink]="playerViewLink()" target="_blank">Player view ↗</a>
       <button type="button" class="rounded-md border border-line px-3 py-1.5 text-sm text-muted hover:border-accent hover:text-accent" (click)="remove()">Delete</button>
     </header>
-    @if (error()) {<p class="mt-2 text-sm text-accent" role="alert">{{ error() }}</p>}
+
+    <!-- One announcement per action for screen readers (never a copy of visible text) -->
+    <div class="sr-only" role="status" aria-live="polite" aria-atomic="true" [attr.data-seq]="liveSeq()">{{ live() }}</div>
+
+    <!-- The action error and the DM-only recharge note: always in the DOM, in view of the sticky block -->
+    <ng-template #slot>
+      <div class="cn-trk-status">
+        <div role="alert">
+          @if (error()) {
+            <div class="flex flex-wrap items-center gap-2 border-t border-line px-2 py-1 text-sm text-accent">
+              <p class="min-w-0 flex-1 [overflow-wrap:anywhere]">{{ error() }}</p>
+              <button type="button" class="cn-btn" (click)="error.set('')">Dismiss</button>
+            </div>
+          }
+        </div>
+        <div role="status" aria-live="polite" aria-atomic="true" (keydown.escape)="noteEscape($event)">
+          @if (noteLines().length) {
+            <div class="flex flex-wrap items-start gap-x-2 border-t border-line px-2 text-xs" data-trk="recharge-note">
+              <div class="min-w-0 flex-1 basis-60">
+                @for (line of noteVisible(); track $index) {
+                  <p class="[overflow-wrap:anywhere]">
+                    @if ($first) {<span class="cn-trk-title me-2">Round {{ noteRound() }}</span> }{{ line }}
+                  </p>
+                }
+                @if (noteHidden() > 0) {
+                  <button type="button" class="cn-btn mt-1" (click)="noteAll.set(true)">+ {{ noteHidden() }} more</button>
+                }
+              </div>
+              <button type="button" class="cn-btn py-0" aria-label="Dismiss recharge rolls" (click)="dismissNote()">Dismiss</button>
+            </div>
+          }
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template #setup>
+      <div class="flex flex-wrap items-center gap-2 p-2 text-sm" role="toolbar" aria-label="Combat setup">
+        <button type="button" class="cn-trk-tap rounded-md border border-line px-3 py-1.5" (click)="act({ type: 'rollInitiative', which: 'missing' })" title="Roll for everyone without initiative (r)"><span aria-hidden="true">🎲 </span>Roll missing</button>
+        <button type="button" class="cn-trk-tap rounded-md border border-line px-3 py-1.5" (click)="act({ type: 'rollInitiative', which: 'npcs' })"><span aria-hidden="true">🎲 </span>Reroll monsters</button>
+        <span class="mx-1 h-5 border-l border-line max-sm:hidden"></span>
+        <button type="button" data-trk="add-monster" class="cn-trk-tap rounded-md border border-line px-3 py-1.5" [class.border-accent]="adding() === 'monster'" [attr.aria-pressed]="adding() === 'monster'" (click)="adding.set(adding() === 'monster' ? null : 'monster')">+ Monster</button>
+        <button type="button" class="cn-trk-tap rounded-md border border-line px-3 py-1.5" [class.border-accent]="adding() === 'pc'" [attr.aria-pressed]="adding() === 'pc'" (click)="adding.set(adding() === 'pc' ? null : 'pc')">+ Character</button>
+        <button type="button" class="cn-trk-tap rounded-md border border-line px-3 py-1.5" [class.border-accent]="adding() === 'custom'" [attr.aria-pressed]="adding() === 'custom'" (click)="adding.set(adding() === 'custom' ? null : 'custom')">+ Other</button>
+        <button type="button" class="cn-trk-tap rounded-md border border-line px-3 py-1.5" [class.border-accent]="adding() === 'lair'" [attr.aria-pressed]="adding() === 'lair'" (click)="adding.set(adding() === 'lair' ? null : 'lair')">+ Lair</button>
+        <button type="button" data-trk="help-btn" class="cn-trk-tap rounded-md border border-line px-3 py-1.5" [attr.aria-expanded]="helpOpen()" aria-controls="cn-trk-help" (click)="toggleHelp()">Keys and rules</button>
+        <button type="button" class="cn-trk-tap ml-auto rounded-md border border-line px-3 py-1.5 text-muted hover:border-accent hover:text-accent" (click)="end()">End combat</button>
+      </div>
+    </ng-template>
 
     @if (!ended()) {
-      <div class="sticky top-0 z-10 mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-panel/95 p-2 text-sm backdrop-blur" role="toolbar" aria-label="Combat">
-        @if (started()) {
-          <button type="button" class="rounded-md border border-line px-3 py-1.5" (click)="act({ type: 'prev' })" title="Previous turn (p)">◀ Prev</button>
-          <button type="button" class="rounded-md bg-accent px-4 py-1.5 font-semibold text-accent-ink" (click)="act({ type: 'next' })" title="Next turn (n)">Next turn ▶</button>
-        } @else {
-          <button type="button" class="rounded-md bg-accent px-4 py-1.5 font-semibold text-accent-ink" (click)="act({ type: 'start' })" title="Start (n)">Start combat</button>
+      <div class="sticky top-0 z-10 mt-3 rounded-lg border border-line bg-panel/95 text-sm backdrop-blur short:static [@media(max-height:499.98px)]:static">
+        <div class="flex flex-wrap items-center gap-1 p-1 sm:gap-2 sm:p-2" role="toolbar" aria-label="Combat">
+          @if (started()) {
+            <button type="button" class="cn-trk-tap rounded-md border border-line px-3 py-0.5 sm:py-1.5" (click)="act({ type: 'prev' })" title="Previous turn (p)"><span aria-hidden="true">◀ </span>Prev</button>
+            <button type="button" data-trk="next" class="cn-trk-tap rounded-md bg-accent px-4 py-0.5 font-semibold text-accent-ink sm:py-1.5" [attr.aria-label]="'Next turn, round ' + t.state.round" (click)="act({ type: 'next' })" title="Next turn (n)">Next turn<span aria-hidden="true"> ▶</span></button>
+          } @else {
+            <button type="button" data-trk="next" class="cn-trk-tap rounded-md bg-accent px-4 py-1.5 font-semibold text-accent-ink" (click)="act({ type: 'start' })" title="Start (n)">Start combat</button>
+          }
+        </div>
+        <ng-container *ngTemplateOutlet="slot" />
+        @if (wide()) {
+          <ng-container *ngTemplateOutlet="setup" />
         }
-        <button type="button" class="rounded-md border border-line px-3 py-1.5" (click)="act({ type: 'rollInitiative', which: 'missing' })" title="Roll for everyone without initiative (r)">🎲 Roll missing</button>
-        <button type="button" class="rounded-md border border-line px-3 py-1.5" (click)="act({ type: 'rollInitiative', which: 'npcs' })">🎲 Reroll monsters</button>
-        <span class="mx-1 h-5 border-l border-line"></span>
-        <button type="button" class="rounded-md border border-line px-3 py-1.5" [class.border-accent]="adding() === 'monster'" (click)="adding.set(adding() === 'monster' ? null : 'monster')">+ Monster</button>
-        <button type="button" class="rounded-md border border-line px-3 py-1.5" [class.border-accent]="adding() === 'pc'" (click)="adding.set(adding() === 'pc' ? null : 'pc')">+ Character</button>
-        <button type="button" class="rounded-md border border-line px-3 py-1.5" [class.border-accent]="adding() === 'custom'" (click)="adding.set(adding() === 'custom' ? null : 'custom')">+ Other</button>
-        <button type="button" class="ml-auto rounded-md border border-line px-3 py-1.5 text-muted hover:border-accent hover:text-accent" (click)="end()">End combat</button>
       </div>
+      @if (!wide()) {
+        <div class="mt-2 rounded-lg border border-line bg-panel text-sm"><ng-container *ngTemplateOutlet="setup" /></div>
+      }
       @switch (adding()) {
         @case ('monster') {<div class="mt-2"><cn-ref-picker kind="monster" placeholder="Search the bestiary…" (selected)="addMonster($event)" /></div>}
         @case ('pc') {
           <div class="mt-2 flex flex-wrap gap-2 text-sm">
-            @for (pc of pcs(); track pc.id) {<button type="button" class="rounded-md border border-line px-3 py-1.5 hover:border-accent" (click)="addPc(pc.id)">{{ pc.title }}</button>} @empty {<span class="text-muted">No player characters in this campaign.</span>}
+            @for (pc of pcs(); track pc.id) {<button type="button" class="cn-trk-tap rounded-md border border-line px-3 py-1.5 hover:border-accent" (click)="addPc(pc.id)">{{ pc.title }}</button>} @empty {<span class="text-muted">No player characters in this campaign.</span>}
           </div>
         }
         @case ('custom') {
@@ -38,68 +87,322 @@
             <label class="flex flex-col gap-1"><span class="text-xs text-muted">HP</span><input #hp type="number" class="cn-prop-input w-20" /></label>
             <label class="flex flex-col gap-1"><span class="text-xs text-muted">AC</span><input #ac type="number" class="cn-prop-input w-16" /></label>
             <label class="flex flex-col gap-1"><span class="text-xs text-muted">Initiative</span><input #init type="number" class="cn-prop-input w-20" /></label>
-            <button type="submit" class="rounded-md bg-accent px-3 py-1.5 font-semibold text-accent-ink">Add</button>
+            <button type="submit" class="cn-trk-tap rounded-md bg-accent px-3 py-1.5 font-semibold text-accent-ink">Add</button>
+          </form>
+        }
+        @case ('lair') {
+          <form class="mt-2 flex flex-col gap-2 text-sm" (submit)="$event.preventDefault(); addLair(ln.value)">
+            <label class="flex flex-col gap-1"><span class="text-xs text-muted">Name</span><input #ln class="cn-prop-input max-w-sm" value="Lair actions" maxlength="120" /></label>
+            @if (lairCandidates().length) {
+              <fieldset class="max-h-48 overflow-auto rounded-md border border-line p-2">
+                <legend class="px-1 text-xs text-muted">Mark as in their lair</legend>
+                @for (m of lairCandidates(); track m.id) {
+                  <label class="cn-trk-tap flex items-center gap-2"><input type="checkbox" [checked]="lairMarks().has(m.id)" (change)="toggleLairMark(m.id, $any($event.target).checked)" />{{ m.name }}</label>
+                }
+              </fieldset>
+            }
+            <div class="flex flex-wrap gap-2">
+              @if (monsters().length) {<button type="button" class="cn-btn" (click)="markAllMonsters()">Select all monsters</button>}
+              <button type="submit" class="cn-btn-primary">Add lair row</button>
+            </div>
           </form>
         }
       }
+      @if (helpOpen()) {
+        <section id="cn-trk-help" class="mt-2 max-h-[70vh] overflow-auto rounded-lg border border-line bg-panel p-3 text-sm" aria-labelledby="cn-trk-help-h" (keydown.escape)="closeHelp($event)">
+          <h2 id="cn-trk-help-h" tabindex="-1" class="font-display text-xl font-bold">Keys and rules</h2>
+          <h3 class="mt-2 font-semibold">Keys</h3>
+          <p><kbd>n</kbd> Next turn · <kbd>p</kbd> Previous turn · <kbd>r</kbd> Roll missing initiative · <kbd>?</kbd> This help.</p>
+          <p>With focus inside a combatant row: <kbd>d</kbd> death-save roll field, <kbd>l</kbd> spend a legendary action, <kbd>Shift+L</kbd> give one back, <kbd>u</kbd> use Legendary Resistance, <kbd>Shift+U</kbd> give one back. Keys do nothing while you type in a field. Every action also has a button.</p>
+          <p>Hit points box: <code>-7</code> damage, <code>+5</code> heal, <code>=20</code> set, <code>t5</code> temporary.</p>
+          <h3 class="mt-2 font-semibold">Death saves</h3>
+          <ul class="list-disc pl-5">
+            <li>A player character at 0 HP, or a creature you flag as making death saves, gets death saves. Type the d20 the player rolled, or press Roll for me.</li>
+            <li>Natural 20: back up at 1 HP. Natural 1: two failures. 10 or more is a success. Damage at 0 HP is a failure, a critical hit is two.</li>
+            <li>Temporary hit points: this is a table convention, not printed rules text. Damage that temporary hit points fully absorb adds no death-save failure. Only damage that gets past them does. If your table rules otherwise, use the failure + button.</li>
+            <li>Stable clears the counts. A character who reached three successes shows them until healed.</li>
+            <li>Monsters and NPCs are simply Down at 0 HP. The tracker may count saves for them quietly, but shows nothing until you turn on "Makes death saves" in More.</li>
+            <li>Players see only successes, failures and Dying, Stable or Dead for player characters. They never see your rolls.</li>
+          </ul>
+          <h3 class="mt-2 font-semibold">Legendary and recharge</h3>
+          <ul class="list-disc pl-5">
+            <li>Legendary actions come back when that creature's turn starts. Previous turn does not give them back; use Give back. Legendary Resistance never resets by itself.</li>
+            <li>A spent recharge ability rolls a d6 when its creature's turn starts. You see the result in a note that stays until the next roll or until you dismiss it; players never see it. Click a spent ability to mark it recharged by hand.</li>
+            <li>In lair is a manual switch. It changes the legendary numbers to the lair values.</li>
+          </ul>
+          <h3 class="mt-2 font-semibold">Lair, Ready, Move after</h3>
+          <ul class="list-disc pl-5">
+            <li>The lair row acts at initiative 20 and loses ties. It starts hidden. Hiding it makes the players' highlight blink off for that turn, like any hidden creature.</li>
+            <li>Ready: write the trigger. Players see the trigger of a player character; a monster's stays with you. It clears when you clear it or when that creature's next turn starts.</li>
+            <li>Move after: the creature takes the initiative of the one you pick and acts right after it, from now on. If it was the active creature, its turn passes to the next one at once, and that can trigger recharge rolls and refill legendary actions. Its conditions do not tick when you move it, and Previous turn does not undo a move.</li>
+          </ul>
+          <button type="button" class="cn-btn mt-2" (click)="closeHelp()">Close help</button>
+        </section>
+      }
     } @else {
       <p class="mt-3 rounded-md border border-line bg-panel px-3 py-2 text-sm">This combat has ended. Player characters' hit points were saved to their pages.</p>
+      <ng-container *ngTemplateOutlet="slot" />
     }
 
     <ol class="mt-3 flex flex-col gap-2" aria-label="Initiative order">
       @for (c of order(); track c.id) {
-        <li class="rounded-xl border bg-panel p-2 sm:p-3" [class.border-accent]="c.id === t.state.activeId" [class.ring-2]="c.id === t.state.activeId" [class.ring-accent]="c.id === t.state.activeId" [class.opacity-60]="c.hp === 0" [attr.aria-current]="c.id === t.state.activeId ? 'true' : null">
-          <div class="flex flex-wrap items-center gap-2">
+        @let isActive = c.id === t.state.activeId;
+        @let lair = c.kind === 'lair';
+        @let down = L.isDown(c);
+        @let dead = c.dying?.status === 'dead' && L.makesDeathSaves(c);
+        @let moreOpen = moreFor().has(c.id);
+        @let leg = L.legendaryView(c);
+        @let res = L.resistanceView(c);
+        @let chips = L.rechargeChips(c);
+        <li class="rounded-xl border p-2 sm:p-3" [class.bg-panel]="!down" [class.bg-panel-2]="down" [class.border-dashed]="down" [class.border-accent]="isActive" [class.ring-2]="isActive" [class.ring-accent]="isActive" [attr.data-trk-id]="c.id" [attr.aria-current]="isActive ? 'true' : null">
+          <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
             <input type="number" class="cn-prop-input w-16 text-center font-bold" [value]="c.initiative ?? ''" placeholder="init" [attr.aria-label]="'Initiative of ' + c.name" (change)="setInitiative(c, $any($event.target).value)" />
-            <span class="min-w-0 flex-1">
-              <span class="font-semibold">{{ c.name }}</span>
-              <span class="ml-1 text-xs text-muted">{{ c.kind === 'pc' ? 'PC' : c.kind }}{{ c.initBonus ? ' · ' + (c.initBonus > 0 ? '+' : '') + c.initBonus : '' }}</span>
-              @if (c.hidden) {<span class="ml-1 cn-badge cn-badge-legacy" title="Not shown in the player view">hidden</span>}
+            <span class="min-w-0 flex-1 basis-40 [overflow-wrap:anywhere]">
+              <span class="font-semibold" [id]="'cn-trk-name-' + c.id" [class.line-through]="dead">{{ c.name }}</span>
+              @if (!lair) {<span class="ml-1 text-xs text-muted">{{ c.kind === 'pc' ? 'PC' : c.kind }}{{ c.initBonus ? ' · ' + (c.initBonus > 0 ? '+' : '') + c.initBonus : '' }}</span>}
             </span>
-            @if (c.ac !== null) {<span class="rounded border border-line px-2 py-0.5 text-sm" title="Armor class">🛡 {{ c.ac }}</span>}
-            @if (c.hp !== null) {
-              <span class="flex items-center gap-2 text-sm">
-                <span class="w-28">
-                  <span class="font-mono">{{ c.hp }}</span><span class="text-muted">/{{ c.hpMax ?? '?' }}</span>
-                  @if (c.tempHp) {<span class="ml-1 text-xs text-accent">+{{ c.tempHp }} temp</span>}
-                  <span class="mt-0.5 block h-1.5 overflow-hidden rounded-full bg-panel-2"><span class="block h-full bg-accent" [style.width.%]="hpPercent(c)"></span></span>
+            @if (isActive || c.readied || c.inLair || lair || c.hidden || L.showDownChip(c)) {
+              <span class="flex flex-wrap gap-1 max-sm:basis-full">
+                @if (isActive) {<span class="cn-trk-chip"><span aria-hidden="true">▶</span>Active turn</span>}
+                @if (c.readied; as r) {<span class="cn-trk-chip"><span aria-hidden="true">◷</span>Readied: {{ r.trigger }}{{ r.spell ? ' (spell)' : '' }}</span>}
+                @if (lair) {<span class="cn-trk-chip"><span aria-hidden="true">⌂</span>Lair</span>}
+                @if (c.inLair && !lair) {<span class="cn-trk-chip"><span aria-hidden="true">⌂</span>In lair</span>}
+                @if (L.showDownChip(c)) {<span class="cn-trk-chip"><span aria-hidden="true">▼</span>Down</span>}
+                @if (c.hidden) {<span class="cn-trk-chip" title="Not shown in the player view"><span aria-hidden="true">◌</span>hidden</span>} @else if (lair) {<span class="cn-trk-chip"><span aria-hidden="true">●</span>Shown to players</span>}
+              </span>
+            }
+            @if (!lair && c.ac !== null) {<span class="rounded border border-line px-2 py-0.5 text-sm" title="Armor class"><span aria-hidden="true">🛡 </span><span class="sr-only">AC </span>{{ c.ac }}</span>}
+            @if (!lair && c.hp !== null) {
+              <span class="w-28 text-sm max-sm:basis-full">
+                <span class="font-mono">{{ c.hp }}</span><span class="text-muted">/{{ c.hpMax ?? '?' }}</span>
+                @if (c.tempHp) {<span class="ml-1 text-xs text-accent">+{{ c.tempHp }} temp</span>}
+                <span class="mt-0.5 block h-1.5 overflow-hidden rounded-full bg-panel-2"><span class="block h-full bg-accent" [style.width.%]="hpPercent(c)"></span></span>
+              </span>
+              <input #hpIn data-trk="hp" class="cn-prop-input cn-trk-hp w-20 max-sm:min-w-[8rem] max-sm:flex-1" placeholder="-7 / +5" enterkeyhint="done" [attr.aria-label]="'Change hit points of ' + c.name" title="-7 damage · +5 heal · =20 set · t5 temporary" (keydown.enter)="applyHp(c, hpIn)" />
+              <button type="button" class="cn-btn cn-trk-tap" [attr.aria-label]="'Apply hit point change to ' + c.name" (click)="applyHp(c, hpIn)">Apply</button>
+              @if (L.showCrit(c)) {
+                <label class="cn-trk-tap inline-flex items-center gap-2 text-sm"><input type="checkbox" [checked]="critFor().has(c.id)" (change)="setCrit(c, $any($event.target).checked)" />Critical hit</label>
+              }
+            }
+            <span class="flex flex-wrap gap-3 max-sm:basis-full sm:ml-auto">
+              <button type="button" class="cn-trk-tap inline-flex items-center justify-center gap-1 rounded px-2 text-lg" [attr.aria-label]="'Hidden from players, ' + c.name" [attr.aria-pressed]="c.hidden" [title]="c.hidden ? 'Show to players' : 'Hide from players'" (click)="act({ type: 'update', id: c.id, patch: { hidden: !c.hidden } })">
+                <span aria-hidden="true">{{ c.hidden ? '🙈' : '👁' }}</span>@if (lair) {<span class="text-sm">Hidden</span>}
+              </button>
+              @if (!lair && !ended()) {
+                <button type="button" data-trk="more" class="cn-btn cn-trk-tap" [attr.aria-expanded]="moreOpen" [attr.aria-controls]="'cn-trk-more-' + c.id" [attr.aria-label]="'More actions for ' + c.name + (c.readied ? ', readied' : '')" (click)="toggleMore(c)">
+                  More<span aria-hidden="true">{{ c.readied ? ' •' : '' }} {{ moreOpen ? '▴' : '▾' }}</span>
+                </button>
+              }
+              <button type="button" class="cn-trk-tap px-2 text-muted hover:text-accent" (click)="removeCombatant(c)" [attr.aria-label]="'Remove ' + c.name">✕</button>
+            </span>
+          </div>
+
+          @if (lair) {
+            <div class="mt-2 flex flex-col gap-1">
+              <label class="flex flex-wrap items-center gap-2 text-sm"><span>Last effect used</span><input class="cn-input max-w-sm flex-1" aria-label="Last lair effect used" [value]="c.notes" maxlength="2000" (change)="act({ type: 'update', id: c.id, patch: { notes: $any($event.target).value } })" /></label>
+              <p class="text-xs text-muted">An effect can't repeat two rounds in a row.</p>
+              @if (lairWarning()) {<p><span class="cn-trk-chip"><span aria-hidden="true">▲</span>No creature is marked as in lair</span></p>}
+            </div>
+          } @else {
+            <div class="mt-1 flex flex-wrap items-center gap-1 text-xs">
+              @for (cond of c.conditions; track cond.name) {
+                <span class="inline-flex items-center gap-1 rounded-full bg-panel-2 px-2 py-0.5">
+                  {{ cond.name }}@if (cond.rounds !== null) { ({{ cond.rounds }}) }
+                  <button type="button" class="cn-trk-tap text-muted hover:text-accent" (click)="act({ type: 'removeCondition', id: c.id, name: cond.name })" [attr.aria-label]="'Remove ' + cond.name">✕</button>
                 </span>
-                <input class="cn-prop-input w-20" placeholder="-7 / +5" [attr.aria-label]="'Change hit points of ' + c.name" title="-7 damage · +5 heal · =20 set · t5 temporary" (keydown.enter)="applyHp(c, $any($event.target))" />
-              </span>
+              }
+              @if (conditionFor() === c.id) {
+                <form class="inline-flex items-center gap-1" (submit)="$event.preventDefault(); addCondition(c, cn.value, cr.value)">
+                  <input #cn class="cn-prop-input w-36" list="cn-conditions" placeholder="Condition" aria-label="Condition" />
+                  <input #cr type="number" min="1" class="cn-prop-input w-16" placeholder="rounds" aria-label="Rounds" />
+                  <button type="submit" class="cn-trk-tap rounded border border-line px-2">Add</button>
+                </form>
+              } @else {
+                <button type="button" class="cn-trk-tap rounded-full border border-dashed border-line px-2 py-0.5 text-muted hover:border-accent" (click)="conditionFor.set(c.id)">+ condition</button>
+              }
+              <button type="button" class="cn-trk-tap rounded-full border border-dashed border-line px-2 py-0.5 text-muted hover:border-accent" (click)="notesFor.set(notesFor() === c.id ? null : c.id)">{{ c.notes ? '📝 notes' : '+ notes' }}</button>
+            </div>
+            @if (notesFor() === c.id) {
+              <textarea class="cn-prop-input mt-1 w-full text-sm" rows="2" [value]="c.notes" [attr.aria-label]="'Notes for ' + c.name" (change)="act({ type: 'update', id: c.id, patch: { notes: $any($event.target).value } })"></textarea>
             }
-            <button type="button" class="px-1 text-lg" [title]="c.hidden ? 'Show to players' : 'Hide from players'" [attr.aria-pressed]="c.hidden" (click)="act({ type: 'update', id: c.id, patch: { hidden: !c.hidden } })">{{ c.hidden ? '🙈' : '👁' }}</button>
-            <button type="button" class="px-1 text-muted hover:text-accent" (click)="act({ type: 'remove', id: c.id })" [attr.aria-label]="'Remove ' + c.name">✕</button>
-          </div>
-          <div class="mt-1 flex flex-wrap items-center gap-1 text-xs">
-            @for (cond of c.conditions; track cond.name) {
-              <span class="inline-flex items-center gap-1 rounded-full bg-panel-2 px-2 py-0.5">
-                {{ cond.name }}@if (cond.rounds !== null) { ({{ cond.rounds }}) }
-                <button type="button" class="text-muted hover:text-accent" (click)="act({ type: 'removeCondition', id: c.id, name: cond.name })" [attr.aria-label]="'Remove ' + cond.name">✕</button>
-              </span>
+
+            @if (moreOpen && !ended()) {
+              <div class="cn-trk-panel flex flex-col gap-2 text-sm" [id]="'cn-trk-more-' + c.id" (keydown.escape)="closeMore($event, c)">
+                <div>
+                  @if (c.readied) {
+                    <button type="button" class="cn-btn" [attr.aria-label]="'Clear the readied action of ' + c.name" (click)="clearReady(c)">Clear the readied action</button>
+                  } @else {
+                    <button type="button" data-trk="ready-open" class="cn-btn" [attr.aria-expanded]="readyFor() === c.id" (click)="readyFor.set(readyFor() === c.id ? null : c.id)">Ready…</button>
+                  }
+                  @if (readyFor() === c.id && !c.readied) {
+                    <form class="mt-2 flex flex-wrap items-center gap-2" novalidate (submit)="$event.preventDefault(); setReady(c, rt.value, rs.checked)" (keydown.escape)="closeReady($event, c)">
+                      <label class="flex min-w-0 flex-1 basis-56 flex-col gap-1"><span class="text-xs text-muted">Trigger</span>
+                        <input #rt class="cn-input" required maxlength="200" [attr.aria-label]="'Trigger of the readied action of ' + c.name" [attr.aria-invalid]="readyInvalid() === c.id ? 'true' : null" [attr.aria-describedby]="'cn-trk-ready-help-' + c.id" />
+                      </label>
+                      <label class="cn-trk-tap inline-flex items-center gap-2"><input #rs type="checkbox" />Readied spell</label>
+                      <button type="submit" class="cn-btn">Set</button>
+                      <button type="button" class="cn-btn" (click)="closeReady($event, c)">Cancel</button>
+                      <p class="basis-full text-xs text-muted" [id]="'cn-trk-ready-help-' + c.id">{{ c.kind === 'pc' ? 'Players will see this trigger.' : 'Only you will see this trigger.' }}</p>
+                    </form>
+                  }
+                </div>
+                <div>
+                  <button type="button" class="cn-btn" [attr.aria-expanded]="moveFor() === c.id" (click)="moveFor.set(moveFor() === c.id ? null : c.id)">Move after…</button>
+                  @if (moveFor() === c.id) {
+                    @let targets = L.moveTargets(order(), c, t.state.activeId);
+                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                      <label class="flex flex-wrap items-center gap-2"><span>Move {{ c.name }} after</span>
+                        <select #mv class="cn-input w-auto" [disabled]="!targets.length">
+                          @for (o of targets; track o.id) {<option [value]="o.id">{{ o.name }} (initiative {{ o.initiative ?? '–' }})</option>}
+                        </select>
+                      </label>
+                      @if (targets.length) {<button type="button" class="cn-btn" (click)="moveAfter(c, mv.value)">Move</button>} @else {<span class="text-muted">No one acts later in this round.</span>}
+                    </div>
+                  }
+                </div>
+                @if (c.kind !== 'pc') {
+                  <div>
+                    <button type="button" role="switch" class="cn-btn" [attr.aria-checked]="c.inLair === true" [attr.aria-describedby]="'cn-trk-lair-hint-' + c.id" (click)="setInLair(c)"><span aria-hidden="true">{{ c.inLair ? '☑' : '☐' }}</span>In lair</button>
+                    <p class="mt-1 text-xs text-muted" [id]="'cn-trk-lair-hint-' + c.id">Uses the lair numbers for legendary actions and Legendary Resistance.</p>
+                  </div>
+                  <div>
+                    <button type="button" role="switch" class="cn-btn" [attr.aria-checked]="c.deathSaves === true" (click)="toggleDeathFlag(c)"><span aria-hidden="true">{{ c.deathSaves ? '☑' : '☐' }}</span>Makes death saves</button>
+                  </div>
+                }
+              </div>
             }
-            @if (conditionFor() === c.id) {
-              <form class="inline-flex items-center gap-1" (submit)="$event.preventDefault(); addCondition(c, cn.value, cr.value)">
-                <input #cn class="cn-prop-input w-36" list="cn-conditions" placeholder="Condition" aria-label="Condition" />
-                <input #cr type="number" min="1" class="cn-prop-input w-16" placeholder="rounds" aria-label="Rounds" />
-                <button type="submit" class="rounded border border-line px-2">Add</button>
-              </form>
-            } @else {
-              <button type="button" class="rounded-full border border-dashed border-line px-2 py-0.5 text-muted hover:border-accent" (click)="conditionFor.set(c.id)">+ condition</button>
+
+            @if (L.showStartDeathSaves(c) && !ended()) {
+              <button type="button" class="cn-btn mt-2" [attr.aria-label]="'Start death saves for ' + c.name" (click)="setDeathStatus(c, { reset: true })">Start death saves</button>
             }
-            <button type="button" class="rounded-full border border-dashed border-line px-2 py-0.5 text-muted hover:border-accent" (click)="notesFor.set(notesFor() === c.id ? null : c.id)">{{ c.notes ? '📝 notes' : '+ notes' }}</button>
-          </div>
-          @if (notesFor() === c.id) {
-            <textarea class="cn-prop-input mt-1 w-full text-sm" rows="2" [value]="c.notes" [attr.aria-label]="'Notes for ' + c.name" (change)="act({ type: 'update', id: c.id, patch: { notes: $any($event.target).value } })"></textarea>
+
+            @if (L.showDeathPanel(c)) {
+              @let d = c.dying!;
+              <div class="cn-trk-panel" [class.ring-2]="isActive && d.status === 'dying'" [class.ring-accent]="isActive && d.status === 'dying'" role="group" [attr.aria-labelledby]="'cn-trk-ds-' + c.id + ' cn-trk-name-' + c.id">
+                <div class="flex flex-wrap items-center gap-2">
+                  <p class="cn-trk-title" [id]="'cn-trk-ds-' + c.id">Death saves</p>
+                  <span class="cn-trk-chip"><span aria-hidden="true">{{ d.status === 'dying' ? '▼' : d.status === 'stable' ? '■' : '⊗' }}</span>{{ d.status === 'dying' ? 'Dying' : d.status === 'stable' ? 'Stable' : 'Dead' }}</span>
+                </div>
+                @if (isActive && d.status === 'dying' && !ended()) {<p class="mt-1 text-sm">Roll a death save for {{ c.name }}.</p>}
+                <div class="mt-1 flex flex-col gap-1 text-sm">
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1" role="group" [attr.aria-label]="'Successes of ' + c.name">
+                    <span class="w-20">Successes</span>
+                    <span class="inline-flex gap-1" aria-hidden="true">@for (p of L.pips(d.successes, 3); track $index) {<span class="cn-trk-pip cn-trk-pip--round cn-trk-pip--big" [attr.data-on]="p">@if (p) {✓}</span>}</span>
+                    <span class="inline-flex flex-wrap items-center gap-2">
+                      @if (!ended()) {<button type="button" class="cn-btn cn-trk-step" [attr.aria-label]="'Remove a success from ' + c.name" (click)="adjustCount(c, 'successes', -1)">−</button>}
+                      <span>{{ d.successes }} of 3</span>
+                      @if (!ended()) {<button type="button" class="cn-btn cn-trk-step" [attr.aria-label]="'Add a success to ' + c.name" (click)="adjustCount(c, 'successes', 1)">+</button>}
+                    </span>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1" role="group" [attr.aria-label]="'Failures of ' + c.name">
+                    <span class="w-20">Failures</span>
+                    <span class="inline-flex gap-1" aria-hidden="true">@for (p of L.pips(d.failures, 3); track $index) {<span class="cn-trk-pip cn-trk-pip--square cn-trk-pip--big" [attr.data-on]="p">@if (p) {✕}</span>}</span>
+                    <span class="inline-flex flex-wrap items-center gap-2">
+                      @if (!ended()) {<button type="button" class="cn-btn cn-trk-step" [attr.aria-label]="'Remove a failure from ' + c.name" (click)="adjustCount(c, 'failures', -1)">−</button>}
+                      <span>{{ d.failures }} of 3</span>
+                      @if (!ended()) {<button type="button" class="cn-btn cn-trk-step" [attr.aria-label]="'Add a failure to ' + c.name" (click)="adjustCount(c, 'failures', 1)">+</button>}
+                    </span>
+                  </div>
+                </div>
+                @if (d.status === 'dead' && d.failures < 3) {<p class="mt-1 text-xs text-muted">Set by hand or by massive damage.</p>}
+                @if (!ended()) {
+                  @if (d.status === 'dying') {
+                    <div class="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                      <label class="flex items-center gap-2"><span>Roll</span>
+                        <input #roll data-trk="roll" type="number" min="1" max="20" inputmode="numeric" placeholder="d20" class="cn-input w-20" [attr.aria-label]="'Death save d20 roll of ' + c.name" [attr.aria-invalid]="rollInvalid() === c.id ? 'true' : null" (keydown.enter)="recordRoll(c, roll)" (keydown.escape)="rollEscape($event, c)" />
+                      </label>
+                      <button type="button" class="cn-btn" [attr.aria-label]="'Record roll for ' + c.name" (click)="recordRoll(c, roll)">Record roll</button>
+                      <button type="button" class="cn-btn" [attr.aria-label]="'Roll for me, death save for ' + c.name" (click)="rollForMe(c)">Roll for me</button>
+                    </div>
+                    <div class="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                      <button type="button" class="cn-btn" [attr.aria-label]="'Nat 20: up at 1 HP, death save for ' + c.name" (click)="sendDeathSave(c, 20)">Nat 20: up at 1 HP</button>
+                      <button type="button" class="cn-btn" [attr.aria-label]="'Nat 1: two failures, death save for ' + c.name" (click)="sendDeathSave(c, 1)">Nat 1: two failures</button>
+                    </div>
+                  }
+                  <div class="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                    @if (d.status === 'dying') {
+                      <button type="button" data-trk="ds-status" class="cn-btn" [attr.aria-label]="'Stable, ' + c.name" (click)="setDeathStatus(c, { reset: true, status: 'stable' })">Stable</button>
+                    }
+                    @if (d.status === 'stable') {
+                      @if (d.successes > 0 || d.failures > 0) {<button type="button" data-trk="ds-status" class="cn-btn" [attr.aria-label]="'Clear counts, ' + c.name" (click)="setDeathStatus(c, { reset: true, status: 'stable' })">Clear counts</button>}
+                    }
+                    @if (d.status !== 'dying') {
+                      <button type="button" data-trk="ds-status" class="cn-btn" [attr.aria-label]="'Back to dying, ' + c.name" (click)="setDeathStatus(c, { reset: true })">Back to dying</button>
+                    }
+                    @if (d.status !== 'dead') {
+                      <button type="button" data-trk="ds-status" class="cn-btn ms-4" [attr.aria-label]="'Dead, ' + c.name" (click)="setDeathStatus(c, { status: 'dead' })">Dead</button>
+                    }
+                  </div>
+                }
+              </div>
+            }
+
+            @if (leg || res) {
+              <div class="cn-trk-pair">
+                @if (c.legendary && leg) {
+                  <div class="cn-trk-panel" role="group" [attr.aria-labelledby]="'cn-trk-lg-' + c.id + ' cn-trk-name-' + c.id">
+                    <p class="cn-trk-title" [id]="'cn-trk-lg-' + c.id">Legendary actions{{ c.inLair ? ' · in lair: ' + leg.max + ' per round' : '' }}</p>
+                    <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                      <span class="inline-flex gap-1" aria-hidden="true">@for (p of leg.pips; track $index) {<span class="cn-trk-pip cn-trk-pip--diamond" [attr.data-on]="p"><span>@if (p) {●}</span></span>}</span>
+                      <span>@if (leg.none) {<span aria-hidden="true">▲ </span>}{{ leg.text }}</span>
+                    </div>
+                    @if (!ended()) {
+                      <div class="mt-1 flex flex-wrap items-center gap-2 text-sm">
+                        <span class="inline-flex flex-wrap items-center gap-2" role="group" [attr.aria-label]="'Spend legendary actions of ' + c.name">
+                          <span>Spend</span>
+                          @for (n of [1, 2, 3]; track n) {
+                            @if (n <= leg.max) {<button type="button" class="cn-btn cn-trk-step" [attr.aria-label]="'Spend ' + n + ' legendary action' + (n === 1 ? '' : 's') + ' of ' + c.name" (click)="act({ type: 'legendarySpend', id: c.id, amount: n })">{{ n }}</button>}
+                          }
+                        </span>
+                        <button type="button" class="cn-btn" [attr.aria-label]="'Give back one legendary action of ' + c.name" (click)="act({ type: 'legendaryUndo', id: c.id, amount: 1 })">Undo</button>
+                      </div>
+                    }
+                    @if (L.legendaryWarning(c); as w) {<p class="mt-1"><span class="cn-trk-chip"><span aria-hidden="true">▲</span>{{ w }}: may not take legendary actions</span></p>}
+                  </div>
+                }
+                @if (c.resistance && res) {
+                  <div class="cn-trk-panel" role="group" [attr.aria-labelledby]="'cn-trk-lr-' + c.id + ' cn-trk-name-' + c.id">
+                    <p class="cn-trk-title" [id]="'cn-trk-lr-' + c.id">Legendary resistance{{ c.inLair ? ' · in lair: ' + res.max : '' }}</p>
+                    <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                      <span class="inline-flex gap-1" aria-hidden="true">@for (p of res.pips; track $index) {<span class="cn-trk-pip cn-trk-pip--round" [attr.data-on]="p">@if (p) {●}</span>}</span>
+                      <span>@if (res.none) {<span aria-hidden="true">▲ </span>}{{ res.text }}</span>
+                      @if (!ended()) {
+                        <button type="button" class="cn-btn" [attr.aria-label]="'Use one Legendary Resistance of ' + c.name" (click)="act({ type: 'legendaryResist', id: c.id })">Use one</button>
+                        <button type="button" class="cn-btn" [attr.aria-label]="'Give back one Legendary Resistance of ' + c.name" (click)="act({ type: 'legendaryResist', id: c.id, undo: true })">Give back</button>
+                      }
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+
+            @if (chips.length) {
+              <div class="cn-trk-panel" role="group" [attr.aria-labelledby]="'cn-trk-rc-' + c.id + ' cn-trk-name-' + c.id">
+                <p class="cn-trk-title" [id]="'cn-trk-rc-' + c.id">Recharge</p>
+                <div class="mt-1 flex flex-wrap items-center gap-2 text-sm">
+                  @for (r of chips; track r.name) {
+                    @if (ended()) {
+                      <span class="cn-trk-chip"><span aria-hidden="true">{{ r.ready ? '●' : '○' }}</span>{{ r.name }} ({{ r.min === 6 ? '6' : r.min + '–6' }}): {{ r.ready ? 'Ready' : 'Spent' }}</span>
+                    } @else {
+                      <button type="button" class="cn-btn" [attr.aria-label]="r.name + ' (' + (r.min === 6 ? '6' : r.min + '–6') + '): ' + (r.ready ? 'Ready' : 'Spent') + '. ' + (r.ready ? 'Mark used, ' : 'Mark recharged, ') + c.name" (click)="act(r.ready ? { type: 'rechargeUsed', id: c.id, name: r.name } : { type: 'rechargeSet', id: c.id, name: r.name, ready: true })">
+                        <span aria-hidden="true">{{ r.ready ? '●' : '○' }}</span>{{ r.name }} ({{ r.min === 6 ? '6' : r.min + '–6' }}): {{ r.ready ? 'Ready' : 'Spent' }}
+                      </button>
+                    }
+                  }
+                </div>
+                @if (!ended()) {<p class="mt-1 text-xs text-muted">Click when used. A spent ability rolls when this creature's turn starts. Click a spent one to mark it recharged.</p>}
+              </div>
+            }
           }
         </li>
       } @empty {
-        <li class="rounded-xl border border-dashed border-line p-6 text-center text-muted">No combatants yet.</li>
+        <li class="rounded-xl border border-dashed border-line p-6 text-center text-muted">No combatants yet.<br />Add monsters or characters with the buttons above. Press r to roll initiative.</li>
       }
     </ol>
     <datalist id="cn-conditions">
       @for (cond of conditions; track cond) {<option [value]="cond"></option>}
     </datalist>
-    <p class="mt-3 text-xs text-muted">Keys: <kbd>n</kbd> next turn · <kbd>p</kbd> previous · <kbd>r</kbd> roll missing initiative. Hit points: <code>-7</code> damage, <code>+5</code> heal, <code>=20</code> set, <code>t5</code> temporary.</p>
+    <p class="mt-3 text-xs text-muted">Press <kbd>?</kbd> for keys and rules.</p>
   </div>
 } @else if (error()) {
   <p class="p-8 text-center text-muted">{{ error() }}</p>

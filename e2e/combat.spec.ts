@@ -86,7 +86,7 @@ test('keyboard turns and live updates', async () => {
   await page.keyboard.press('n');
   await expect(page.locator('li[aria-current=true]', { hasText: 'Aria' })).toBeVisible();
   await expect(table.locator('li[aria-current=true]', { hasText: 'Aria' })).toBeVisible();
-  await expect(page.locator('[aria-live=polite]', { hasText: 'Round 1' })).toBeVisible();
+  await expect(page.locator('header [aria-live=polite]', { hasText: 'Round 1' })).toBeVisible();
 });
 
 test('damage shows as a health word for players', async () => {
@@ -109,8 +109,50 @@ test('conditions count down with the rounds', async () => {
   await expect(table.locator('li', { hasText: 'Goblin 2' }).getByText('Prone')).toBeVisible();
   await page.locator('h1').click();
   for (let i = 0; i < 7; i++) await page.keyboard.press('n');
-  await expect(page.locator('[aria-live=polite]', { hasText: 'Round 2' })).toBeVisible();
+  await expect(page.locator('header [aria-live=polite]', { hasText: 'Round 2' })).toBeVisible();
   await expect(row).not.toContainText('Prone');
+});
+
+test('the sticky Combat block and the row actions fit at 200% text on a phone', async () => {
+  const { page } = shared;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
+  const sticky = page.locator('div.sticky');
+  expect((await sticky.boundingBox())!.height).toBeLessThanOrEqual(160);
+  const past = await page.evaluate(() => [...document.querySelectorAll('ol[aria-label="Initiative order"] button, ol[aria-label="Initiative order"] input')].filter((e) => e.getBoundingClientRect().right > window.innerWidth + 1).length);
+  expect(past, 'row controls past the viewport edge').toBe(0);
+  await page.evaluate(() => (document.documentElement.style.fontSize = ''));
+  await page.setViewportSize({ width: 1280, height: 720 });
+});
+
+test('a recharge note and a dying character fit a phone at 100% and 200% text', async () => {
+  const { page } = shared;
+  const trackerId = trackerUrl.split('/').pop()!;
+  const act = (a: object) => api<{ rolls?: unknown[]; state: { combatants: { id: string; name: string }[] } }>(page, 'POST', `/api/campaigns/${campaignId}/trackers/${trackerId}/actions`, a);
+  const added = await act({ type: 'add', combatants: [{ name: 'Drake', initiative: 40, hpMax: 50, recharge: [{ name: 'Fire Breath', min: 6 }] }] });
+  const state = await act({ type: 'rechargeUsed', id: added.state.combatants.find((c) => c.name === 'Drake')!.id, name: 'Fire Breath' });
+  const bram = state.state.combatants.find((c) => c.name === 'Bram')!.id;
+  await act({ type: 'update', id: bram, patch: { hp: 0 } });
+  for (let i = 0; i < 12; i++) if ((await act({ type: 'next' })).rolls?.length) break;
+  await page.setViewportSize({ width: 390, height: 844 });
+  const note = page.locator('[data-trk=recharge-note]');
+  await expect(note).toBeVisible();
+  expect((await page.locator('div.sticky:has([data-trk=next])').boundingBox())!.height, 'sticky block with one roll, 100%').toBeLessThanOrEqual(130);
+  await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
+  expect((await page.locator('div.sticky:has([data-trk=next])').boundingBox())!.height, 'sticky block with one roll, 200%').toBeLessThanOrEqual(300);
+  await page.evaluate(() => (document.documentElement.style.fontSize = ''));
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await note.getByRole('button', { name: 'Dismiss recharge rolls' }).click();
+  await expect(note).toHaveCount(0);
+  // The table screen with a dying character at 200% text
+  for (const width of [390, 320]) {
+    await table.setViewportSize({ width, height: 844 });
+    await table.evaluate(() => (document.documentElement.style.fontSize = '200%'));
+    await expect(table.getByText('Successes')).toBeVisible();
+    const past = await table.evaluate(() => [...document.querySelectorAll('main *, li *')].filter((e) => e.getBoundingClientRect().right > window.innerWidth + 1).length);
+    expect(past, `table screen at ${width} px, 200%: elements past the edge`).toBe(0);
+  }
+  await table.evaluate(() => (document.documentElement.style.fontSize = ''));
 });
 
 test("ending combat saves the party's hit points", async () => {
