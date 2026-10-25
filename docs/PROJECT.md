@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Release 1.0 shipped (v1.0.0, 2026-10-22); 1.1.0 to 1.2.0 shipped as post-1.0 follow-ups (not in this file); release 1.3 is broken down and in progress (Epic I1 done); 1.4 and later are assigned but not yet broken down |
+| Status | Release 1.0 shipped (v1.0.0, 2026-10-22); 1.1.0 to 1.2.0 shipped as post-1.0 follow-ups (not in this file); release 1.3 is broken down and in progress (waves 1 to 3 done, waves 4 and 5 open); release 1.3.1 (hardening and follow-ups, §6b) is planned after it; 1.4 and later are assigned but not yet broken down |
 | Date | 2026-10-13, updated 2026-10-23 |
 | Specification | [PRD.md](PRD.md) (what and why). This file is the task list (who and how). |
 | Engineering state | [STATUS.md](STATUS.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [PLAN.md](PLAN.md) |
@@ -16,7 +16,8 @@
 |---|---|---|---|
 | **1.0** | Trustworthy to self-host | M1 License, M2 Accounts, M3 Backup, M4 Trash, M5 Release process, M6 Phone-width | 43 tasks, 10 waves (§5) |
 | **1.1.0 to 1.2.0** | Post-1.0 follow-ups (shipped 2026-10-22) | Sign out other sessions, player-visible page count, accessibility backlog, keyboard block menu, page titles | Not planned here; see [CHANGELOG.md](../CHANGELOG.md) |
-| **1.3** | Prep and play loop | N1 Page history, N3 Reveal to players, I1 Keep hidden links, I3 Tracker additions, I2 Query views | 24 tasks, 5 waves (§6) |
+| **1.3** | Prep and play loop | N1 Page history, N3 Reveal to players, I1 Keep hidden links, I3 Tracker additions, I2 Query views | 22 tasks, 5 waves (§6) |
+| **1.3.1** | Hardening and follow-ups | Rest of the player-merge hardening (I1.4 to I1.6), cheaper queries (I2.4 to I2.7), offline-gap toast (N3.6), test health (H1.1 to H1.5) | 13 tasks, 4 waves (§6b) |
 | **1.4** | Stay in sync | N2, N4, I4, I5, I10 | Assigned, broken down when scheduled (§7) |
 | **Later** | Grow | N5–N17, I6–I18 | Assigned, broken down when scheduled (§7) |
 
@@ -515,7 +516,7 @@ Renumbered on 2026-10-23: the tags `v1.1.0` to `v1.2.0` were used by post-1.0 fo
 
 ### 6.1b Epic I1b: Harden the player merge (scheduled by the Product Manager, 2026-10-23)
 
-Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `packages/blocks/src/project.ts`), so one owner does them in order, each with its own tests. **Priority:** I1.3 is a data-loss bug (PRD §11: "a data-loss or secret-leak bug interrupts any release"), so it ships in the next patch release (1.3.x or earlier, as soon as scheduled) and does not wait for a minor release. I1.4 is hardening with no known exploit and rides with the next release. I1.5 is a polish and goes to the 1.4 theme only if players report it. No leak is known in any of the three: players never receive hidden ids.
+Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `packages/blocks/src/project.ts`), so one owner does them in order, each with its own tests. **Priority:** I1.3 is a data-loss bug (PRD §11: "a data-loss or secret-leak bug interrupts any release"), so it ships in the next patch release (1.3.x or earlier, as soon as scheduled) and does not wait for a minor release. I1.4 is hardening with no known exploit and, with I1.5 and I1.6, moved to release 1.3.1 (§6b) if players report it. No leak is known in any of the three: players never receive hidden ids.
 
 ### [x] Task I1.3: Keep DM-only children when a player's save is malformed (P1, patch release)
 **Owner**: Minimal Change Engineer · **QA**: Application Security Engineer
@@ -523,25 +524,6 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 **Description**: Two cases in `mergeLevel`: (a) a visible container (e.g. a callout with a DM-only child) submitted without its `content` key deletes the DM-only children: treat a missing `content` as `[]` so the hidden children are put back; (b) a repeated block id duplicates DM-only children, and a new block that reuses a hidden block's id takes that id: use each stored id once, and treat the id of a block the player cannot see as unknown (it is reissued).
 **Acceptance Criteria**: a regression test per case in `packages/blocks/test/` and one end-to-end in `apps/server/test/visibility.test.ts` (DM-only child still there for the DM, never in the player's response); no other test changes; gate green
 **Depends on**: I1.2
-
-### [ ] Task I1.4: Drop links to pages the player cannot see (P2)
-**Owner**: Minimal Change Engineer · **QA**: Application Security Engineer
-**Description**: A `pageLink` a player submits to a page they cannot see is removed (kept as its label text) unless it is restored from the stored block (I1.2). Closes the forged-link path: a player who guesses an id cannot create a link or probe whether a page exists.
-**Acceptance Criteria**: test: a forged link to a hidden page id is stored as plain text, and a restored DM link is still kept; the sentinel crawl stays green
-**Depends on**: I1.3
-
-### [ ] Task I1.5: Restore the right link when the label is marked or repeated (P3)
-**Owner**: Minimal Change Engineer · **QA**: Code Reviewer
-**Description**: `restoreHiddenLinks` matches the label as a substring of unmarked text. Make it also find a label inside marked text (bold, italic; the link keeps the mark) and prefer the occurrence nearest to where the link was, so a repeated word does not get the link.
-**Acceptance Criteria**: tests: a bolded label keeps the DM's link; with the label word earlier in the paragraph, the link lands on the original occurrence
-**Depends on**: I1.4
-**Note**: if this proves to need a stable link identity in the document format, stop and raise it with the Software Architect instead of widening the diff.
-
-### [ ] Task I1.6: Keep a block's id when one common attribute is invalid (found by N3.4 QA)
-**Owner**: Minimal Change Engineer · **QA**: Application Security Engineer
-**Description**: In `packages/blocks/src/sanitize.ts`, `blockAttrs` parses the common attributes (`id`, `visibility`, `revealed`) as one object, so one invalid value (for example `visibility: 'all'`; the valid values are `inherit` and `dm`) drops all three: the block is given a new id and `visibility: 'inherit'`. For an API or AI-assistant client this silently re-ids the block, so a reveal never produces a live event and block references go stale. Parse each attribute separately and fall back per field, so the id survives. Repro: PATCH a block with `attrs: {id: 'bX', visibility: 'all'}` and read it back.
-**Acceptance Criteria**: the repro keeps `id: 'bX'` and falls back to `visibility: 'inherit'`; a unit test per attribute; the I1.x merge tests, the sentinel crawl and the N3.2 detector tests stay green
-**Depends on**: I1.5
 
 ### 6.2 Epic N1: Page history
 
@@ -612,12 +594,6 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 **Description**: Two browser contexts: the DM reveals; the player sees it within 2 seconds without reloading.
 **Depends on**: N3.3, N3.4
 
-### [ ] Task N3.6: Say what changed after a long offline gap (follow-up of N3.4)
-**Owner**: Frontend Developer · **QA**: Evidence Collector
-**Description**: When the stream reconnects without a usable `Last-Event-ID` (no event received before the gap, or the server ring has moved on) the client refetches silently. Compare the refetched open page with the previous one (block ids newly present, which the client already can compute) and toast 'New details on this page | Show' for it; for other pages keep the existing 'You have {n} new pages' summary, and decide with the Narrative Designer whether a 'something changed on {n} pages you can see' summary is wanted for block reveals on pages that are not open (needs a per-page revision comparison). Never put content or secret counts in the toast.
-**Acceptance Criteria**: offline reveal on the open page shows a toast after reconnect; no toast when nothing changed; no duplicate toast when events are replayed; a unit test per case
-**Depends on**: N3.4
-
 ### 6.4 Epic I3: Tracker additions
 
 ### [x] Task I3.1: Rules spec
@@ -666,6 +642,53 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 **Acceptance Criteria**: `docs/qa/query-benchmark.md`; if over budget, a follow-up task is filed
 **Depends on**: I2.2
 
+### 6.6 Release gate and waves
+
+### [ ] Task G2.1: Release 1.3 certification
+**Owner**: Reality Checker · **QA**: **Owner (human)**
+**Description**: Evidence for every 1.3 item; full gate, `pnpm e2e`, phone project, Docker image.
+**Depends on**: all 1.3 tasks
+
+| Wave | Tasks |
+|---|---|
+| 1 | I1.1, N1.1, N3.1, I3.1, I2.1 |
+| patch | I1.3 (data-loss fix, as soon as scheduled; then I1.4, I1.5 with the next release) |
+| 2 | I1.2, N1.2, N3.2, I3.2, I2.2 (all done 2026-10-24) |
+| 3 | N1.3, N3.3, N3.4, I3.3, I2.3 (all done 2026-10-24 and 2026-10-25) |
+| 4 | N1.4, N1.5, N3.5, I3.4 |
+| 5 | N1.6, then G2.1 |
+
+## 6b. Release 1.3.1: Hardening and follow-ups
+
+Added 2026-10-25 by the Senior Project Manager. These are the open items from the release 1.3 QA reports that no 1.3 wave takes: the rest of the player-merge hardening (I1.4 to I1.6), faster queries (I2.4 to I2.7), the offline-gap toast (N3.6) and test health (H1.1 to H1.5). They ship after release 1.3 and before 1.4. Task text is unchanged from where each was first filed; the references (`docs/qa/query-benchmark.md`, `docs/design/reveal.md`, the I1.2 and I1.3 Done notes) still apply.
+
+**Theme:** nothing new for players. The player merge becomes stricter, queries get cheaper, the live reveal says more after a gap, and the test suite stops failing under load.
+
+**Not in 1.3.1:** wave 4 and 5 of release 1.3 (N1.4, N1.5, N1.6, N3.5, I3.4, G2.1) stay in §6. The restore drill against the built bundle (H1.2) is also a step of the 1.3 gate: until H1.2 is done, G2.1 runs it by hand.
+
+### 6b.1 Epic I1b: Harden the player merge (continued from §6.1b)
+
+### [ ] Task I1.4: Drop links to pages the player cannot see (P2)
+**Owner**: Minimal Change Engineer · **QA**: Application Security Engineer
+**Description**: A `pageLink` a player submits to a page they cannot see is removed (kept as its label text) unless it is restored from the stored block (I1.2). Closes the forged-link path: a player who guesses an id cannot create a link or probe whether a page exists.
+**Acceptance Criteria**: test: a forged link to a hidden page id is stored as plain text, and a restored DM link is still kept; the sentinel crawl stays green
+**Depends on**: I1.3
+
+### [ ] Task I1.5: Restore the right link when the label is marked or repeated (P3)
+**Owner**: Minimal Change Engineer · **QA**: Code Reviewer
+**Description**: `restoreHiddenLinks` matches the label as a substring of unmarked text. Make it also find a label inside marked text (bold, italic; the link keeps the mark) and prefer the occurrence nearest to where the link was, so a repeated word does not get the link.
+**Acceptance Criteria**: tests: a bolded label keeps the DM's link; with the label word earlier in the paragraph, the link lands on the original occurrence
+**Depends on**: I1.4
+**Note**: if this proves to need a stable link identity in the document format, stop and raise it with the Software Architect instead of widening the diff.
+
+### [ ] Task I1.6: Keep a block's id when one common attribute is invalid (found by N3.4 QA)
+**Owner**: Minimal Change Engineer · **QA**: Application Security Engineer
+**Description**: In `packages/blocks/src/sanitize.ts`, `blockAttrs` parses the common attributes (`id`, `visibility`, `revealed`) as one object, so one invalid value (for example `visibility: 'all'`; the valid values are `inherit` and `dm`) drops all three: the block is given a new id and `visibility: 'inherit'`. For an API or AI-assistant client this silently re-ids the block, so a reveal never produces a live event and block references go stale. Parse each attribute separately and fall back per field, so the id survives. Repro: PATCH a block with `attrs: {id: 'bX', visibility: 'all'}` and read it back.
+**Acceptance Criteria**: the repro keeps `id: 'bX'` and falls back to `visibility: 'inherit'`; a unit test per attribute; the I1.x merge tests, the sentinel crawl and the N3.2 detector tests stay green
+**Depends on**: I1.5
+
+### 6b.2 Epic I2b: Cheaper queries (from the I2.3 benchmark)
+
 ### [ ] Task I2.4: Query reads no page bodies
 **Owner**: Backend Architect · **QA**: Performance Benchmarker
 **Description**: `PageService.livePages()` is `select *`, so every query (and the page tree and other callers around pages.ts 454, 602 and 657) reads and parses every body; a query result never contains one (I2.3: about 80 of 110 ms at 2,000 pages). Select only the summary columns (a body-less `livePageSummaries()` for `queryable()` and `tree()`; keep the full select where a body is needed; check each caller first). No behaviour change.
@@ -690,9 +713,15 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 **Acceptance Criteria**: `bench:query --pages 5000` p50 under 150 ms
 **Depends on**: I2.4, I2.5
 
-### 6.5b Epic H1: Test health and follow-ups found during waves 2 and 3
+### 6b.3 Epic N3b: Say what changed after a gap
 
-Filed 2026-10-25 from the QA reports; none blocks a 1.3 task, all should be done or consciously deferred before G2.1.
+### [ ] Task N3.6: Say what changed after a long offline gap (follow-up of N3.4)
+**Owner**: Frontend Developer · **QA**: Evidence Collector
+**Description**: When the stream reconnects without a usable `Last-Event-ID` (no event received before the gap, or the server ring has moved on) the client refetches silently. Compare the refetched open page with the previous one (block ids newly present, which the client already can compute) and toast 'New details on this page | Show' for it; for other pages keep the existing 'You have {n} new pages' summary, and decide with the Narrative Designer whether a 'something changed on {n} pages you can see' summary is wanted for block reveals on pages that are not open (needs a per-page revision comparison). Never put content or secret counts in the toast.
+**Acceptance Criteria**: offline reveal on the open page shows a toast after reconnect; no toast when nothing changed; no duplicate toast when events are replayed; a unit test per case
+**Depends on**: N3.4
+
+### 6b.4 Epic H1: Test health and follow-ups
 
 ### [ ] Task H1.1: Make the load-sensitive tests reliable
 **Owner**: Test Automation Engineer · **QA**: Reality Checker
@@ -724,21 +753,19 @@ Filed 2026-10-25 from the QA reports; none blocks a 1.3 task, all should be done
 **Acceptance Criteria**: each of the four cases has a decision in `docs/design/tracker-rules.md` and a test
 **Depends on**: none
 
-### 6.6 Release gate and waves
+### 6b.5 Release gate and waves
 
-### [ ] Task G2.1: Release 1.3 certification
+### [ ] Task G3.1: Release 1.3.1 certification
 **Owner**: Reality Checker · **QA**: **Owner (human)**
-**Description**: Evidence for every 1.3 item; full gate, `pnpm e2e`, phone project, Docker image.
-**Depends on**: all 1.3 tasks
+**Description**: Evidence for every 1.3.1 item that was built; full gate, `pnpm e2e`, phone project, the restore drill against the built bundle (H1.2), Docker image.
+**Depends on**: all 1.3.1 tasks except I2.6 and I2.7, which only run if their condition is met (a Product Manager decision; more than about 5,000 pages)
 
 | Wave | Tasks |
 |---|---|
-| 1 | I1.1, N1.1, N3.1, I3.1, I2.1 |
-| patch | I1.3 (data-loss fix, as soon as scheduled; then I1.4, I1.5 with the next release) |
-| 2 | I1.2, N1.2, N3.2, I3.2, I2.2 (all done 2026-10-24) |
-| 3 | N1.3, N3.3, N3.4, I3.3, I2.3 (all done 2026-10-24 and 2026-10-25) |
-| 4 | N1.4, N1.5, N3.5, I3.4 |
-| 5 | N1.6, then G2.1 |
+| 1 | I1.4, I2.4, I2.5, N3.6, H1.1, H1.2, H1.3, H1.4, H1.5 (independent of each other) |
+| 2 | I1.5 (after I1.4), I2.6 (after I2.5; needs the Product Manager decision first) |
+| 3 | I1.6 (after I1.5), I2.7 (after I2.4 and I2.5; only if campaigns pass about 5,000 pages) |
+| 4 | G3.1 |
 
 ## 7. Backlog: assigned, broken down when scheduled
 

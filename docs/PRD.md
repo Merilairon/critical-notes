@@ -191,6 +191,7 @@ All of the following is built and tested (unit, API and browser tests; see [STAT
 | **1.0** | Trustworthy to self-host | M1–M6 |
 | **1.0, 1.1.x, 1.2.0** | Shipped 2026-10-16 to 2026-10-22: 1.0 as above; 1.1.0 to 1.2.0 were follow-ups (sign out other sessions, accessibility, keyboard block menu), not the themes below | M1–M6, then post-1.0 follow-ups |
 | **1.3** | Prep and play loop | N1 page history, N3 reveal to players, I1 keep hidden links, I3 tracker additions, I2 query views |
+| **1.3.1** | Hardening and follow-ups | Player-merge hardening (I1 follow-ups), cheaper queries (I2 follow-ups), offline-gap toast (N3 follow-up), test health |
 | **1.4** | Stay in sync | N2 activity feed, N4 generators, I4 merge on conflict, I5 player snippets, I10 onboarding |
 | **Later** | Grow | N5 OAuth for MCP, N6 maps, N7 calendar, N8 graph, N9 shared dice, N10 co-editing, N11 SRD-only mode, then P3 items as demand shows |
 
