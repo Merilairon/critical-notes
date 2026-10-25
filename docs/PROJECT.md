@@ -17,7 +17,7 @@
 | **1.0** | Trustworthy to self-host | M1 License, M2 Accounts, M3 Backup, M4 Trash, M5 Release process, M6 Phone-width | 43 tasks, 10 waves (§5) |
 | **1.1.0 to 1.2.0** | Post-1.0 follow-ups (shipped 2026-10-22) | Sign out other sessions, player-visible page count, accessibility backlog, keyboard block menu, page titles | Not planned here; see [CHANGELOG.md](../CHANGELOG.md) |
 | **1.3** | Prep and play loop | N1 Page history, N3 Reveal to players, I1 Keep hidden links, I3 Tracker additions, I2 Query views | 22 tasks, 5 waves (§6) |
-| **1.3.1** | Hardening and follow-ups | Rest of the player-merge hardening (I1.4 to I1.6), cheaper queries (I2.4 to I2.7), offline-gap toast (N3.6), test health (H1.1 to H1.5) | 13 tasks, 4 waves (§6b) |
+| **1.3.1** | Hardening and follow-ups | Rest of the player-merge hardening (I1.4 to I1.6), cheaper queries (I2.4 to I2.7), offline-gap toast (N3.6), test health (H1.1 to H1.5) | 14 tasks (13 plus the gate), 4 waves (§6b) |
 | **1.4** | Stay in sync | N2, N4, I4, I5, I10 | Assigned, broken down when scheduled (§7) |
 | **Later** | Grow | N5–N17, I6–I18 | Assigned, broken down when scheduled (§7) |
 
@@ -652,7 +652,7 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 | Wave | Tasks |
 |---|---|
 | 1 | I1.1, N1.1, N3.1, I3.1, I2.1 |
-| patch | I1.3 (data-loss fix, as soon as scheduled; then I1.4, I1.5 with the next release) |
+| patch | I1.3 (data-loss fix, done 2026-10-23; I1.4 to I1.6 moved to release 1.3.1, §6b) |
 | 2 | I1.2, N1.2, N3.2, I3.2, I2.2 (all done 2026-10-24) |
 | 3 | N1.3, N3.3, N3.4, I3.3, I2.3 (all done 2026-10-24 and 2026-10-25) |
 | 4 | N1.4, N1.5, N3.5, I3.4 |
