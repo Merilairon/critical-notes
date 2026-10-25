@@ -26,11 +26,13 @@ import { pcDigest } from './facet-digest';
 import { BacklinksPanel } from './backlinks-panel';
 import { CampaignStore } from './campaign.store';
 import { FacetForm } from './facet-form';
+import { LiveService } from './live/live.service';
 import { NpcStatblock } from './npc-statblock';
 import { PropertiesPanel } from './properties-panel';
 import { PageTemplateDialog } from '../templates/page-template-dialog';
 
 const SAVE_DELAY = 700;
+const NO_IDS: readonly string[] = [];
 
 const VISIBILITY_LABELS: Record<PageVisibility, string> = { dm: 'DM only', all: 'All players', selected: 'Selected players' };
 
@@ -46,6 +48,9 @@ export class PageEditor implements OnDestroy {
   private readonly router = inject(Router);
   private readonly title = inject(Title);
   protected readonly store = inject(CampaignStore);
+  protected readonly live = inject(LiveService, { optional: true });
+  /** Block ids a player was just shown ("New" highlight), from the live stream. */
+  protected readonly newBlockIds = computed(() => this.live?.newBlocks()[this.pageId()] ?? NO_IDS);
 
   protected readonly page = signal<PageDto | null>(null);
   /** The document last loaded from the server (input to the editor; edits are not fed back). */
@@ -94,6 +99,21 @@ export class PageEditor implements OnDestroy {
       // Only the route id is a dependency: flush() and load() read and write page state
       untracked(() => void this.flush().finally(() => this.load(id)));
     });
+    // The live stream refreshes this page through this handle, and never over unsaved edits
+    effect((onCleanup) => {
+      const live = this.live;
+      const id = this.pageId();
+      if (!live) return;
+      untracked(() =>
+        live.registerOpen({
+          id,
+          isDirty: () => Object.keys(this.pending).length > 0 || this.saving !== null || this.status() === 'saving',
+          apply: (page) => this.applyLive(page),
+          reload: () => void this.saveAndReload(id),
+        }),
+      );
+      onCleanup(() => live.unregisterOpen(id));
+    });
     effect(() => {
       const p = this.page();
       if (p) this.title.setTitle(pageTitle(p.title, this.store.campaign()?.name));
@@ -118,6 +138,28 @@ export class PageEditor implements OnDestroy {
       this.page.set(null);
       this.notFound.set(true);
     }
+  }
+
+  /**
+   * "Save and reload" from the live toast: save the pending edit first, and only reload when that worked. If the save
+   * hit a conflict (the DM changed the page) or failed, the page stays as it is with its banner, so the player can still copy their text.
+   */
+  protected async saveAndReload(id: string) {
+    // Typing during a save lands in a new pending change: save again until nothing is left, so no edit is dropped or sent late
+    do {
+      await this.flush();
+      if (this.status() === 'conflict' || this.status() === 'error') return;
+    } while (Object.keys(this.pending).length);
+    clearTimeout(this.timer);
+    await this.load(id);
+  }
+
+  /** A fresher copy from the live stream: adopt it (the caller checked that nothing is unsaved). */
+  private applyLive(page: PageDto) {
+    if (page.id !== this.page()?.id) return;
+    this.page.set(page);
+    this.loadedDoc.set(page.body);
+    this.store.patchSummary(page);
   }
 
   /** Queue a change; saves are debounced and merged. */
@@ -262,6 +304,7 @@ export class PageEditor implements OnDestroy {
 
   protected async reloadAfterConflict() {
     this.pending = {};
+    clearTimeout(this.timer);
     await this.load(this.pageId());
   }
 

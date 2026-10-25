@@ -17,9 +17,10 @@ Range.prototype.getBoundingClientRect ??= () => NO_RECT as DOMRect;
 const para = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] });
 const DOC = { type: 'doc', schemaVersion: 1, content: [para('One'), para('Two'), para('Three')] } as unknown as BlockDoc;
 
-@Component({ imports: [BlockEditor], template: `<main><cn-block-editor [doc]="doc()" /></main>` })
+@Component({ imports: [BlockEditor], template: `<main><cn-block-editor [doc]="doc()" [highlightIds]="ids()" /></main>` })
 class Host {
   readonly doc = signal<BlockDoc>(DOC);
+  readonly ids = signal<string[]>([]);
 }
 
 const settle = () => new Promise<void>((r) => setTimeout(r));
@@ -303,5 +304,46 @@ describe('block options menu: moving different kinds of block', () => {
     await t.flush();
     expect(t.status()).toBe('');
   }, 10000);
+});
+
+describe('DM-only toggles keep block ids (the live reveal pairs old and new blocks by id)', () => {
+  const withId = (id: string, text: string, attrs: object = {}) => ({ type: 'paragraph', attrs: { id, ...attrs }, content: [{ type: 'text', text }] });
+  const attrsOf = (t: Awaited<ReturnType<typeof mount>>) => t.editor.editor.state.doc.children.map((n) => [n.attrs['id'], n.attrs['visibility'], n.attrs['revealed']]);
+
+  it('the menu toggles DM only off and on without changing the id', async () => {
+    const t = await mount();
+    await t.load([withId('bAAAAAAAA', 'One'), withId('bBBBBBBBB', 'Two', { visibility: 'dm' })]);
+    await t.caretIn(1);
+    t.button().click();
+    await t.flush();
+    await t.choose('DM only');
+    expect(attrsOf(t)).toEqual([['bAAAAAAAA', 'inherit', false], ['bBBBBBBBB', 'inherit', false]]);
+    await t.caretIn(1);
+    t.button().click();
+    await t.flush();
+    await t.choose('DM only');
+    expect(attrsOf(t)[1]).toEqual(['bBBBBBBBB', 'dm', false]);
+  });
+
+  it('marks the blocks named by highlightIds with data-bid and the New class (own character page), and unmarks them', async () => {
+    const t = await mount();
+    await t.load([withId('bAAAAAAAA', 'One'), withId('bBBBBBBBB', 'Two')]);
+    t.host.ids.set(['bBBBBBBBB']);
+    await t.flush();
+    const marked = Array.from(t.el.querySelectorAll('.tiptap .cn-new-block'));
+    expect(marked.map((m) => [m.getAttribute('data-bid'), m.textContent])).toEqual([['bBBBBBBBB', 'Two']]);
+    t.host.ids.set([]);
+    await t.flush();
+    expect(t.el.querySelector('.cn-new-block')).toBeNull();
+  });
+
+  it('Ctrl+Shift+D keeps the id', async () => {
+    const t = await mount();
+    await t.load([withId('bAAAAAAAA', 'One', { visibility: 'dm' })]);
+    await t.caretIn(0);
+    t.key(t.el.querySelector('.tiptap')!, 'D', { ctrlKey: true, shiftKey: true });
+    await t.flush();
+    expect(attrsOf(t)[0]?.[0]).toBe('bAAAAAAAA');
+  });
 });
 

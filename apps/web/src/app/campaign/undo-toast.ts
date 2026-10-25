@@ -2,6 +2,8 @@ import type { ElementRef} from '@angular/core';
 import { afterNextRender, ChangeDetectionStrategy, Component, effect, inject, Injector, signal, untracked, viewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { CampaignStore } from './campaign.store';
+import { LiveService } from './live/live.service';
+import { LiveToast } from './live/live-toast';
 
 export const UNDO_SECONDS = 10;
 const NOTICE_MS = 4000;
@@ -12,10 +14,11 @@ const NOTICE_MS = 4000;
  */
 @Component({
   selector: 'cn-undo-toast',
-  imports: [RouterLink],
+  imports: [RouterLink, LiveToast],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-50 sm:right-auto sm:left-[max(1rem,env(safe-area-inset-left))] sm:max-w-md lg:max-w-[min(28rem,calc(100vw-14rem))]', '(keydown.escape)': 'onEscape()' },
-  template: `<div role="status" aria-live="polite" aria-atomic="true">
+  template: `@if (live) {<cn-live-toast />}
+    <div role="status" aria-live="polite" aria-atomic="true">
       @if (store.undo(); as u) {
         @if (!store.undoFailed()) {
           <div class="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-panel px-4 py-3 text-sm shadow-xl" (mouseenter)="hovered.set(true)" (mouseleave)="hovered.set(false)" (focusin)="focused.set(true)" (focusout)="focused.set(false)">
@@ -43,6 +46,7 @@ const NOTICE_MS = 4000;
 })
 export class UndoToast {
   protected readonly store = inject(CampaignStore);
+  protected readonly live = inject(LiveService, { optional: true });
   private readonly router = inject(Router);
   private readonly injector = inject(Injector);
   private readonly trashLink = viewChild<ElementRef<HTMLElement>>('trashLink');

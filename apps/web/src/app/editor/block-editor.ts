@@ -9,7 +9,9 @@ import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table
 import { UniqueID } from '@tiptap/extension-unique-id';
 import { Placeholder } from '@tiptap/extensions';
 import type { Node as PMNode } from '@tiptap/pm/model';
-import { NodeSelection, Selection, TextSelection, type Transaction } from '@tiptap/pm/state';
+import { NodeSelection, Plugin, Selection, TextSelection, type Transaction } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { watchSeen } from '../core/seen-observer';
 import StarterKit from '@tiptap/starter-kit';
 import { TiptapEditorDirective } from 'ngx-tiptap';
 import { firstValueFrom } from 'rxjs';
@@ -72,6 +74,34 @@ const VisibilityShortcuts = Extension.create<{ enabled: () => boolean }>({
       return false;
     };
     return { 'Mod-Shift-d': toggle('visibility'), 'Mod-Shift-r': toggle('revealed') };
+  },
+});
+
+/** Marks blocks a player was just shown (live reveal): a node decoration with the "New" class and the block id as `data-bid`. */
+const NewBlocks = Extension.create<{ ids: () => readonly string[] }>({
+  name: 'newBlocks',
+  addOptions() {
+    return { ids: () => [] };
+  },
+  addProseMirrorPlugins() {
+    const ids = this.options.ids;
+    return [
+      new Plugin({
+        props: {
+          decorations: (state) => {
+            const want = ids();
+            if (!want.length) return null;
+            const out: Decoration[] = [];
+            state.doc.descendants((node, pos) => {
+              const id = node.attrs['id'];
+              if (typeof id === 'string' && want.includes(id)) out.push(Decoration.node(pos, pos + node.nodeSize, { class: 'cn-new-block', 'data-bid': id }));
+              return true;
+            });
+            return DecorationSet.create(state.doc, out);
+          },
+        },
+      }),
+    ];
   },
 });
 
@@ -165,6 +195,11 @@ export class BlockEditor implements OnDestroy {
   readonly label = input('Page content');
   readonly pageId = input<string | null>(null);
   readonly changed = output<BlockDoc>();
+  /** Block ids to mark "New" (live reveal), as `BlockView.highlightIds` does for read-only pages. */
+  readonly highlightIds = input<readonly string[]>([]);
+  readonly seen = output<string[]>();
+  private newIds: readonly string[] = [];
+  private stopSeen: (() => void) | null = null;
 
   private readonly editorContext = inject(EDITOR_CONTEXT) as { pageId: WritableSignal<string | null> };
   readonly pageIdSignal = this.editorContext.pageId;
@@ -244,6 +279,7 @@ export class BlockEditor implements OnDestroy {
       VisibilityShortcuts.configure({ enabled: this.gm }),
       BlockMenuShortcut.configure({ open: () => this.openAtCaret(null) }),
       Placeholder.configure({ placeholder: () => this.placeholder(), includeChildren: false }),
+      NewBlocks.configure({ ids: () => this.newIds }),
     ],
     editorProps: { attributes: { class: 'min-h-48 outline-none pl-6', spellcheck: 'true' } },
     onUpdate: ({ editor }) => this.changed.emit({ ...(editor.getJSON() as BlockDoc), schemaVersion: 1 }),
@@ -274,6 +310,29 @@ export class BlockEditor implements OnDestroy {
       });
     });
     effect(() => this.editor.setEditable(this.editable()));
+    // "New" marks: decorations carry the class and a data-bid; the shared observer clears them after SEEN_MS in view
+    effect(() => {
+      const ids = this.highlightIds();
+      this.doc();
+      untracked(() => {
+        this.newIds = ids;
+        this.editor.view.dispatch(this.editor.state.tr.setMeta('addToHistory', false).setMeta('cn-new-blocks', true));
+        this.stopSeen?.();
+        this.stopSeen = null;
+        afterNextRender(
+          () => {
+            const marked = new Map<Element, string>();
+            for (const el of Array.from(this.editor.view.dom.querySelectorAll('.cn-new-block[data-bid]'))) marked.set(el, el.getAttribute('data-bid') ?? '');
+            this.stopSeen = watchSeen(marked, (id) => {
+              this.newIds = this.newIds.filter((x) => x !== id);
+              this.editor.view.dispatch(this.editor.state.tr.setMeta('addToHistory', false).setMeta('cn-new-blocks', true));
+              this.seen.emit([id]);
+            });
+          },
+          { injector: this.injector },
+        );
+      });
+    });
     effect(() => {
       const label = this.label();
       untracked(() =>
@@ -523,6 +582,7 @@ export class BlockEditor implements OnDestroy {
 
   ngOnDestroy() {
     clearTimeout(this.statusTimer);
+    this.stopSeen?.();
     this.editor.destroy();
     this.handle.remove();
   }

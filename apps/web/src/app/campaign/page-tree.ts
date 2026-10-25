@@ -4,6 +4,7 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
 import { PAGE_TYPE_ICONS, type PageSummaryDto } from '@cn/shared';
 import { readStored, writeStored } from '../core/storage';
 import { CampaignStore } from './campaign.store';
+import { LiveService } from './live/live.service';
 
 /** Expanded/collapsed state shared by all tree levels. */
 const expanded = signal<Record<string, boolean>>(readStored('cn.tree.expanded', {}));
@@ -40,6 +41,9 @@ const expanded = signal<Record<string, boolean>>(readStored('cn.tree.expanded', 
           >
             <span aria-hidden="true">{{ page.icon || icons[page.type] }}</span>
             <span class="min-w-0 [overflow-wrap:anywhere]">{{ page.title }}</span>
+            @if (live?.isNew(page.id)) {
+              <span class="shrink-0 rounded-full border-2 border-accent bg-accent px-1.5 text-[0.7rem] leading-4 font-bold text-accent-ink">New</span>
+            }
           </a>
           @if (store.isGm()) {
             <button
@@ -64,6 +68,7 @@ export class PageTreeLevel {
   readonly parentId = input<string | null>(null);
   readonly depth = input(0);
   protected readonly store = inject(CampaignStore);
+  protected readonly live = inject(LiveService, { optional: true });
   protected readonly icons = PAGE_TYPE_ICONS;
   protected readonly children = computed(() => this.store.childrenOf().get(this.parentId()) ?? []);
 

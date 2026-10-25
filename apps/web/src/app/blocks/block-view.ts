@@ -1,5 +1,5 @@
 import { httpResource } from '@angular/common/http';
-import { afterNextRender, ChangeDetectionStrategy, Component, computed, type ElementRef, forwardRef, inject, input, type OnDestroy, signal, viewChild } from '@angular/core';
+import { afterNextRender, ChangeDetectionStrategy, Component, computed, effect, type ElementRef, forwardRef, inject, Injector, input, type OnDestroy, output, signal, untracked, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { PAGE_TYPE_ICONS, type EntityDto, type QueryRowDto } from '@cn/shared';
 import { CampaignStore } from '../campaign/campaign.store';
@@ -11,6 +11,7 @@ import { QueryResults } from '../editor/views/query-results';
 import { EntityView } from '../reference/entity-view';
 import { Inline } from '../reference/render/inline';
 import { Roll } from '../reference/render/roll';
+import { watchSeen } from '../core/seen-observer';
 import { watchHeadingLevels } from './heading-levels';
 import { newTableNameScope, nameTablesInDom } from './table-names';
 
@@ -161,6 +162,11 @@ export class BlockNodes {
   readonly pageId = input<string | null>(null);
   protected readonly store = inject(CampaignStore, { optional: true });
   protected readonly icons = PAGE_TYPE_ICONS;
+  /** Block id for the live "New" highlight (see BlockView.highlightIds). */
+  protected bid(n: ViewNode): string | null {
+    const id = n.attrs?.['id'];
+    return typeof id === 'string' ? id : null;
+  }
   protected imageUrl = (src: unknown) => imageSrcUrl(src as never);
   protected tableRoll(n: ViewNode): string | null {
     const roll = n.attrs?.['roll'];
@@ -203,7 +209,12 @@ export class BlockNodes {
 export class BlockView implements OnDestroy {
   readonly doc = input<{ content?: ViewNode[] } | null>(null);
   readonly pageId = input<string | null>(null);
+  /** Block ids to mark "New" (live reveal). A mark clears after the block has been in view for SEEN_MS, then `seen` fires. */
+  readonly highlightIds = input<readonly string[]>([]);
+  readonly seen = output<string[]>();
   private readonly root = viewChild.required<ElementRef<HTMLElement>>('root');
+  private readonly injector = inject(Injector);
+  private highlighter: (() => void) | null = null;
   private readonly scope = newTableNameScope();
   private observer: MutationObserver | null = null;
   private stopLevels: (() => void) | null = null;
@@ -217,9 +228,32 @@ export class BlockView implements OnDestroy {
       this.observer.observe(el, { childList: true, subtree: true, characterData: true });
       this.stopLevels = watchHeadingLevels(el);
     });
+    effect(() => {
+      const ids = this.highlightIds();
+      this.doc();
+      untracked(() => afterNextRender(() => this.highlight(ids), { injector: this.injector }));
+    });
+  }
+
+  private highlight(ids: readonly string[]) {
+    this.highlighter?.();
+    this.highlighter = null;
+    const root = this.root().nativeElement;
+    const marked = new Map<Element, string>();
+    for (const el of Array.from(root.querySelectorAll('[data-bid]'))) {
+      const id = el.getAttribute('data-bid') ?? '';
+      const on = ids.includes(id);
+      el.classList.toggle('cn-new-block', on);
+      if (on) marked.set(el, id);
+    }
+    this.highlighter = watchSeen(marked, (id, el) => {
+      el.classList.remove('cn-new-block');
+      this.seen.emit([id]);
+    });
   }
 
   ngOnDestroy() {
+    this.highlighter?.();
     this.observer?.disconnect();
     this.stopLevels?.();
   }

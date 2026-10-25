@@ -1570,3 +1570,48 @@ details[open] > summary > .cn-chevron {
     outline-offset: -2px;
   }
 }
+
+/* Live reveal (N3.4): a block a player was just shown gets an accent edge and a "New" pill (text and shape, not colour alone) */
+cn-query-block.cn-new-block,
+cn-ref-embed-block.cn-new-block,
+cn-tabs-block.cn-new-block {
+  display: block;
+}
+.cn-new-block {
+  box-shadow: inset 4px 0 0 var(--color-accent);
+  padding-inline-start: 0.75rem;
+  animation: cn-new-in 300ms ease-out;
+}
+/* In flow, on its own line above the block, so the pill never covers text */
+.cn-new-block::before {
+  content: 'New';
+  display: block;
+  width: max-content;
+  margin-bottom: 0.25rem;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+  padding: 0 0.5rem;
+  font:
+    700 0.7rem/1.1rem ui-sans-serif,
+    system-ui,
+    sans-serif;
+}
+@keyframes cn-new-in {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cn-new-block {
+    animation: none;
+  }
+}
+@media (forced-colors: active) {
+  .cn-new-block {
+    border-inline-start: 4px solid Highlight;
+  }
+  .cn-new-block::before {
+    border: 1px solid ButtonText;
+  }
+}

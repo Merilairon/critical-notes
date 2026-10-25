@@ -22,13 +22,14 @@ import { PageTemplateDialog } from '../templates/page-template-dialog';
 import { ContextService } from '../core/context.service';
 import { LayoutService } from '../core/layout.service';
 import { CampaignStore } from './campaign.store';
+import { LiveService } from './live/live.service';
 import { PageTree } from './page-tree';
 import { UndoToast } from './undo-toast';
 
 @Component({
   selector: 'cn-campaign-shell',
   imports: [RouterOutlet, RouterLink, RouterLinkActive, PageTree, PageTemplateDialog, UndoToast],
-  providers: [CampaignStore],
+  providers: [CampaignStore, LiveService],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'flex min-h-0 flex-1' },
   template: `@if (store.error()) {
@@ -161,6 +162,7 @@ import { UndoToast } from './undo-toast';
 export class CampaignShell implements OnDestroy {
   readonly campaignId = input.required<string>();
   protected readonly store = inject(CampaignStore);
+  private readonly live = inject(LiveService);
   protected readonly context = inject(ContextService);
   private readonly router = inject(Router);
   private readonly http = inject(HttpClient);
@@ -199,7 +201,7 @@ export class CampaignShell implements OnDestroy {
       ),
   );
   /** The fixed toast covers the bottom of the content: leave room so focused elements scroll clear of it. */
-  protected readonly toastShown = computed(() => !!this.store.undo() || !!this.store.toast());
+  protected readonly toastShown = computed(() => !!this.store.undo() || !!this.store.toast() || !!this.live.toast() || this.live.paused());
   protected readonly activeCombats = signal<{ id: string; name: string; round: number }[]>([]);
   /** Game masters run the combat; players open the player view. */
   protected combatLink(trackerId: string) {
@@ -212,7 +214,11 @@ export class CampaignShell implements OnDestroy {
     effect(() => {
       const id = this.campaignId();
       untracked(() => {
-        void this.store.load(id);
+        this.live.stop();
+        // The live stream starts once the campaign (and so the member's role) is known
+        void this.store.load(id).then(() => {
+          if (this.campaignId() === id && !this.store.error()) this.live.start(id);
+        });
         firstValueFrom(
           this.http.get<{ trackers: { id: string; name: string; round: number }[] }>(
             `/api/campaigns/${id}/trackers/active`,
@@ -282,6 +288,7 @@ export class CampaignShell implements OnDestroy {
 
   ngOnDestroy() {
     this.layout.drawerOpen.set(false);
+    this.live.stop();
     this.store.leave();
   }
 }
