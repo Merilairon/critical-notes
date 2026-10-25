@@ -634,8 +634,9 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 **Acceptance Criteria**: unit tests per rule; hidden information stays hidden in the player view
 **Depends on**: I3.1
 
-### [ ] Task I3.3: Tracker UI
+### [x] Task I3.3: Tracker UI
 **Owner**: Frontend Developer · **QA**: Evidence Collector
+**Done:** 2026-10-25, Code Reviewer PASS (2 rounds), QA Evidence Collector: PASS on the behaviour and layout checks, with two measured items accepted by the Orchestrator (below). Built to `docs/design/tracker-ui.md` v1.2 (owner decision: 'Roll for me' rolls the d20 on the client and sends `deathSave {roll}`; the legendary/resistance number-edit form is P2). DM page: death save pips, roll field, Nat 20/Nat 1/Stable/Dead/Clear counts/Back to dying/Start death saves, crit checkbox; legendary spend/undo and resistance use/give back; recharge chips (one per name) and the DM-only roll note; lair row (+ Lair, in-lair and hidden toggles, no HP/AC); Ready; Move after (the turn passes on at once); the More disclosure; two toolbar groups with a sticky Combat group; row-scoped keyboard shortcuts with guards; help text (the temp-HP rule is a table convention); `addMonster` passes the statblock's combat facts; 44 px on touch. Player view: dying and readied for PCs only, strike-through only for dead PCs, an un-hidden lair row shows name and initiative. Browser checks passed: death-save flows, shortcuts and dialog guards, recharge note, Move after, DOM order equals visual order at 320/390/1280, no clipped controls at 200%, no sideways scroll, axe 0 serious/critical (DM page and player view, light and dark), greyscale/deuteranopia crops, no DM-only data in the player's DOM, GET or SSE. **Accepted, not met exactly:** the sticky block with one recharge note at 390 px / 200% text measured 297.7 px against the design's 270 px (accepted up to 300 px); the boss row is about 697 px against the expected 630-650 (report only per the design). **Not tested:** the sticky block with an error alert in a browser (covered by a unit test), five roll toasts, the full Tab-order list, a held key with a real hold, a real player-role account, screen readers and devices. The remaining reducer wrinkles from the I3.2 QA still apply. Merged to `main` 2026-10-25 (the `styles.css` merge needed a repair: a forced-colours block from N3.4 had been cut by the conflict; gate 951 + 453, `pnpm e2e` 108 passed, 8 skipped).
 **Description**: Controls in `play/tracker-page.html` (death save pips, legendary counters, recharge roll, delay/ready) and their display in `tracker-player.ts`; keyboard shortcuts documented.
 **Depends on**: I3.2 · **Design**: UX Architect
 
@@ -701,7 +702,7 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 | 1 | I1.1, N1.1, N3.1, I3.1, I2.1 |
 | patch | I1.3 (data-loss fix, as soon as scheduled; then I1.4, I1.5 with the next release) |
 | 2 | I1.2, N1.2, N3.2, I3.2, I2.2 (all done 2026-10-24) |
-| 3 | N1.3, N3.3, N3.4, I3.3, I2.3 (I2.3 and N1.3 done 2026-10-24) |
+| 3 | N1.3, N3.3, N3.4, I3.3, I2.3 (all done 2026-10-24 and 2026-10-25) |
 | 4 | N1.4, N1.5, N3.5, I3.4 |
 | 5 | N1.6, then G2.1 |
 
