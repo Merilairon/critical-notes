@@ -40,6 +40,9 @@ import type { VisibilityService } from '../services/visibility';
 import { MAX_ZIP_BYTES, type CampaignTransfer } from '../services/campaign-transfer';
 import type { EditionMigration } from '../services/migration';
 
+/** A player's save of their page: room for about twenty paragraphs of the 100,000-character limit; the GM has no such limit. */
+const MAX_PLAYER_PAGE_BODY_BYTES = 2 * 1024 * 1024;
+
 const cloneStatblockInput = z.object({
   pageId: z.string().max(64),
   baseUid: z.string().max(300),
@@ -234,7 +237,18 @@ export function campaignRoutes(deps: {
   });
 
   /** Game masters edit every page; players only their own character (hidden blocks are kept). */
-  app.patch('/:campaignId/pages/:pageId', validate('json', updatePageInput), (c) => {
+  app.patch(
+    '/:campaignId/pages/:pageId',
+    (c, next) =>
+      seen(c).viewer.gm
+        ? next()
+        : bodyLimit({
+            maxSize: MAX_PLAYER_PAGE_BODY_BYTES,
+            onError: () => {
+              throw badRequest('That page is too large to save');
+            },
+          })(c, next),
+    validate('json', updatePageInput), (c) => {
     const { campaignId, viewer, visible } = seen(c);
     const pageId = c.req.param('pageId');
     let page;

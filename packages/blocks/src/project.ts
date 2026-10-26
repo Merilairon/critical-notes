@@ -94,8 +94,8 @@ function restoreHiddenLinks(before: BlockNode, n: BlockNode, ctx: ProjectContext
     for (let k = back >= 0 ? firstTaken(back, label.length) : -1; k >= 0; k = back >= 0 ? firstTaken(back, label.length) : -1) back = k >= label.length ? flat.lastIndexOf(label, k - label.length) : -1;
     const at = fwd < 0 ? back : back < 0 ? fwd : fwd - wasAt <= wasAt - back ? fwd : back;
     if (at < 0) {
-      // A label that is not in the text at all (reworded) is searched for once
-      if (flat.indexOf(label) < 0) absent.add(label);
+      // No free occurrence anywhere (reworded, or all taken): later links with the same label need not search again
+      absent.add(label);
       continue;
     }
     taken.fill(1, at, at + label.length);

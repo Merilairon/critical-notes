@@ -412,6 +412,16 @@ describe('mergePlayerEdit', () => {
       expect(JSON.stringify(merged).match(/"pageId":"hidden-page"/g)).toHaveLength(count);
     });
 
+    it('stays fast with 19,000 hidden links and a label found only at the end of a big text', () => {
+      const labelled = Array.from({ length: 19_000 }, () => [{ type: 'text', text: 'x' }, { type: 'pageLink', attrs: { pageId: 'hidden-page', label: 'a' } }]).flat();
+      const big = sanitizeDoc(doc({ type: 'paragraph', content: labelled }), { newId }).doc;
+      const seen = projectDoc(big, linkCtx)!;
+      const t0 = performance.now();
+      const merged = mergePlayerEdit(big, { ...seen, content: [{ ...seen.content![0]!, content: [{ type: 'text', text: `${'b'.repeat(99_999)}a` }] }] }, linkCtx);
+      expect(performance.now() - t0).toBeLessThan(1000);
+      expect(JSON.stringify(merged).match(/"pageId":"hidden-page"/g)).toHaveLength(1);
+    });
+
     it('keeps a link to a page the player can see', () => {
       const seen = projectDoc(storedLinks, linkCtx)!;
       const link = { type: 'pageLink', attrs: { pageId: 'open-page', label: 'Tavern' } };

@@ -532,6 +532,43 @@ describe('what players may change', () => {
     expect(second.body).toEqual(first.body);
   });
 
+  it('counts the labels of forged links, with the same 400 whether or not the page holds hidden links', async () => {
+    const forged = Array.from({ length: 3 }, (_, i) => ({ type: 'pageLink', attrs: { pageId: `forged-${i}`, label: 'L'.repeat(40_000) } }));
+    const submit = async () => {
+      const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+      return player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, body: { ...mine.body, content: [...mine.body.content, { type: 'paragraph', content: forged }] } });
+    };
+    const first = await submit();
+    expect(first.status).toBe(400);
+    const before = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
+    const links = Array.from({ length: 30 }, () => ({ type: 'paragraph', content: [{ type: 'text', text: 'See ' }, { type: 'pageLink', attrs: { pageId: ids['hidden'], label: 'a' } }] }));
+    expect((await dm.patch(`${base()}/pages/${ids['pc']}`, { revision: before.revision, body: { ...before.body, content: [...before.body.content, ...links] } })).status).toBe(200);
+    const second = await submit();
+    expect(second.status).toBe(400);
+    expect(second.body).toEqual(first.body);
+  });
+
+  it('lets a player save an existing long paragraph unchanged, but not change it', async () => {
+    const big = { type: 'paragraph', attrs: { id: 'bigpara' }, content: [{ type: 'text', text: 'a'.repeat(90_000) }, { type: 'text', text: 'b'.repeat(90_000), marks: [{ type: 'bold' }] }] };
+    const before = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
+    expect((await dm.patch(`${base()}/pages/${ids['pc']}`, { revision: before.revision, body: { ...before.body, content: [...before.body.content, big] } })).status).toBe(200);
+    const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+    expect((await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, body: mine.body })).status).toBe(200);
+    const again = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+    const grown = again.body.content.map((b: { attrs?: { id?: string }; content: unknown[] }) => (b.attrs?.id === 'bigpara' ? { ...b, content: [...b.content, { type: 'text', text: 'c' }] } : b));
+    expect((await player.patch(`${base()}/pages/${ids['pc']}`, { revision: again.revision, body: { ...again.body, content: grown } })).status).toBe(400);
+    const cleaned = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
+    expect((await dm.patch(`${base()}/pages/${ids['pc']}`, { revision: cleaned.revision, body: { ...cleaned.body, content: cleaned.body.content.filter((b: { attrs?: { id?: string } }) => b.attrs?.id !== 'bigpara') } })).status).toBe(200);
+  });
+
+  it('refuses a player’s page save over the request size limit', async () => {
+    const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+    const paragraphs = Array.from({ length: 30 }, () => ({ type: 'paragraph', content: [{ type: 'text', text: 'x'.repeat(90_000) }] }));
+    const res = await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, body: { ...mine.body, content: [...mine.body.content, ...paragraphs] } });
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toContain('too large');
+  });
+
   it('a player cannot reveal: a submitted new block with revealed:true is stored unrevealed', async () => {
     const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
     const forged = { type: 'secret', attrs: { id: 'forged1', revealed: true }, content: [para('Forged secret', { revealed: true })] };

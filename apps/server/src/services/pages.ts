@@ -719,6 +719,23 @@ export class PageService {
   }
 
   /**
+   * A fixed limit on the text of one inline block of what the player submitted (labels of links count, as the merge turns
+   * a forged link into its label). It never looks at hidden content: a longer block is accepted only if it is exactly a
+   * block the player was shown (compared with their projection), so existing long blocks can still be saved unchanged.
+   */
+  private checkPlayerTextSize(stored: BlockDocument | null, submitted: BlockDocument, ctx: ProjectContext) {
+    const parts = (n: BlockNode) => (n.content ?? []).map((c) => (c.type === 'text' ? (c.text ?? '') : c.type === 'pageLink' ? String(c.attrs?.label ?? '') : ''));
+    const size = (n: BlockNode) => parts(n).reduce((sum, t) => sum + t.length, 0);
+    const over = (nodes: BlockNode[] | undefined): BlockNode[] => (nodes ?? []).flatMap((n) => [...(size(n) > MAX_PLAYER_BLOCK_TEXT ? [n] : []), ...over(n.content)]);
+    const long = over(submitted.content);
+    if (!long.length) return;
+    const shown = new Set<string>();
+    const collect = (nodes: BlockNode[] | undefined) => (nodes ?? []).forEach((n) => (size(n) > MAX_PLAYER_BLOCK_TEXT && shown.add(parts(n).join('')), collect(n.content)));
+    collect(projectDoc(stored, ctx)?.content);
+    if (long.some((n) => !shown.has(parts(n).join('')))) throw badRequest(`A paragraph is too long (max ${MAX_PLAYER_BLOCK_TEXT} characters)`);
+  }
+
+  /**
    * A player's edit of their own character: content, details and (non-DM) properties. Blocks they cannot see
    * are kept; they cannot change type, visibility or who may see the page.
    */
@@ -730,13 +747,9 @@ export class PageService {
     const facetType = facetTypeFor(current.type);
     const dmFields = new Set(facetType ? FACET_DM_ONLY_FIELDS[facetType] : []);
     if (input.facet && Object.keys(input.facet).some((k) => dmFields.has(k) || k === 'playerUserId')) throw badRequest('Those details are for the DM');
-    // A fixed limit on what the player submitted (never on what is stored), so it says nothing about hidden content
-    const tooLong = (nodes: BlockNode[] | undefined): boolean =>
-      (nodes ?? []).some((n) => (n.content ?? []).reduce((sum, c) => sum + (c.type === 'text' ? (c.text ?? '').length : 0), 0) > MAX_PLAYER_BLOCK_TEXT || tooLong(n.content));
-    if (input.body && tooLong((input.body as BlockDocument).content)) throw badRequest(`A paragraph is too long (max ${MAX_PLAYER_BLOCK_TEXT} characters)`);
-    const body = input.body
-      ? (mergePlayerEdit(current.body as BlockDocument | null, input.body as BlockDocument, this.playerContext(this.properties.list(campaignId), visible)) as BlockDoc)
-      : undefined;
+    const projectCtx = this.playerContext(this.properties.list(campaignId), visible);
+    if (input.body) this.checkPlayerTextSize(current.body as BlockDocument | null, input.body as BlockDocument, projectCtx);
+    const body = input.body ? (mergePlayerEdit(current.body as BlockDocument | null, input.body as BlockDocument, projectCtx) as BlockDoc) : undefined;
     const saved = this.update(campaignId, pageId, { ...input, ...(body ? { body } : {}) }, ctx);
     return this.projectPage(campaignId, saved, visible);
   }
