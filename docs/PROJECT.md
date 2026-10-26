@@ -551,8 +551,9 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 **Description**: A "History" panel on the page: list (who, when, "via AI assistant" label), a text diff between two versions (`docText`), Restore.
 **Depends on**: N1.3 · **Design**: UX Architect
 
-### [ ] Task N1.5: MCP history tools
+### [x] Task N1.5: MCP history tools
 **Owner**: MCP Builder · **QA**: API Tester
+**Done:** 2026-10-26. `get_page_history` (list or one version; explicit fields, no ids of authors or tokens) and `restore_page_version` (write tokens; needs `currentRevision`). Allowlist: exactly the three history routes, nothing else. Gate 955 + 453.
 **Description**: `get_page_history` (read) and `restore_page_version` (write), so an assistant can undo its own edit.
 **Depends on**: N1.3
 

@@ -4,6 +4,7 @@ import { docToMarkdown, markdownToDoc } from '@cn/blocks/markdown';
 import { PAGE_TYPES, PROPERTY_TYPES, type PageDto, type PageType, type PropertyDefDto, type TrashEntryDto } from '@cn/shared';
 import { z } from 'zod';
 import { ApiError, path } from '../api';
+import type { RestoreResult, RevisionDetail, RevisionListItem } from '../../services/page-history';
 import { PageDirectory } from '../pages';
 import { ToolError, type Tools } from '../tools';
 import { campaignId } from './campaign';
@@ -212,6 +213,59 @@ export function pageTools(t: Tools) {
     'Brings back a deleted page and the subpages deleted with it.',
     z.object({ campaignId, pageId }),
     async ({ campaignId: cid, pageId: id }) => ({ data: await t.api.post(path`/api/campaigns/${cid}/pages/${id}/restore`) }),
+    { idempotent: true },
+  );
+
+  t.read(
+    'get_page_history',
+    'Read the history of a page',
+    'The saved versions of a page, newest first (game masters only; players get an error). Without revision: a list of versions, each with revision, createdAt (epoch milliseconds), author, viaAssistant (true when an AI assistant saved it, with tokenName), cause (edit, restore, create, template, migration, tracker or baseline), restoredFrom, title and bytes; no text. Use before to page back from a revision. With revision: that one version in full (title, type, details, properties and its text as Markdown), to compare it with get_page. To undo an edit, find the version from before it here, then call restore_page_version. Versions saved within two minutes by the same author are one entry, but an assistant edit is always its own entry.',
+    z.object({
+      campaignId,
+      pageId,
+      revision: z.number().int().optional().describe('Read this one version in full; leave out to list versions'),
+      before: z.number().int().optional().describe('For the list: only versions older than this revision'),
+      limit: z.number().int().min(1).max(100).default(20).describe('For the list: how many versions (default 20)'),
+    }),
+    async (a) => {
+      const base = path`/api/campaigns/${a.campaignId}/pages/${a.pageId}/history`;
+      const head = (r: RevisionListItem) => ({
+        revision: r.revision,
+        createdAt: r.createdAt,
+        author: r.author?.displayName ?? null,
+        viaAssistant: r.source === 'mcp',
+        ...(r.source === 'mcp' ? { tokenName: r.tokenName } : {}),
+        cause: r.cause,
+        restoredFrom: r.restoredFrom,
+        title: r.title,
+        bytes: r.bytes,
+      });
+      if (a.revision !== undefined) {
+        const [r, dir] = await Promise.all([t.api.get<RevisionDetail>(`${base}/${a.revision}`), PageDirectory.load(t.api, a.campaignId)]);
+        return {
+          data: { ...head(r), type: r.type, details: r.details ?? {}, properties: r.properties },
+          markdown: docToMarkdown(r.body as BlockDocument | null, { pageRef: dir.ref, pageTitle: dir.title }),
+        };
+      }
+      const { items } = await t.api.get<{ items: RevisionListItem[] }>(base, { before: a.before, limit: a.limit });
+      return { data: items.map(head) };
+    },
+  );
+
+  t.write(
+    'restore_page_version',
+    'Restore an earlier version of a page',
+    "Brings back the title, type, text, details and properties of an earlier version (revision from get_page_history) as a new version, so the restore can itself be undone. Game masters only. Visibility, viewers, parent, tags, icon and who owns a player character are not restored. currentRevision is the page's revision right now (from get_page, or the newest entry of get_page_history); if the page was saved since, nothing is changed and you are told to read it again. Returns the page revision, whether anything changed (false when the page already had that content) and warnings about links or properties that no longer exist.",
+    z.object({
+      campaignId,
+      pageId,
+      revision: z.number().int().describe('The version to bring back (from get_page_history)'),
+      currentRevision: z.number().int().describe("The page's current revision, to make sure nothing was saved in between"),
+    }),
+    async (a) => {
+      const out = await t.api.post<RestoreResult>(path`/api/campaigns/${a.campaignId}/pages/${a.pageId}/history/${a.revision}/restore`, { revision: a.currentRevision });
+      return { data: { id: out.page.id, title: out.page.title, revision: out.page.revision, restored: out.restored, warnings: out.warnings } };
+    },
     { idempotent: true },
   );
 
