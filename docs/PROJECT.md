@@ -758,8 +758,9 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 **Acceptance Criteria**: each of the four cases has a decision in `docs/design/tracker-rules.md` and a test
 **Depends on**: none
 
-### [ ] Task H1.6: Steady the phone-sizing test in combat.spec.ts
+### [x] Task H1.6: Steady the phone-sizing test in combat.spec.ts
 **Owner**: Test Automation Engineer · **QA**: Reality Checker
+**Done:** 2026-10-26, Code Reviewer PASS, QA Reality Checker: PASS. Cause: a test race, not a product bug: after `setViewportSize(390)` the test measured the sticky block before the `matchMedia('(min-width: 640px)')` handler had re-rendered the tracker page, so it still held the wrapped 'Combat setup' toolbar (263 px against 130 px). Fix: a `phoneLayoutSettled` helper (waits for the toolbar to leave the sticky block, no sleeps) used in the two phone-sizing tests; plus a Ghoul flagged for death saves in the player-view test. Evidence: the original spec failed in 5 of 40 runs under load (always 263 vs 130), the fixed spec in 0 of 40 valid runs; a planted `dying` leak on the Ghoul and a planted legendary-counter leak each fail the spec (the `dying` leak passed the old spec); a full e2e run is 137 passed, 8 skipped. Merged 2026-10-26.
 **Description**: Found in the I3.4 QA: 'a recharge note and a dying character fit a phone at 100% and 200% text' failed in 2 of 7 runs on a loaded machine (sticky block 263 px against a 130 px limit), and because the file runs in order it stops every later test. Find out whether the measure is taken before layout settles or the limit is wrong, and fix the cause. Also add a monster flagged for death saves so a leak of `dying` on a non-PC fails the player-view test.
 **Acceptance Criteria**: the file passes 20 times in a row, also while another e2e run loads the machine; a planted `dying` leak on a flagged monster fails the spec
 **Depends on**: none
