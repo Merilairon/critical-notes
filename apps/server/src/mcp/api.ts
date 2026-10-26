@@ -12,6 +12,10 @@ const ID = '[^/?#]+';
 const ROUTES: [string, RegExp][] = [
   ['GET', new RegExp(`^/api/campaigns(/${ID}(/(pages|properties|search|members|encounters|inventory)(/${ID})?)?)?$`)],
   ['GET', new RegExp(`^/api/campaigns/${ID}/trash$`)],
+  // Page history (task N1.5): exactly the list, one revision and the restore of one page. The revision is a strict integer, so
+  // `history/1/../x` or `history/1x` never match. The REST layer lets only game masters through (players get 403) and a read token
+  // cannot POST; there is no route to prune or delete revisions, and none is added here.
+  ['GET', new RegExp(`^/api/campaigns/${ID}/pages/${ID}/history(/-?\\d{1,15})?$`)],
   ['GET', /^\/api\/reference\/(search|autocomplete\/[a-z]+)$/],
   ['GET', new RegExp(`^/api/homebrew/(sources(/${ID}(/entities)?)?|entities/${ID})$`)],
   // `trash` (the trash list) and `export` (a file download) are fixed routes, not template ids. The id here may hold no
@@ -19,6 +23,7 @@ const ROUTES: [string, RegExp][] = [
   ['GET', new RegExp(`^/api/templates(/(?!(?:trash|export)$)[^/?#\\s\\x00-\\x1f]+)?$`)],
   ['POST', new RegExp(`^/api/campaigns/${ID}/(pages(/from-template|/${ID}/(move|restore))?|properties|encounters|inventory/(items|coins))$`)],
   ['POST', new RegExp(`^/api/homebrew/(sources(/${ID}/entities)?|entities/${ID}/restore)$`)],
+  ['POST', new RegExp(`^/api/campaigns/${ID}/pages/${ID}/history/-?\\d{1,15}/restore$`)],
   ['POST', /^\/api\/templates$/],
   ['PATCH', new RegExp(`^/api/campaigns/${ID}/(pages|properties|encounters|inventory/items)/${ID}$`)],
   ['PATCH', new RegExp(`^/api/homebrew/sources/${ID}$`)],

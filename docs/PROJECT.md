@@ -551,8 +551,9 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 **Description**: A "History" panel on the page: list (who, when, "via AI assistant" label), a text diff between two versions (`docText`), Restore.
 **Depends on**: N1.3 · **Design**: UX Architect
 
-### [ ] Task N1.5: MCP history tools
+### [x] Task N1.5: MCP history tools
 **Owner**: MCP Builder · **QA**: API Tester
+**Done:** 2026-10-26, Code Reviewer PASS, QA API Tester: PASS (live /mcp, 5 roles), Application Security Engineer: APPROVED. `get_page_history` (list or one version; explicit fields, no ids of authors or tokens) and `restore_page_version` (write tokens; needs `currentRevision`). Allowlist: exactly the three history routes, nothing else. Gate 955 + 453. Follow-up (low, for 1.3.1): the MCP client's `path` helper leaves `.` and `..` unencoded (only reaches allowlisted routes, `requireDm` still applies); reject them for all tools.
 **Description**: `get_page_history` (read) and `restore_page_version` (write), so an assistant can undo its own edit.
 **Depends on**: N1.3
 

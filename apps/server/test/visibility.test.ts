@@ -3,7 +3,6 @@ import { pageRevisions } from '../src/db/schema';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createFixture, createSignedInApp, TestClient, type Fixture, type TestApp } from './helpers';
 import { openEvents } from './events-helpers';
-import { isAllowed } from '../src/mcp/api';
 import { callTool, makeToken, mcpClient } from './mcp-client';
 import { UNIDENTIFIED_ITEM_NAME, type InventoryDto } from '@cn/shared';
 
@@ -182,6 +181,15 @@ describe('sentinel crawl: nothing DM-only reaches a player', () => {
     expect(JSON.stringify((await player.get(`${base()}/pages/${ids['histo']}`)).body)).not.toMatch(SENTINEL);
   });
 
+  it("gives a GM's AI assistant the same history as the GM: a list without content, a version with it", async () => {
+    const gm = await mcpClient(app, await makeToken(dm, 'read'));
+    const list = await callTool(gm, 'get_page_history', { campaignId, pageId: ids['histo'] });
+    expect(list.isError).toBe(false);
+    expect(list.text).not.toMatch(SENTINEL);
+    const first = await callTool(gm, 'get_page_history', { campaignId, pageId: ids['histo'], revision: 1 });
+    expect(first.text).toMatch(SENTINEL); // GM only: the GM sees what the web app shows
+  });
+
   it('finds no marker in anything a player can request', async () => {
     const bodies: string[] = [];
     // Only what the server answers counts (the requests themselves may search for the marker)
@@ -290,10 +298,16 @@ describe('sentinel crawl: nothing DM-only reaches a player', () => {
     const templates = await read('list_templates', { campaignId });
     for (const tpl of templates.data as { id: string }[]) await read('get_template', { templateId: tpl.id });
     expect((await read('list_encounters', { campaignId })).isError).toBe(true);
-    // A player's token has no way to history: no tool and no route on the allowlist (N1.5 adds them for GM tokens only)
-    for (const [m, u] of [['GET', `/api/campaigns/${campaignId}/pages/${ids['histo']}/history`], ['GET', `/api/campaigns/${campaignId}/pages/${ids['histo']}/history/1`], ['POST', `/api/campaigns/${campaignId}/pages/${ids['histo']}/history/1/restore`]] as const) {
-      expect(isAllowed(m, u!)).toBe(false);
+    // History (N1.5): the routes are on the allowlist, but the REST layer refuses a player's token, for every page (visible,
+    // hidden, own character, missing) and every revision. The refusals are crawled like any other read.
+    for (const key of ['histo', 'town', 'hidden', 'selectedOther', 'pc']) {
+      expect([key, (await read('get_page_history', { campaignId, pageId: ids[key] })).isError]).toEqual([key, true]);
+      expect([key, (await read('get_page_history', { campaignId, pageId: ids[key], revision: 1 })).isError]).toEqual([key, true]);
+      const restore = await read('restore_page_version', { campaignId, pageId: ids[key], revision: 1, currentRevision: 1 });
+      expect([key, restore.isError]).toEqual([key, true]);
     }
+    expect((await read('get_page_history', { campaignId, pageId: 'does-not-exist' })).isError).toBe(true);
+    expect((await dm.get(`${base()}/pages/${ids['histo']}`)).body.revision).toBe(histoRevision); // the refused restore wrote nothing
     const trash = await read('list_trash', { campaignId });
     expect(trash.isError).toBe(true);
     const tools = (await mcp.listTools()).tools;

@@ -71,12 +71,17 @@ describe('API tokens', () => {
   it('read tokens get the read tools only', async () => {
     const reader = await mcpClient(app, await makeToken(dm, 'read'));
     const names = (await reader.listTools()).tools.map((t) => t.name);
-    expect(names).toEqual(expect.arrayContaining(['list_campaigns', 'get_campaign', 'get_page', 'search_rules', 'get_inventory', 'list_templates', 'list_trash']));
+    expect(names).toEqual(expect.arrayContaining(['list_campaigns', 'get_campaign', 'get_page', 'search_rules', 'get_inventory', 'list_templates', 'list_trash', 'get_page_history']));
+    expect(names).not.toContain('restore_page_version');
     expect(names.some((n) => /^(create|update|delete|save|add|remove|change|restore)_/.test(n))).toBe(false);
     const writer = (await mcp.listTools()).tools;
     expect(writer.find((t) => t.name === 'delete_page')?.annotations).toMatchObject({ destructiveHint: true, readOnlyHint: false });
     expect(writer.find((t) => t.name === 'list_trash')?.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
     expect(writer.find((t) => t.name === 'get_page')?.annotations).toMatchObject({ readOnlyHint: true });
+    expect(writer.find((t) => t.name === 'get_page_history')?.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
+    expect(writer.find((t) => t.name === 'restore_page_version')?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false });
+    // 34 tools: 13 read, 21 write; a read token gets the 13
+    expect([writer.length, writer.filter((t) => t.annotations?.readOnlyHint).length, names.length]).toEqual([34, 13, 13]);
   });
 });
 
