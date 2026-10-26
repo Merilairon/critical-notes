@@ -590,8 +590,9 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 **Description**: A toast and a "New" badge on the page for players; the open page refreshes the revealed block.
 **Depends on**: N3.2
 
-### [ ] Task N3.5: Reveal tests
+### [x] Task N3.5: Reveal tests
 **Owner**: Test Automation Engineer · **QA**: Reality Checker
+**Done:** 2026-10-26, Code Reviewer PASS (plus one round of synchronisation fixes: the tree-absence check could pass before the tree rendered, the leak guard, waiting for the player's event stream), QA Reality Checker: PASS. `e2e/reveal.spec.ts` (6 tests, DM and player in two browser contexts): Reveal now on a secret and on a DM-only block and Share now on a handout reach the player within 2 s (`LIVE = 2000` on every live assertion) with no reload (a window marker), and nothing hidden is in the player's page or API responses before the reveal. 6 of 6 solo runs and the full suite (113 passed, 8 skipped); 7 planted bugs (no events, client ignores events, projection leaks, Reveal does nothing, forced reload) each fail the spec. No extra sign-up: the player's session is reused from `players.spec.ts` (`e2e/.auth/player.json`, `PLAYER_STATE`), and one player registers only when the spec runs alone. Notes: the response-body leak guard was never the first to fire in the mutations; the Ctrl+. after click lag seen by the author is not reproduced and the spec uses the drag handle. Merged 2026-10-26.
 **Description**: Two browser contexts: the DM reveals; the player sees it within 2 seconds without reloading.
 **Depends on**: N3.3, N3.4
 
