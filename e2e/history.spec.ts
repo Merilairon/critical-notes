@@ -18,14 +18,16 @@ test('a page with two versions', async () => {
 
 test('open History, compare the first version with the current page', async () => {
   const { page } = shared;
-  const toggle = page.getByRole('button', { name: /History/ });
+  const toggle = page.getByRole('button', { name: /^🕑 History$/ });
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   const panel = page.locator('#cn-history-panel');
   await expect(panel.getByRole('heading', { name: 'History' })).toBeFocused();
   await expect(panel.getByRole('listitem')).toHaveCount(2);
-  await panel.getByRole('checkbox', { name: /Compare version 1\b/ }).check();
+  const first = panel.getByRole('checkbox', { name: 'Compare version 1' });
+  await first.click();
+  await expect(first).toBeChecked();
   const diff = panel.getByRole('region', { name: /Changes from version 1 to version/ });
   await expect(diff).toContainText('removed: Alpha tavern');
   await expect(diff).toContainText('added: Beta tavern');
@@ -50,13 +52,13 @@ test('Escape closes the panel and returns focus to the History button', async ()
   await page.locator('#cn-history-panel').getByRole('heading', { name: 'History' }).focus();
   await page.keyboard.press('Escape');
   await expect(page.locator('#cn-history-panel')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /History/ })).toBeFocused();
+  await expect(page.getByRole('button', { name: /^🕑 History$/ })).toBeFocused();
 });
 
 test('the History button is hidden while previewing as a player', async () => {
   const { page } = shared;
   await page.getByRole('button', { name: /Preview as player/ }).click();
-  await expect(page.getByRole('button', { name: /History/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^🕑 History$/ })).toHaveCount(0);
   await page.getByRole('button', { name: /Preview as player/ }).click();
-  await expect(page.getByRole('button', { name: /History/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^🕑 History$/ })).toBeVisible();
 });

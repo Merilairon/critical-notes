@@ -65,12 +65,16 @@ async function mount(items: HistoryItem[] | number, opts: { revision?: number; p
   const box = (rev: number) => el.querySelector<HTMLInputElement>(`input[data-rev="${rev}"]`)!;
   const restoreBtn = (rev: number) => el.querySelector<HTMLButtonElement>(`[data-restore="${rev}"]`)!;
   const button = (text: string) => Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.includes(text)) as HTMLButtonElement;
+  const reload = async (list: HistoryItem[] = Array.isArray(items) ? items : []) => {
+    http.expectOne(`${BASE}?limit=50`).flush({ items: list });
+    await settle();
+  };
   const tickBox = async (rev: number, d?: HistoryDetail) => {
     box(rev).click();
     if (d) http.expectOne(`${BASE}/${rev}`).flush(d);
     await tick(fixture);
   };
-  return { fixture, el, http, prepare, restored, stale, closed, box, restoreBtn, button, tickBox, rows: () => Array.from(el.querySelectorAll('li')) };
+  return { fixture, el, http, reload, prepare, restored, stale, closed, box, restoreBtn, button, tickBox, rows: () => Array.from(el.querySelectorAll('li')) };
 }
 
 describe('HistoryPanel', () => {
@@ -235,10 +239,11 @@ describe('HistoryPanel', () => {
   });
 
   it('restores a version with no confirm, tells the result, and offers Undo restore', async () => {
-    const { el, http, fixture, restoreBtn, restored, prepare, button } = await mount([item(5), item(4)], { revision: 5 });
+    const { reload, el, http, fixture, restoreBtn, restored, prepare, button } = await mount([item(5), item(4)], { revision: 5 });
     const confirmSpy = vi.spyOn(window, 'confirm');
     restoreBtn(4).click();
     await settle();
+    await reload();
     fixture.detectChanges();
     expect(restoreBtn(4).getAttribute('aria-busy')).toBe('true');
     expect(restoreBtn(4).getAttribute('aria-disabled')).toBe('true');
@@ -260,9 +265,10 @@ describe('HistoryPanel', () => {
   });
 
   it('undo restore restores the version that was current', async () => {
-    const { el, http, fixture, restoreBtn, button, restored } = await mount([item(5), item(4)], { revision: 5 });
+    const { reload, el, http, fixture, restoreBtn, button, restored } = await mount([item(5), item(4)], { revision: 5 });
     restoreBtn(4).click();
     await settle();
+    await reload();
     http.expectOne(`${BASE}/4/restore`).flush({ page: page(6), restored: true, warnings: [] });
     await settle();
     http.expectOne(`${BASE}?limit=50`).flush({ items: [item(6), item(5), item(4)] });
@@ -272,6 +278,7 @@ describe('HistoryPanel', () => {
     fixture.componentRef.setInput('prepare', prepare);
     button('Undo restore').click();
     await settle();
+    await reload([item(6), item(5), item(4)]);
     const req = http.expectOne(`${BASE}/5/restore`);
     expect(req.request.body).toEqual({ revision: 6 });
     req.flush({ page: page(7, ['five']), restored: true, warnings: [] });
@@ -284,9 +291,10 @@ describe('HistoryPanel', () => {
   });
 
   it('undoes to the newest row even when the page revision is higher (saves that change nothing add no row)', async () => {
-    const { http, fixture, restoreBtn, button, el } = await mount([item(5), item(4)], { revision: 7 });
+    const { reload, http, fixture, restoreBtn, button, el } = await mount([item(5), item(4)], { revision: 7 });
     restoreBtn(4).click();
     await settle();
+    await reload();
     const first = http.expectOne(`${BASE}/4/restore`);
     expect(first.request.body).toEqual({ revision: 7 });
     first.flush({ page: page(8), restored: true, warnings: [] });
@@ -296,14 +304,83 @@ describe('HistoryPanel', () => {
     fixture.componentRef.setInput('prepare', vi.fn(async () => ({ ok: true, revision: 8 })));
     button('Undo restore').click();
     await settle();
+    await reload([item(8), item(5), item(4)]);
     expect(http.expectOne(`${BASE}/5/restore`).request.body).toEqual({ revision: 8 });
     expect(el).toBeTruthy();
   });
 
-  it('says nothing changed when restored is false, with no Undo', async () => {
-    const { el, http, fixture, restoreBtn, button } = await mount([item(5), item(4)]);
+  it('reads the list again after prepare, so the undo target is the row the flush created or folded into', async () => {
+    const { http, fixture, restoreBtn, button, reload } = await mount([item(5), item(4)], { revision: 5 });
     restoreBtn(4).click();
     await settle();
+    // the flush folded row 5 into row 6: the list now starts at 6
+    await reload([item(6), item(4)]);
+    http.expectOne(`${BASE}/4/restore`).flush({ page: page(7), restored: true, warnings: [] });
+    await settle();
+    http.expectOne(`${BASE}?limit=50`).flush({ items: [item(7), item(6), item(4)] });
+    await tick(fixture);
+    fixture.componentRef.setInput('prepare', vi.fn(async () => ({ ok: true, revision: 7 })));
+    button('Undo restore').click();
+    await settle();
+    await reload([item(7), item(6), item(4)]);
+    expect(http.expectOne(`${BASE}/6/restore`).request.body).toEqual({ revision: 7 });
+  });
+
+  it('ignores a second press of Restore while one restore runs', async () => {
+    const { http, restoreBtn, reload } = await mount([item(5), item(4), item(3)]);
+    restoreBtn(4).click();
+    restoreBtn(3).click();
+    restoreBtn(4).click();
+    await settle();
+    await reload();
+    http.expectOne(`${BASE}/4/restore`);
+    http.expectNone(`${BASE}/3/restore`);
+  });
+
+  it('renders script and image markup in titles, names and warnings as plain text', async () => {
+    const evil = '<img src=x onerror="window.__pwned=1"><script>window.__pwned=1</script>';
+    const { el, http, fixture, restoreBtn, reload } = await mount([item(5), item(4, { title: evil, author: { id: 'u', displayName: evil } })]);
+    expect(el.querySelector('img, script')).toBeNull();
+    expect(el.textContent).toContain(evil);
+    restoreBtn(4).click();
+    await settle();
+    await reload();
+    http.expectOne(`${BASE}/4/restore`).flush({ page: page(6), restored: true, warnings: [evil] });
+    await settle();
+    http.expectOne(`${BASE}?limit=50`).flush({ items: [item(6), item(5), item(4)] });
+    await tick(fixture);
+    expect(el.querySelector('img, script')).toBeNull();
+    expect((window as unknown as { __pwned?: number }).__pwned).toBeUndefined();
+  });
+
+  it('ignores a late detail failure for a version that was unticked meanwhile', async () => {
+    const { el, http, fixture, box } = await mount([item(5), item(4)]);
+    box(4).click();
+    const req = http.expectOne(`${BASE}/4`);
+    box(4).click();
+    err(req, 500);
+    await tick(fixture);
+    expect(alerts(el)).not.toContain('Could not load version 4');
+    expect(el.textContent).not.toContain('Could not load version 4.');
+  });
+
+  it('drops loaded versions and ticks when the page changes', async () => {
+    const { el, http, fixture, tickBox, box } = await mount([item(5), item(4)]);
+    await tickBox(4, detail(4, ['x']));
+    fixture.componentRef.setInput('page', { ...page(2), id: 'p2' });
+    fixture.detectChanges();
+    http.expectOne('/api/campaigns/c1/pages/p2/history?limit=50').flush({ items: [item(2)] });
+    await tick(fixture);
+    expect(el.querySelector('[data-diff]')).toBeNull();
+    expect(box(4)).toBeNull();
+    expect(el.textContent).toContain('This is the only version so far.');
+  });
+
+  it('says nothing changed when restored is false, with no Undo', async () => {
+    const { reload, el, http, fixture, restoreBtn, button } = await mount([item(5), item(4)]);
+    restoreBtn(4).click();
+    await settle();
+    await reload();
     http.expectOne(`${BASE}/4/restore`).flush({ page: page(5), restored: false, warnings: [] });
     await settle();
     http.expectOne(`${BASE}?limit=50`).flush({ items: [item(5), item(4)] });
@@ -313,9 +390,10 @@ describe('HistoryPanel', () => {
   });
 
   it('shows warnings as text until dismissed', async () => {
-    const { el, http, fixture, restoreBtn, button } = await mount([item(5), item(4)]);
+    const { reload, el, http, fixture, restoreBtn, button } = await mount([item(5), item(4)]);
     restoreBtn(4).click();
     await settle();
+    await reload();
     http.expectOne(`${BASE}/4/restore`).flush({ page: page(6), restored: true, warnings: ['The page linked in "Patron" no longer exists; the link was cleared', '<b>x</b>'] });
     await settle();
     http.expectOne(`${BASE}?limit=50`).flush({ items: [item(6), item(5), item(4)] });
@@ -330,11 +408,12 @@ describe('HistoryPanel', () => {
   });
 
   it('on a stale 409 emits the newer page, keeps the target ticked, alerts and never retries', async () => {
-    const { el, http, fixture, restoreBtn, stale, restored, box } = await mount([item(5), item(4)], { revision: 5 });
+    const { reload, el, http, fixture, restoreBtn, stale, restored, box } = await mount([item(5), item(4)], { revision: 5 });
     const button = restoreBtn(4);
     button.focus();
     button.click();
     await settle();
+    await reload();
     const newer = page(6, ['someone else']);
     err(http.expectOne(`${BASE}/4/restore`), 409, { error: 'This page was changed by someone else', details: { current: newer } });
     await settle();
@@ -351,9 +430,10 @@ describe('HistoryPanel', () => {
   });
 
   it('fetches the page itself when the 409 body has none', async () => {
-    const { http, fixture, restoreBtn, stale } = await mount([item(5), item(4)]);
+    const { reload, http, fixture, restoreBtn, stale } = await mount([item(5), item(4)]);
     restoreBtn(4).click();
     await settle();
+    await reload();
     err(http.expectOne(`${BASE}/4/restore`), 409, { error: 'changed' });
     await settle();
     const newer = page(6);
@@ -366,11 +446,12 @@ describe('HistoryPanel', () => {
   });
 
   it('shows other restore errors and keeps focus on the pressed button', async () => {
-    const { el, http, fixture, restoreBtn, restored } = await mount([item(5), item(4)]);
+    const { el, http, fixture, restoreBtn, restored, reload } = await mount([item(5), item(4)]);
     const b = restoreBtn(4);
     b.focus();
     b.click();
     await settle();
+    await reload();
     err(http.expectOne(`${BASE}/4/restore`), 500, { error: 'Disk full' });
     await tick(fixture);
     expect(alerts(el)).toContain('Disk full');

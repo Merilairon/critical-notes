@@ -121,6 +121,9 @@
           <h3 class="text-sm font-semibold">{{ heading2() }}</h3>
           <p class="text-sm text-muted">Compares text only. Formatting and images are not compared.</p>
           <p id="cn-history-summary" class="mt-1 text-sm">{{ summary() }}</p>
+          @if (degraded()) {
+            <p class="text-sm text-muted">Large change, shown as a block.</p>
+          }
           @if (identical()) {
             <p class="mt-1 text-sm">These two versions are identical.</p>
           }

@@ -1,4 +1,4 @@
-import { collapse, diffFields, diffLines, diffWords, MAX_DIFF_CELLS, showValue, summarize, summaryText, type DiffLine } from './history-diff';
+import { collapse, diffDegrades, diffFields, diffLines, diffWords, MAX_DIFF_CELLS, showValue, summarize, summaryText, type DiffLine } from './history-diff';
 
 const kinds = (l: DiffLine[]) => l.map((x) => x.kind);
 const text = (l: DiffLine) => l.parts.map((p) => p.text).join('');
@@ -126,5 +126,14 @@ describe('diffFields', () => {
 
   it('cuts long values at 80 characters', () => {
     expect(showValue('x'.repeat(200))).toHaveLength(81);
+  });
+});
+
+describe('diffDegrades', () => {
+  it('is true only when the changed middle is above the size guard', () => {
+    const n = Math.ceil(Math.sqrt(MAX_DIFF_CELLS)) + 5;
+    expect(diffDegrades(nLines(n, 'x').join('\n'), nLines(n, 'y').join('\n'))).toBe(true);
+    expect(diffDegrades('a\nb', 'a\nc')).toBe(false);
+    expect(diffDegrades(nLines(n, 'x').join('\n'), nLines(n, 'x').join('\n'))).toBe(false);
   });
 });

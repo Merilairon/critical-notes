@@ -374,8 +374,12 @@ export class PageEditor implements OnDestroy {
   /** A restore (or the newer page after a stale restore) replaces what the editor shows. */
   protected adoptHistory(page: PageDto) {
     if (page.id !== this.page()?.id) return;
-    this.pending = {};
-    clearTimeout(this.timer);
+    // Edits typed while the restore ran would be lost by replacing the page: keep them on screen under the conflict banner instead
+    if (Object.keys(this.pending).length) {
+      clearTimeout(this.timer);
+      this.status.set('conflict');
+      return;
+    }
     this.page.set(page);
     this.loadedDoc.set(page.body);
     this.showProps.set(Object.keys(page.props).length > 0);

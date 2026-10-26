@@ -72,6 +72,22 @@ function lcsOps(a: readonly string[], b: readonly string[]): { op: Op; a?: strin
   return out;
 }
 
+/** True when the two texts are too large to diff line by line: the changed middle is then shown as one removed and one added block. */
+export function diffDegrades(from: string, to: string): boolean {
+  const split = (s: string) => (s === '' ? [] : s.replace(/\r\n?/g, '\n').split('\n'));
+  const a = split(from);
+  const b = split(to);
+  let start = 0;
+  while (start < a.length && start < b.length && a[start] === b[start]) start++;
+  let endA = a.length;
+  let endB = b.length;
+  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) {
+    endA--;
+    endB--;
+  }
+  return (endA - start) * (endB - start) > MAX_DIFF_CELLS;
+}
+
 /** Tokens split on whitespace, whitespace kept as its own token. */
 const tokens = (s: string) => s.split(/(\s+)/).filter((t) => t !== '');
 

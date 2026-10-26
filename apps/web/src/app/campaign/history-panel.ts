@@ -5,7 +5,7 @@ import { FACET_FIELDS, facetTypeFor, PAGE_TYPE_LABELS, type PageDto, type PageTy
 import { firstValueFrom } from 'rxjs';
 import { errorMessage } from '../core/http.interceptor';
 import { CampaignStore } from './campaign.store';
-import { collapse, diffFields, diffLines, summarize, summaryText, type DiffItem } from './history-diff';
+import { collapse, diffDegrades, diffFields, diffLines, summarize, summaryText, type DiffItem } from './history-diff';
 
 /** One row of `GET .../history` (a revision without content). */
 export interface HistoryItem {
@@ -155,7 +155,16 @@ export class HistoryPanel {
     effect(() => {
       this.refresh();
       const pageId = this.pageId();
-      untracked(() => void this.loadFirst(this.loading() || this.lastPageId !== pageId).finally(() => (this.lastPageId = pageId)));
+      untracked(() => {
+        if (this.lastPageId && this.lastPageId !== pageId) {
+          this.cache.set(new Map());
+          this.selected.set([]);
+          this.items.set([]);
+          this.done.set(false);
+          this.clearResult();
+        }
+        void this.loadFirst(this.loading() || this.lastPageId !== pageId).finally(() => (this.lastPageId = pageId));
+      });
     });
     afterNextRender(() => {
       const h = this.heading().nativeElement;
@@ -223,6 +232,7 @@ export class HistoryPanel {
       if (initial) this.status.set('');
     } finally {
       if (gen === this.generation) {
+        if (this.status() === 'Loading history…') this.status.set('');
         this.loading.set(false);
         this.retrying.set(false);
       }
@@ -241,8 +251,10 @@ export class HistoryPanel {
     if (this.loadingMore() || before === null) return;
     this.loadingMore.set(true);
     this.alert.set('');
+    const pid = this.pageId();
     try {
       const res = await firstValueFrom(this.http.get<{ items: HistoryItem[] }>(this.url(`?before=${before}&limit=${PAGE_SIZE}`)));
+      if (pid !== this.pageId()) return;
       const have = new Set(this.items().map((i) => i.revision));
       const fresh = res.items.filter((i) => !have.has(i.revision));
       this.items.update((l) => [...l, ...fresh]);
@@ -251,6 +263,7 @@ export class HistoryPanel {
       const firstNew = fresh[0]?.revision;
       if (firstNew !== undefined) this.focusAfterRender(() => this.host.nativeElement.querySelector<HTMLElement>(`[data-rev="${firstNew}"]`));
     } catch (err) {
+      if (pid !== this.pageId()) return;
       this.alert.set(`Could not load older versions: ${errorMessage(err)}`);
     } finally {
       this.loadingMore.set(false);
@@ -278,10 +291,14 @@ export class HistoryPanel {
     if (this.cache().has(rev)) return;
     this.detailLoading.set(true);
     this.detailError.set(null);
+    const pid = this.pageId();
     try {
       const d = await firstValueFrom(this.http.get<HistoryDetail>(this.url(`/${rev}`)));
+      if (pid !== this.pageId()) return;
       this.cache.update((m) => new Map(m).set(rev, d));
     } catch (err) {
+      // A late failure for a version that was unticked meanwhile, or for another page, is not news
+      if (pid !== this.pageId() || !this.selected().includes(rev)) return;
       const gone = err instanceof HttpErrorResponse && err.status === 404;
       this.detailError.set({ rev, text: gone ? `Version ${rev} no longer exists.` : `Could not load version ${rev}.` });
       if (gone) {
@@ -329,9 +346,17 @@ export class HistoryPanel {
     return s ? `Changes from version ${s.from.revision} to version ${s.to.revision}` : '';
   });
 
-  private readonly lines = computed(() => {
+  private readonly texts = computed(() => {
     const s = this.sides();
-    return s ? diffLines(docText(s.from.body as BlockDocument | null, 'dm'), docText(s.to.body as BlockDocument | null, 'dm')) : [];
+    return s ? { from: docText(s.from.body as BlockDocument | null, 'dm'), to: docText(s.to.body as BlockDocument | null, 'dm') } : null;
+  });
+  private readonly lines = computed(() => {
+    const x = this.texts();
+    return x ? diffLines(x.from, x.to) : [];
+  });
+  protected readonly degraded = computed(() => {
+    const x = this.texts();
+    return !!x && diffDegrades(x.from, x.to);
   });
 
   protected readonly summary = computed(() => summaryText(summarize(this.lines())));
@@ -409,7 +434,9 @@ export class HistoryPanel {
       return;
     }
     const before = prepared.revision;
-    // The version to go back to is the newest row (the page revision can be higher: saves that change nothing add no row)
+    // Flushing pending edits can add, or fold into, a history row: read the list again before choosing the version to go back to
+    // (it is the newest row; the page revision can be higher because saves that change nothing add no row)
+    await this.loadFirst(false);
     const newest = this.items()[0]?.revision ?? null;
     try {
       const out = await firstValueFrom(this.http.post<RestoreResult>(this.url(`/${rev}/restore`), { revision: before }));
