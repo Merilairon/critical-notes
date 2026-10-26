@@ -25,6 +25,7 @@ import { AutosizeTitle, singleLine } from './autosize-title';
 import { pcDigest } from './facet-digest';
 import { BacklinksPanel } from './backlinks-panel';
 import { CampaignStore } from './campaign.store';
+import { HistoryPanel, type HistoryPrepared } from './history-panel';
 import { FacetForm } from './facet-form';
 import { LiveService } from './live/live.service';
 import { NpcStatblock } from './npc-statblock';
@@ -38,7 +39,7 @@ const VISIBILITY_LABELS: Record<PageVisibility, string> = { dm: 'DM only', all: 
 
 @Component({
   selector: 'cn-page-editor',
-  imports: [RouterLink, AutosizeTitle, BlockEditor, BlockView, FacetForm, NpcStatblock, PropertiesPanel, BacklinksPanel, PageTemplateDialog],
+  imports: [RouterLink, AutosizeTitle, BlockEditor, BlockView, FacetForm, NpcStatblock, PropertiesPanel, BacklinksPanel, PageTemplateDialog, HistoryPanel],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './page-editor.html',
 })
@@ -66,6 +67,10 @@ export class PageEditor implements OnDestroy {
   protected readonly previewing = signal(false);
   protected readonly showProps = signal(false);
   protected readonly applying = signal(false);
+  protected readonly historyOpen = signal(false);
+  /** A history restore is writing: the debounced autosave waits. */
+  private readonly historyBusy = signal(false);
+  private readonly historyBtn = viewChild<ElementRef<HTMLElement>>('historyBtn');
   private readonly layout = inject(LayoutService);
   /** On a phone (portrait, or short landscape) the character sheet is a collapsible section; otherwise it is always open. */
   protected readonly collapsible = this.layout.phone;
@@ -101,6 +106,14 @@ export class PageEditor implements OnDestroy {
       // Only the route id is a dependency: flush() and load() read and write page state
       untracked(() => void this.flush().finally(() => this.load(id)));
     });
+    // The editor owns the "restore is writing" flag: whenever the panel goes away (Close, Escape, another page, the player preview)
+    // the flag resets here, because a destroyed panel can no longer report that it finished
+    effect(() => {
+      if (this.historyOpen()) return;
+      untracked(() => {
+        if (this.historyBusy()) this.onHistoryBusy(false);
+      });
+    });
     // The live stream refreshes this page through this handle, and never over unsaved edits
     effect((onCleanup) => {
       const live = this.live;
@@ -130,6 +143,7 @@ export class PageEditor implements OnDestroy {
     this.clearShare();
     this.notFound.set(false);
     this.previewing.set(false);
+    this.historyOpen.set(false);
     this.playerView.set(null);
     try {
       const page = await firstValueFrom(this.http.get<PageDto>(`/api/campaigns/${this.store.id()}/pages/${id}`));
@@ -169,12 +183,7 @@ export class PageEditor implements OnDestroy {
   protected queue(change: Omit<UpdatePageInput, 'revision'>, immediate = false) {
     const p = this.page();
     if (!p) return;
-    this.pending = {
-      ...this.pending,
-      ...change,
-      ...(change.facet ? { facet: { ...(this.pending.facet ?? {}), ...change.facet } } : {}),
-      ...(change.props ? { props: { ...(this.pending.props ?? {}), ...change.props } } : {}),
-    };
+    this.pending = mergeChanges(this.pending, change);
     // Reflect summary changes immediately in the UI
     const local: Partial<PageDto> = {};
     if (change.title !== undefined) local.title = change.title;
@@ -185,7 +194,14 @@ export class PageEditor implements OnDestroy {
     if (change.props) local.props = withoutNulls({ ...p.props, ...change.props });
     if (Object.keys(local).length) this.page.set({ ...p, ...local });
     clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.flush(), immediate ? 0 : SAVE_DELAY);
+    this.timer = setTimeout(() => this.autoFlush(), immediate ? 0 : SAVE_DELAY);
+  }
+
+  /** The debounced save. Held back while a history restore is writing: the restore decides what happens to the typing (see `adoptHistory`). */
+  private autoFlush() {
+    // A conflict cannot be saved over: do not retry a doomed PATCH on every keystroke
+    if (this.historyBusy() || this.status() === 'conflict') return;
+    void this.flush();
   }
 
   private async flush(): Promise<void> {
@@ -206,9 +222,13 @@ export class PageEditor implements OnDestroy {
         this.savedCount.update((n) => n + 1);
       } catch (err) {
         if (err instanceof HttpErrorResponse && err.status === 409) {
+          // Keep what was not saved, so the typing stays on screen and a history restore sees it
+          // `change` is older than whatever was typed since
+          this.pending = mergeChanges(change, this.pending);
           this.status.set('conflict');
         } else {
-          this.pending = { ...change, ...this.pending };
+          // `change` is older than whatever was typed since
+          this.pending = mergeChanges(change, this.pending);
           this.status.set('error');
           this.error.set(errorMessage(err));
         }
@@ -340,6 +360,7 @@ export class PageEditor implements OnDestroy {
     const p = this.page();
     if (!p) return;
     await this.flush();
+    this.historyOpen.set(false);
     try {
       this.playerView.set(await firstValueFrom(this.http.get<PageDto>(`/api/campaigns/${this.store.id()}/pages/${p.id}`, { params: { as: 'player' } })));
       this.previewing.set(true);
@@ -348,6 +369,50 @@ export class PageEditor implements OnDestroy {
       this.error.set(errorMessage(err));
     }
   }
+
+  protected toggleHistory() {
+    if (this.historyOpen()) this.closeHistory();
+    else this.historyOpen.set(true);
+  }
+
+  protected closeHistory() {
+    this.historyOpen.set(false);
+    setTimeout(() => this.historyBtn()?.nativeElement.focus());
+  }
+
+  /** The History panel restores over the saved page: save pending edits first and report the revision. */
+  protected readonly prepareHistory = async (): Promise<HistoryPrepared> => {
+    await this.flush();
+    const ok = this.status() !== 'conflict' && this.status() !== 'error';
+    return { ok, revision: this.page()?.revision ?? 0 };
+  };
+
+  /** The panel's restore starts or ends. When it ends without a conflict, typing that waited is saved. */
+  protected onHistoryBusy(busy: boolean) {
+    this.historyBusy.set(busy);
+    if (!busy && this.status() !== 'conflict' && Object.keys(this.pending).length) this.autoFlush();
+  }
+
+  /**
+   * A restore (or the newer page after a stale restore) replaces what the editor shows. Returns false, changing nothing, when the
+   * editor holds typing that is not saved (pending or being saved): it stays on screen under the conflict banner and the GM
+   * reloads on purpose. The panel says so.
+   */
+  protected readonly adoptHistory = (page: PageDto): boolean => {
+    if (page.id !== this.page()?.id) return true;
+    if (Object.keys(this.pending).length || this.saving) {
+      clearTimeout(this.timer);
+      this.status.set('conflict');
+      return false;
+    }
+    this.page.set(page);
+    this.loadedDoc.set(page.body);
+    this.showProps.set(Object.keys(page.props).length > 0);
+    this.status.set('idle');
+    this.store.patchSummary(page);
+    this.savedCount.update((n) => n + 1);
+    return true;
+  };
 
   protected async openApply() {
     await this.flush();
@@ -409,6 +474,16 @@ export class PageEditor implements OnDestroy {
     clearTimeout(this.shareTimer);
     void this.flush();
   }
+}
+
+/** `older` and `newer` unsaved changes as one: the newer wins per field, `facet` and `props` merge per key. */
+function mergeChanges(older: Omit<UpdatePageInput, 'revision'>, newer: Omit<UpdatePageInput, 'revision'>): Omit<UpdatePageInput, 'revision'> {
+  return {
+    ...older,
+    ...newer,
+    ...(older.facet || newer.facet ? { facet: { ...(older.facet ?? {}), ...(newer.facet ?? {}) } } : {}),
+    ...(older.props || newer.props ? { props: { ...(older.props ?? {}), ...(newer.props ?? {}) } } : {}),
+  };
 }
 
 function withoutNulls(values: Record<string, unknown>): Record<string, unknown> {

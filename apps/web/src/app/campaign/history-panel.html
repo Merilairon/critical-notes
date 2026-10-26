@@ -1,0 +1,172 @@
+<section id="cn-history-panel" class="mt-6 border-t border-line pt-3" aria-labelledby="cn-history-h" (keydown.escape)="close()">
+  <div class="flex items-start justify-between gap-3">
+    <h2 #heading id="cn-history-h" tabindex="-1" class="text-xs font-semibold tracking-wide text-muted uppercase outline-none">History</h2>
+    <button type="button" class="cn-btn px-2 py-1 text-sm font-normal touch:min-h-[44px]" (click)="close()">Close</button>
+  </div>
+  <p class="mt-1 text-sm text-muted">Earlier versions of this page. Tick one to compare it with the current version, or two to compare them with each other.</p>
+  <p id="cn-history-scope" class="mt-1 text-sm text-muted">{{ scope }}</p>
+
+  <div role="status" aria-live="polite" aria-atomic="true" class="mt-2 text-sm">
+    @if (status()) {
+      <p>{{ status() }}</p>
+    }
+    @if (undoTarget() !== null) {
+      <button type="button" class="cn-btn mt-1 bg-accent px-3 py-1.5 text-sm text-accent-ink touch:min-h-[44px]" [attr.aria-disabled]="busyUndo() || null" [attr.aria-busy]="busyUndo() || null" (click)="undo()">
+        {{ busyUndo() ? 'Undoing…' : 'Undo restore' }}
+      </button>
+    }
+    @if (warnings().length) {
+      <div class="mt-2 rounded-xl border border-line bg-panel p-3">
+        <p class="font-semibold">Restored with notes</p>
+        <ul class="mt-1 list-disc pl-5">
+          @for (w of warnings(); track $index) {
+            <li class="[overflow-wrap:anywhere]">{{ w }}</li>
+          }
+        </ul>
+        <button type="button" class="cn-btn mt-2 px-3 py-1.5 text-sm touch:min-h-[44px]" (click)="dismissWarnings()">Dismiss</button>
+      </div>
+    }
+  </div>
+  <div role="alert" class="text-sm text-accent">{{ alert() }}</div>
+
+  <div [attr.aria-busy]="loading() || null" class="mt-2">
+    @if (loadError(); as e) {
+      <div role="alert" class="rounded-xl border border-line bg-panel p-3 text-sm">
+        <p>{{ unavailable() ? 'History is not available for this page.' : 'Could not load history: ' + e }}</p>
+        @if (!unavailable()) {
+          <button type="button" data-action="retry" class="cn-btn mt-2 px-3 py-1.5 text-sm touch:min-h-[44px]" [attr.aria-disabled]="retrying() || null" (click)="retry()">Try again</button>
+        }
+      </div>
+    } @else if (loading()) {
+      <p class="text-sm text-muted">Loading history…</p>
+    } @else if (!items().length) {
+      <p class="text-sm text-muted">No earlier versions yet. Versions are kept from the next edit on.</p>
+    } @else {
+      <fieldset class="min-w-0">
+        <legend class="sr-only">Versions to compare</legend>
+        <ul class="space-y-2" aria-label="Versions">
+          @for (r of rows(); track r.item.revision) {
+            <li class="flex flex-col gap-2 rounded-xl border border-line bg-panel p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div class="min-w-0">
+                <label class="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold touch:min-h-[44px]">
+                  <input
+                    type="checkbox"
+                    class="h-5 w-5 shrink-0"
+                    [attr.data-rev]="r.item.revision"
+                    [attr.aria-label]="'Compare version ' + r.item.revision"
+                    [attr.aria-disabled]="full() && !selected().includes(r.item.revision) ? 'true' : null"
+                    [checked]="selected().includes(r.item.revision)"
+                    (click)="toggle(r.item.revision, $event)"
+                  />
+                  <span aria-hidden="true">Version {{ r.item.revision }}</span>
+                  @if (r.current) {
+                    <span class="rounded-full bg-panel-2 px-2 py-0.5 text-xs font-normal">Current</span>
+                  }
+                </label>
+                <p class="text-sm text-muted [overflow-wrap:anywhere]">{{ r.who }}</p>
+                <p class="text-sm text-muted [overflow-wrap:anywhere]">
+                  <time [attr.datetime]="r.iso" [title]="r.iso">{{ r.when }}</time>
+                  @if (r.cause) {
+                    · {{ r.cause }}
+                  }
+                  · {{ r.size }}
+                </p>
+                @if (r.renamedFrom !== null) {
+                  <p class="text-sm text-muted [overflow-wrap:anywhere]">Title: "{{ r.item.title }}" (was "{{ r.renamedFrom }}")</p>
+                }
+              </div>
+              @if (!r.current) {
+                <button
+                  type="button"
+                  class="cn-btn px-3 py-1.5 max-sm:w-full touch:min-h-[44px]"
+                  [attr.data-restore]="r.item.revision"
+                  [attr.aria-label]="restoreLabel(r.item.revision) + ' version ' + r.item.revision"
+                  aria-describedby="cn-history-scope"
+                  [attr.aria-disabled]="busyRev() !== null || busyUndo() ? 'true' : null"
+                  [attr.aria-busy]="busyRev() === r.item.revision || null"
+                  (click)="restore(r.item.revision, $event)"
+                >
+                  {{ restoreLabel(r.item.revision) }}
+                </button>
+              }
+            </li>
+          }
+        </ul>
+      </fieldset>
+      <p class="mt-1 text-sm text-muted" aria-live="polite">{{ full() ? 'Two versions selected. Untick one to choose another.' : '' }}</p>
+      @if (items().length === 1) {
+        <p class="text-sm text-muted">This is the only version so far.</p>
+      }
+      @if (done()) {
+        <p class="mt-2 text-sm text-muted">That is the oldest saved version.</p>
+      } @else {
+        <button type="button" data-action="older" class="cn-btn mt-2 px-3 py-1.5 text-sm touch:min-h-[44px]" [attr.aria-disabled]="loadingMore() || null" [attr.aria-busy]="loadingMore() || null" (click)="loadOlder()">
+          {{ loadingMore() ? 'Loading…' : 'Load older versions' }}
+        </button>
+      }
+
+      <div class="mt-4" [attr.aria-busy]="compareLoading() || null">
+        @if (!selected().length) {
+          <p class="text-sm text-muted">Pick a version to see what changed.</p>
+        } @else if (detailError(); as de) {
+          <div role="alert" class="rounded-xl border border-line bg-panel p-3 text-sm">
+            <p>{{ de.text }}</p>
+            <button type="button" class="cn-btn mt-2 px-3 py-1.5 text-sm touch:min-h-[44px]" (click)="retryDetail()">Try again</button>
+          </div>
+        } @else if (compareLoading()) {
+          <p class="text-sm text-muted">Loading versions…</p>
+        } @else if (heading2()) {
+          <h3 class="text-sm font-semibold">{{ heading2() }}</h3>
+          <p class="text-sm text-muted">Compares text only. Formatting and images are not compared.</p>
+          <p id="cn-history-summary" class="mt-1 text-sm">{{ summary() }}</p>
+          @if (degraded()) {
+            <p class="text-sm text-muted">Large change, shown as a block.</p>
+          }
+          @if (identical()) {
+            <p class="mt-1 text-sm">These two versions are identical.</p>
+          }
+          <div
+            data-diff
+            role="region"
+            tabindex="0"
+            class="mt-2 max-h-[70vh] overflow-y-auto rounded-xl border border-line bg-panel p-2 font-mono text-sm whitespace-pre-wrap [overflow-wrap:anywhere]"
+            [attr.aria-label]="heading2()"
+            aria-describedby="cn-history-summary"
+          >
+            @for (item of diffItems(); track $index) {
+              @if (item.type === 'gap') {
+                <button type="button" class="cn-btn my-1 px-3 py-1 font-sans text-sm touch:min-h-[44px]" (click)="expand(item.id)">Show {{ item.hidden.length }} unchanged {{ item.hidden.length === 1 ? 'line' : 'lines' }}</button>
+              } @else {
+                <div class="flex min-h-5 gap-2" [class]="item.line.kind === 'added' ? 'bg-accent/10' : item.line.kind === 'removed' ? 'text-muted' : ''">
+                  <span class="w-4 shrink-0 select-none" aria-hidden="true">{{ item.line.kind === 'added' ? '+' : item.line.kind === 'removed' ? '−' : '' }}</span>
+                  <span class="min-w-0 flex-1">
+                    @for (part of item.line.parts; track $index) {
+                      @if (!part.changed) {
+                        <span>{{ part.text }}</span>
+                      } @else if (item.line.kind === 'added') {
+                        <ins class="font-semibold underline decoration-2"><span class="sr-only">added: </span>{{ part.text }}</ins>
+                      } @else {
+                        <del class="line-through"><span class="sr-only">removed: </span>{{ part.text }}</del>
+                      }
+                    }
+                  </span>
+                </div>
+              }
+            }
+          </div>
+          @if (otherChanges().length) {
+            <h3 class="mt-3 text-sm font-semibold">Other changes</h3>
+            <dl class="mt-1 space-y-1 text-sm">
+              @for (c of otherChanges(); track $index) {
+                <div class="[overflow-wrap:anywhere]">
+                  <dt class="inline text-muted">{{ c.group === c.label ? c.label : c.group + ' · ' + c.label }}: </dt>
+                  <dd class="inline">{{ c.from }} to {{ c.to }}</dd>
+                </div>
+              }
+            </dl>
+          }
+        }
+      </div>
+    }
+  </div>
+</section>
