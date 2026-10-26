@@ -27,6 +27,8 @@ const playerErrors: string[] = [];
 const leaks: string[] = [];
 /** True until the DM reveals anything: no response to the player may carry hidden text before that. */
 let guarding = true;
+/** Bodies of the player's responses still being read. */
+const pending = new Set<Promise<void>>();
 let campaignId: string, townId: string, handoutId: string;
 
 test.afterAll(async () => playerContext?.close());
@@ -90,26 +92,41 @@ test('the DM prepares a table with hidden content, and a player joins', async ({
   playerContext = await playerSession(browser, token);
   player = watch(await playerContext.newPage(), playerErrors);
   // Every API response the player's browser gets is checked for hidden content
-  player.on('response', async (res) => {
-    if (!res.url().includes('/api/')) return;
-    const body = await res.text().catch(() => '');
-    if (guarding) for (const s of HIDDEN) if (body.includes(s)) leaks.push(`${s} in ${res.url()}`);
+  player.on('response', (res) => {
+    if (!res.url().includes('/api/') || res.url().endsWith('/events')) return;
+    // Whether the guard was on is decided when the response arrives, not when its body has been read
+    const guarded = guarding;
+    pending.add(
+      res.text().then(
+        (body) => {
+          if (guarded) for (const s of HIDDEN) if (body.includes(s)) leaks.push(`${s} in ${res.url()}`);
+        },
+        () => undefined,
+      ),
+    );
   });
 });
 
 test('before any reveal the player has none of it', async () => {
+  // The player's live event stream is open before anything is revealed (no event can be missed)
+  const streamOpen = player.waitForResponse((res) => /\/campaigns\/[^/]+\/events$/.test(new URL(res.url()).pathname) && res.status() === 200);
   await player.goto(`/c/${campaignId}/p/${townId}`);
+  await streamOpen;
   await expect(player.getByRole('heading', { name: 'Harrow Bridge' })).toBeVisible();
   await expect(player.locator('cn-block-view', { hasText: 'A narrow stone bridge' })).toBeVisible();
   await expect(player.locator('cn-block-view', { hasText: 'Travellers pay a toll' })).toBeVisible();
   const body = player.locator('body');
   for (const s of [SECRET, DM_ONLY, HANDOUT_TEXT, 'REVEAL-HANDOUT']) await expect(body).not.toContainText(s);
+  // The tree has rendered (it lists the visible page) before its lack of the handout means anything
+  await expect(player.locator('cn-page-tree')).toContainText('Harrow Bridge');
   await expect(player.locator('cn-page-tree')).not.toContainText('REVEAL-HANDOUT');
   await expect(player.locator('.cn-new-block')).toHaveCount(0);
   const res = await player.request.get(`/api/campaigns/${campaignId}/pages/${handoutId}`);
   expect(res.status(), 'the handout is hidden from the API too').toBe(404);
-  expect(leaks, 'hidden text in a response before any reveal').toEqual([]);
+  // Every response so far has been read before the guard is lifted
+  await Promise.all(pending);
   guarding = false;
+  expect(leaks, 'hidden text in a response before any reveal').toEqual([]);
 });
 
 test('"Reveal now" on a DM secret reaches the open page of the player without a reload', async () => {
@@ -145,8 +162,9 @@ test('"Reveal now" on a DM-only block shows it live too', async () => {
 test('"Share now" on a handout appears in the player\'s tree with a toast and a New badge', async () => {
   const { page } = shared;
   // The toasts of the two reveals above collapse into one card; clear it so this share gets its own
-  await player.locator('cn-live-toast').getByRole('button', { name: 'Dismiss' }).click();
-  await expect(player.locator('cn-live-toast [role=status] > div')).toHaveCount(0);
+  const dismiss = player.locator('cn-live-toast').getByRole('button', { name: 'Dismiss' });
+  if (await dismiss.count()) await dismiss.click();
+  await expect(dismiss).toHaveCount(0);
   await page.goto(`/c/${campaignId}/p/${handoutId}`);
   await page.getByRole('group', { name: 'Share this handout' }).getByRole('button', { name: 'Share now' }).click();
   await expect(page.getByText('Shared with all players')).toBeVisible();
