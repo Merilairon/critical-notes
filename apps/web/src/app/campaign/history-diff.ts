@@ -143,7 +143,8 @@ export function diffLines(from: string, to: string): DiffLine[] {
         addLines[k].parts = w.added;
       }
     }
-    out.push(...remLines, ...addLines);
+    // A blank line that was added or removed is only a paragraph separator in the text: not worth a row of its own
+    out.push(...remLines.filter((l) => l.parts.some((p) => p.text !== '')), ...addLines.filter((l) => l.parts.some((p) => p.text !== '')));
   }
   return out;
 }

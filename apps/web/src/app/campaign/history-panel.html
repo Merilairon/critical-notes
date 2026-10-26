@@ -48,7 +48,7 @@
           @for (r of rows(); track r.item.revision) {
             <li class="flex flex-col gap-2 rounded-xl border border-line bg-panel p-3 sm:flex-row sm:items-center sm:justify-between">
               <div class="min-w-0">
-                <label class="flex items-center gap-2 font-semibold touch:min-h-[44px]">
+                <label class="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold touch:min-h-[44px]">
                   <input
                     type="checkbox"
                     class="h-5 w-5 shrink-0"
@@ -111,9 +111,7 @@
         } @else if (detailError(); as de) {
           <div role="alert" class="rounded-xl border border-line bg-panel p-3 text-sm">
             <p>{{ de.text }}</p>
-            @if (!de.text.endsWith('no longer exists.')) {
-              <button type="button" class="cn-btn mt-2 px-3 py-1.5 text-sm touch:min-h-[44px]" (click)="retryDetail()">Try again</button>
-            }
+            <button type="button" class="cn-btn mt-2 px-3 py-1.5 text-sm touch:min-h-[44px]" (click)="retryDetail()">Try again</button>
           </div>
         } @else if (compareLoading()) {
           <p class="text-sm text-muted">Loading versions…</p>

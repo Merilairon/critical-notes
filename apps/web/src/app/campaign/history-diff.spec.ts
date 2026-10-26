@@ -69,6 +69,13 @@ describe('diffLines', () => {
   });
 });
 
+describe('blank separator lines', () => {
+  it('are not shown as added or removed rows', () => {
+    const d = diffLines('one\n\ntwo', 'one\n\nthree\n\nfour');
+    expect(d.filter((l) => l.kind !== 'equal' && l.parts.every((p) => p.text === ''))).toEqual([]);
+  });
+});
+
 describe('diffWords', () => {
   it('keeps whitespace out of the changed flag', () => {
     const w = diffWords('a b c', 'a x c');

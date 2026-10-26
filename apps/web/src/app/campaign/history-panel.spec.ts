@@ -590,4 +590,42 @@ describe('HistoryPanel', () => {
     expect(document.activeElement).toBe(el.querySelector('h2'));
     expect(el.querySelector('fieldset legend')!.textContent).toBe('Versions to compare');
   });
+
+  it('a 404 on a version says so in the alert, unticks it and reloads the list', async () => {
+    const { el, http, fixture, box } = await mount([item(5), item(4)]);
+    box(4).click();
+    err(http.expectOne(`${BASE}/4`), 404, { error: 'Revision not found' });
+    await settle();
+    http.expectOne(`${BASE}?limit=50`).flush({ items: [item(5)] });
+    await tick(fixture);
+    expect(alerts(el)).toContain('Version 4 no longer exists.');
+    expect(el.querySelector('input[data-rev="4"]')).toBeNull();
+    expect(el.textContent).toContain('Pick a version to see what changed.');
+  });
+
+  it('moves focus to the heading when Try again on the list works', async () => {
+    const { el, http, fixture, button } = await mount(500);
+    button('Try again').focus();
+    button('Try again').click();
+    http.expectOne(`${BASE}?limit=50`).flush({ items: [item(5), item(4)] });
+    await tick(fixture);
+    expect(document.activeElement).toBe(el.querySelector('h2'));
+  });
+
+  it('moves focus to the diff when Try again on a version works', async () => {
+    const { el, http, fixture, box, button } = await mount([item(5), item(4)]);
+    box(4).click();
+    err(http.expectOne(`${BASE}/4`), 500);
+    await tick(fixture);
+    button('Try again').focus();
+    button('Try again').click();
+    http.expectOne(`${BASE}/4`).flush(detail(4, ['old']));
+    await tick(fixture);
+    expect(document.activeElement).toBe(el.querySelector('[data-diff]'));
+  });
+
+  it('wraps the version label so the Current badge fits at large text', async () => {
+    const { rows } = await mount([item(5), item(4)]);
+    expect(rows()[0].querySelector('label')!.classList.contains('flex-wrap')).toBe(true);
+  });
 });

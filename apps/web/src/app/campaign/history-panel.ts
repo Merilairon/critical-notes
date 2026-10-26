@@ -250,7 +250,9 @@ export class HistoryPanel {
     if (this.retrying()) return;
     this.retrying.set(true);
     await this.loadFirst(false);
+    // The button goes away when the retry worked: focus must not fall to the body
     if (this.loadError()) this.focusAfterRender(() => this.host.nativeElement.querySelector<HTMLElement>('[data-action="retry"]'));
+    else this.focusAfterRender(() => this.heading().nativeElement);
   }
 
   protected async loadOlder() {
@@ -307,19 +309,25 @@ export class HistoryPanel {
       // A late failure for a version that was unticked meanwhile, or for another page, is not news
       if (pid !== this.pageId() || !this.selected().includes(rev)) return;
       const gone = err instanceof HttpErrorResponse && err.status === 404;
-      this.detailError.set({ rev, text: gone ? `Version ${rev} no longer exists.` : `Could not load version ${rev}.` });
       if (gone) {
+        // The version was pruned or folded away meanwhile: untick it, say so, and refresh the list
         this.selected.update((s) => s.filter((r) => r !== rev));
+        this.alert.set(`Version ${rev} no longer exists.`);
         void this.loadFirst(false);
+      } else {
+        this.detailError.set({ rev, text: `Could not load version ${rev}.` });
       }
     } finally {
       this.detailLoading.set(false);
     }
   }
 
-  protected retryDetail() {
+  protected async retryDetail() {
     const e = this.detailError();
-    if (e) void this.ensure(e.rev);
+    if (!e) return;
+    await this.ensure(e.rev);
+    // The Try again button is gone once the version loaded: focus moves to the diff
+    if (!this.detailError()) this.focusAfterRender(() => this.host.nativeElement.querySelector<HTMLElement>('[data-diff]') ?? this.heading().nativeElement);
   }
 
   /** The two sides in older-to-newer order; the current page stands in as the newer side when only one is ticked. */

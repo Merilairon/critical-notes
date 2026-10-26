@@ -58,7 +58,7 @@ fieldset "Versions to compare"
 |---|---|
 | `web` | `{author.displayName}` |
 | `player` | `{author.displayName} (player)` |
-| `mcp` | `{author.displayName} via AI assistant ({tokenName})`; `tokenName` null: `via AI assistant (deleted token)` |
+| `mcp` | `{author.displayName} via AI assistant ({tokenName})`; the token's name is kept when a token is revoked (soft revoke), so the name is always shown; `tokenName` null (not reachable today): `via AI assistant (deleted token)`. No `(revoked)` suffix while the list DTO has no revoked flag |
 | `system` | `Earlier version (before history started)` (the baseline row) |
 | author null | `Deleted user` in place of the name |
 
@@ -163,7 +163,7 @@ Setup: a campaign with a GM, a player (Mira) and a GM API token named "Claude de
 
 1. **Entry:** GM and co-DM see `History` in the editor toolbar; the player does not; Preview as player hides it. Panel closed by default; opening puts it below the content, focus on the `h2`, `aria-expanded` true.
 2. **Rows:** newest first, newest labelled Current with no Restore. Web edit shows the name, player edit `(player)`, MCP edit `via AI assistant (Claude desktop)`, restored row `Restored from version n`, template sync `Template sync`.
-3. **Deleted token / user:** after revoking the token the row reads `via AI assistant (deleted token)`; after deleting the author's user `Deleted user`.
+3. **Revoked token / deleted user:** after revoking the token the row still reads `via AI assistant (Claude desktop)` (the name is kept; see section 2); after deleting the author's user `Deleted user`.
 4. **Compare one:** tick an older version: heading `Changes from version a to version b`, summary counts, `Compares text only`.
 5. **Compare two:** tick in reverse order: the older is still "from". A third tick is refused with the hint.
 6. **Not by colour alone:** in a greyscale or forced-colours screenshot added and removed runs are distinguishable (underline vs strike-through, `+` and `−` gutter). In the DOM every changed run has `added:` or `removed:`.
