@@ -266,7 +266,7 @@ export function pageTools(t: Tools) {
       const out = await t.api.post<RestoreResult>(path`/api/campaigns/${a.campaignId}/pages/${a.pageId}/history/${a.revision}/restore`, { revision: a.currentRevision });
       return { data: { id: out.page.id, title: out.page.title, revision: out.page.revision, restored: out.restored, warnings: out.warnings } };
     },
-    { idempotent: true },
+    {},
   );
 
   t.write(
