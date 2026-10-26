@@ -388,6 +388,30 @@ describe('mergePlayerEdit', () => {
       expect(JSON.stringify(merged)).not.toContain('hidden-page');
     });
 
+    it('drops a forged pageEmbed to a hidden page, keeps one to a visible page and the DM’s stored embed', () => {
+      const withEmbed = sanitizeDoc(doc(p('Intro'), { type: 'pageEmbed', attrs: { pageId: 'hidden-page', mode: 'card' } }), { newId }).doc;
+      const seen = projectDoc(withEmbed, linkCtx)!;
+      const forged = { type: 'pageEmbed', attrs: { pageId: 'other-hidden-embed', mode: 'card' } };
+      const visible = { type: 'pageEmbed', attrs: { pageId: 'open-page', mode: 'card' } };
+      const ctx2 = { role: 'player' as const, canSeePage: (id: string) => id !== 'hidden-page' && id !== 'other-hidden-embed' };
+      const merged = mergePlayerEdit(withEmbed, { ...seen, content: [...seen.content!, forged, visible] } as never, ctx2);
+      const text = JSON.stringify(merged);
+      expect(text).not.toContain('other-hidden-embed');
+      expect(text).toContain('"pageId":"open-page"');
+      expect(text).toContain('"pageId":"hidden-page"');
+    });
+
+    it('stays fast with many hidden links in a big block, and then keeps the stored block', () => {
+      const labelled = Array.from({ length: 100 }, () => [{ type: 'text', text: 'x' }, { type: 'pageLink', attrs: { pageId: 'hidden-page', label: 'a' } }]).flat();
+      const big = sanitizeDoc(doc({ type: 'paragraph', content: labelled }), { newId }).doc;
+      const seen = projectDoc(big, linkCtx)!;
+      const chunks = Array.from({ length: 10 }, () => ({ type: 'text', text: 'a'.repeat(100_000) }));
+      const t0 = performance.now();
+      const merged = mergePlayerEdit(big, { ...seen, content: [{ ...seen.content![0]!, content: chunks as never }] }, linkCtx);
+      expect(performance.now() - t0).toBeLessThan(500);
+      expect(JSON.stringify(merged).match(/hidden-page/g)).toHaveLength(100);
+    });
+
     it('keeps a link to a page the player can see', () => {
       const seen = projectDoc(storedLinks, linkCtx)!;
       const link = { type: 'pageLink', attrs: { pageId: 'open-page', label: 'Tavern' } };

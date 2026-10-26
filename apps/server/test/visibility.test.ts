@@ -504,6 +504,18 @@ describe('what players may change', () => {
     expect(JSON.stringify(asDm.body)).toContain(`"pageId":"${ids['hidden']}","label":"a rival"`);
   });
 
+  it('does not store a player’s forged pageEmbed to a hidden page', async () => {
+    const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+    const forged = { type: 'pageEmbed', attrs: { pageId: ids['hidden'], mode: 'card' } };
+    const res = await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, body: { ...mine.body, content: [...mine.body.content, forged] } });
+    expect(res.status).toBe(200);
+    const stored = (await dm.get(`${base()}/pages/${ids['pc']}`)).body.body.content as { type: string }[];
+    expect(stored.some((b) => b.type === 'pageEmbed')).toBe(false);
+    const backlinks = (await dm.get(`${base()}/pages/${ids['hidden']}/backlinks`)).body;
+    const fromPc = (backlinks.backlinks as { id: string; kinds: string[] }[]).find((b) => b.id === ids['pc']);
+    expect(fromPc?.kinds ?? []).not.toContain('embed');
+  });
+
   it('a player cannot reveal: a submitted new block with revealed:true is stored unrevealed', async () => {
     const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
     const forged = { type: 'secret', attrs: { id: 'forged1', revealed: true }, content: [para('Forged secret', { revealed: true })] };

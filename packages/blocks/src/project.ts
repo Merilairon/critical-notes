@@ -57,6 +57,10 @@ function restoreHiddenLinks(before: BlockNode, n: BlockNode, ctx: ProjectContext
   // Length each node had in the text the player saw (a hidden link was its label, other inline nodes count 1)
   const seenLength = (c: BlockNode) => (c.type === 'text' ? (c.text ?? '').length : hidden(c) ? String(c.attrs?.label ?? '').length : 1);
   let content = n.content ?? [];
+  // Scan budget: every restored link rescans the text, so a block with many links and a lot of text keeps the stored version (the player's edit of that block is not applied)
+  const links = (before.content ?? []).filter(hidden).length;
+  const chars = content.reduce((sum, c) => sum + seenLength(c), 0);
+  if (links > 200 || links * chars > 2_000_000) return { ...n, content: before.content };
   let seenAt = 0;
   let shrunk = 0;
   for (const link of before.content ?? []) {
@@ -76,11 +80,13 @@ function restoreHiddenLinks(before: BlockNode, n: BlockNode, ctx: ProjectContext
       if (c.type !== 'text') gaps.push(p);
       p += c.type === 'text' ? (c.text ?? '').length : 1;
     }
-    let at = -1;
-    for (let i = label ? flat.indexOf(label) : -1; i >= 0; i = flat.indexOf(label, i + 1)) {
-      if (gaps.some((g) => g >= i && g < i + label.length)) continue;
-      if (at < 0 || Math.abs(i - was) < Math.abs(at - was)) at = i;
-    }
+    // The occurrence nearest to where the link was: search outward from there, skipping matches that cover a non-text node
+    const covers = (i: number) => gaps.some((g) => g >= i && g < i + label.length);
+    let fwd = label ? flat.indexOf(label, Math.max(was, 0)) : -1;
+    while (fwd >= 0 && covers(fwd)) fwd = flat.indexOf(label, fwd + 1);
+    let back = label && was > 0 ? flat.lastIndexOf(label, was - 1) : -1;
+    while (back >= 0 && covers(back)) back = back > 0 ? flat.lastIndexOf(label, back - 1) : -1;
+    const at = fwd < 0 ? back : back < 0 ? fwd : fwd - was <= was - back ? fwd : back;
     if (at < 0) continue;
     shrunk += label.length - 1;
     const end = at + label.length;
@@ -191,6 +197,7 @@ export function mergePlayerEdit(stored: BlockDocument | null, submittedDoc: Bloc
       const text = String(node.attrs?.label ?? '');
       return text ? [{ type: 'text', text }] : [];
     }
+    if (node.type === 'pageEmbed' && node.attrs?.pageId && !ctx.canSeePage(String(node.attrs.pageId))) return [];
     return [node.content ? { ...node, content: node.content.flatMap(flattenHiddenLinks) } : node];
   };
   const submitted = { ...submittedDoc, content: submittedDoc.content?.flatMap(flattenHiddenLinks) };
