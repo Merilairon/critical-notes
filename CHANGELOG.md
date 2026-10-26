@@ -123,12 +123,12 @@ destroys the DM's hidden links. **This release changes the database and the chan
 
 - If a player rewrites the label of a link to a page they cannot see, the link is lost when they save. When a link is
   kept on a bold or italic label, it comes back without bold or italic.
-- A long paragraph written by the DM (over 100,000 characters, text plus link labels) cannot be saved by a player.
+- A player cannot make a paragraph longer than 100,000 characters (text plus link labels). If the DM wrote a longer one, the player can still save the page as long as that paragraph is left unchanged or made shorter, but cannot edit it while it stays that long.
 - Players can save pages only up to 2 MB.
 - The check on page-link properties can confirm to a player who already knows a hidden page's id that the page exists.
-  Fixed in 1.3.1.
-- When a player moves a paragraph into a container, such as a callout, it may lose the DM's hidden link. Fixed in
-  1.3.1.
+  Planned for 1.3.1.
+- When a player moves a paragraph into a container, such as a callout, it may lose the DM's hidden link. Planned
+  for 1.3.1.
 - A player who was offline when something was revealed is not told about reveals on pages they did not have open. They
   see the change when they open the page.
 - History folds saves by the same author within 2 minutes into one version, so a paste you regret can overwrite up to 2
