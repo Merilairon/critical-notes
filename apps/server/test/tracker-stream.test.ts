@@ -104,7 +104,7 @@ describe('tracker stream re-validation', () => {
     expect(e.events.map((f) => f.event)).toEqual(['state', 'bye']);
   });
 
-  it('a throwing re-check closes only that stream, on a heartbeat and on a delivery, and the process survives', async () => {
+  it('a throwing re-check on a heartbeat closes only that stream and the process survives (the delivery-path guard in routes/play.ts is not isolated here: the heartbeat fires first)', async () => {
     const real = services.eventStreams.currentRole.bind(services.eventStreams);
     const bad = await join('player', 'bad');
     const b = await open(bad.client, 'player');
