@@ -113,10 +113,13 @@ export class HistoryPanel {
   readonly refresh = input(0);
   /** Saves pending edits and reports the page revision to restore over. */
   readonly prepare = input.required<() => Promise<HistoryPrepared>>();
-  /** A restore replaced the page. */
-  readonly restored = output<PageDto>();
-  /** The page moved on (409): the editor shows this newer state. */
-  readonly stale = output<PageDto>();
+  /**
+   * Hands the editor the page a restore produced (`restored`) or the newer page after a 409 (`stale`). Returns whether the editor
+   * took it: it refuses while it holds typing that is not saved yet, and the panel then says so instead of offering an Undo.
+   */
+  readonly adopt = input.required<(page: PageDto, why: 'restored' | 'stale') => boolean>();
+  /** True from the moment a restore starts writing until it ends: the editor holds back its autosave meanwhile. */
+  readonly busy = output<boolean>();
   readonly closed = output<void>();
 
   private readonly http = inject(HttpClient);
@@ -146,6 +149,8 @@ export class HistoryPanel {
   private readonly cache = signal<ReadonlyMap<number, HistoryDetail>>(new Map());
   protected readonly detailLoading = signal(false);
   protected readonly detailError = signal<{ rev: number; text: string } | null>(null);
+  /** The newest revision seen in the last list or head fetch (the current page's version number in the compare heading). */
+  private readonly newestKnown = signal<number | null>(null);
   private readonly pageId = computed(() => this.page().id);
   private generation = 0;
   private lastPageId = '';
@@ -160,6 +165,7 @@ export class HistoryPanel {
           this.cache.set(new Map());
           this.selected.set([]);
           this.items.set([]);
+          this.newestKnown.set(null);
           this.done.set(false);
           this.clearResult();
         }
@@ -220,6 +226,7 @@ export class HistoryPanel {
       const older = first.length === PAGE_SIZE && lowest !== undefined ? this.items().filter((i) => i.revision < lowest) : [];
       const merged = [...first, ...older];
       this.items.set(merged);
+      this.newestKnown.set(first[0]?.revision ?? null);
       if (first.length < PAGE_SIZE) this.done.set(true);
       else if (!older.length) this.done.set(false);
       const have = new Set(merged.map((i) => i.revision));
@@ -322,7 +329,7 @@ export class HistoryPanel {
     const cache = this.cache();
     const p = this.page();
     const current: HistoryDetail = {
-      revision: this.items()[0]?.revision ?? p.revision,
+      revision: this.newestKnown() ?? this.items()[0]?.revision ?? p.revision,
       createdAt: p.createdAt,
       author: null,
       source: 'web',
@@ -434,15 +441,22 @@ export class HistoryPanel {
       return;
     }
     const before = prepared.revision;
-    // Flushing pending edits can add, or fold into, a history row: read the list again before choosing the version to go back to
-    // (it is the newest row; the page revision can be higher because saves that change nothing add no row)
-    await this.loadFirst(false);
-    const newest = this.items()[0]?.revision ?? null;
+    this.busy.emit(true);
     try {
+      // Flushing pending edits can add, or fold into, a history row. The version to go back to is the newest row as the server has it
+      // now, fetched here on its own: the shared list may be mid-reload (the editor's save bumps `refresh`) and superseded.
+      // The page revision can be higher than the newest row because saves that change nothing add no row. No answer: no Undo.
+      const newest = await this.fetchNewest();
       const out = await firstValueFrom(this.http.post<RestoreResult>(this.url(`/${rev}/restore`), { revision: before }));
-      this.restored.emit(out.page);
+      const applied = this.adopt()(out.page, 'restored');
       this.warnings.set(out.warnings);
-      if (out.restored) {
+      if (!applied) {
+        this.status.set(
+          out.restored
+            ? `Version ${rev} was restored. Your unsaved typing was kept and was not saved. Reload the page to see the restored version (this discards the typing).`
+            : `Version ${rev} already matches the saved page, so nothing changed. Your unsaved typing was kept.`,
+        );
+      } else if (out.restored) {
         this.status.set(
           isUndo
             ? `Undone. The page is back to version ${rev}. Saved as version ${out.page.revision}.`
@@ -457,6 +471,20 @@ export class HistoryPanel {
       this.focusAfterRender(() => this.heading().nativeElement);
     } catch (err) {
       await this.fail(err, rev, pressed);
+    } finally {
+      this.busy.emit(false);
+    }
+  }
+
+  /** The newest revision number from a fresh `limit=1` request, or null when it could not be read. */
+  private async fetchNewest(): Promise<number | null> {
+    try {
+      const res = await firstValueFrom(this.http.get<{ items: HistoryItem[] }>(this.url('?limit=1')));
+      const n = res.items[0]?.revision ?? null;
+      if (n !== null) this.newestKnown.set(n);
+      return n;
+    } catch {
+      return null;
     }
   }
 
@@ -472,8 +500,12 @@ export class HistoryPanel {
           current = undefined;
         }
       }
-      if (current) this.stale.emit(current);
-      this.alert.set(`This page was changed by someone else just now. The newest version is loaded. Review it and press Restore again if you still want version ${rev}.`);
+      const applied = current ? this.adopt()(current, 'stale') : true;
+      this.alert.set(
+        applied
+          ? `This page was changed by someone else just now. The newest version is loaded. Review it and press Restore again if you still want version ${rev}.`
+          : 'This page was changed by someone else just now. Your unsaved typing was kept and was not saved. Reload the page to see the newest version (this discards the typing).',
+      );
       if (!this.selected().includes(rev)) {
         this.selected.set([rev]);
         void this.ensure(rev);

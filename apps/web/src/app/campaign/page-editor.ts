@@ -68,6 +68,8 @@ export class PageEditor implements OnDestroy {
   protected readonly showProps = signal(false);
   protected readonly applying = signal(false);
   protected readonly historyOpen = signal(false);
+  /** A history restore is writing: the debounced autosave waits. */
+  private readonly historyBusy = signal(false);
   private readonly historyBtn = viewChild<ElementRef<HTMLElement>>('historyBtn');
   private readonly layout = inject(LayoutService);
   /** On a phone (portrait, or short landscape) the character sheet is a collapsible section; otherwise it is always open. */
@@ -189,7 +191,13 @@ export class PageEditor implements OnDestroy {
     if (change.props) local.props = withoutNulls({ ...p.props, ...change.props });
     if (Object.keys(local).length) this.page.set({ ...p, ...local });
     clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.flush(), immediate ? 0 : SAVE_DELAY);
+    this.timer = setTimeout(() => this.autoFlush(), immediate ? 0 : SAVE_DELAY);
+  }
+
+  /** The debounced save. Held back while a history restore is writing: the restore decides what happens to the typing (see `adoptHistory`). */
+  private autoFlush() {
+    if (this.historyBusy()) return;
+    void this.flush();
   }
 
   private async flush(): Promise<void> {
@@ -210,6 +218,8 @@ export class PageEditor implements OnDestroy {
         this.savedCount.update((n) => n + 1);
       } catch (err) {
         if (err instanceof HttpErrorResponse && err.status === 409) {
+          // Keep what was not saved, so the typing stays on screen and a history restore sees it
+          this.pending = { ...change, ...this.pending };
           this.status.set('conflict');
         } else {
           this.pending = { ...change, ...this.pending };
@@ -371,14 +381,23 @@ export class PageEditor implements OnDestroy {
     return { ok, revision: this.page()?.revision ?? 0 };
   };
 
-  /** A restore (or the newer page after a stale restore) replaces what the editor shows. */
-  protected adoptHistory(page: PageDto) {
-    if (page.id !== this.page()?.id) return;
-    // Edits typed while the restore ran would be lost by replacing the page: keep them on screen under the conflict banner instead
-    if (Object.keys(this.pending).length) {
+  /** The panel's restore starts or ends. When it ends without a conflict, typing that waited is saved. */
+  protected onHistoryBusy(busy: boolean) {
+    this.historyBusy.set(busy);
+    if (!busy && this.status() !== 'conflict' && Object.keys(this.pending).length) this.autoFlush();
+  }
+
+  /**
+   * A restore (or the newer page after a stale restore) replaces what the editor shows. Returns false, changing nothing, when the
+   * editor holds typing that is not saved (pending or being saved): it stays on screen under the conflict banner and the GM
+   * reloads on purpose. The panel says so.
+   */
+  protected readonly adoptHistory = (page: PageDto): boolean => {
+    if (page.id !== this.page()?.id) return true;
+    if (Object.keys(this.pending).length || this.saving) {
       clearTimeout(this.timer);
       this.status.set('conflict');
-      return;
+      return false;
     }
     this.page.set(page);
     this.loadedDoc.set(page.body);
@@ -386,7 +405,8 @@ export class PageEditor implements OnDestroy {
     this.status.set('idle');
     this.store.patchSummary(page);
     this.savedCount.update((n) => n + 1);
-  }
+    return true;
+  };
 
   protected async openApply() {
     await this.flush();

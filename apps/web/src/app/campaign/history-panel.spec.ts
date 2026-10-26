@@ -40,7 +40,7 @@ const page = (revision: number, lines: string[] = ['now']): PageDto =>
 const alerts = (el: HTMLElement) => Array.from(el.querySelectorAll('[role="alert"]')).map((a) => a.textContent).join(' ');
 const err = (r: TestRequest, status: number, body: object = {}) => r.flush(body, { status, statusText: String(status) });
 
-async function mount(items: HistoryItem[] | number, opts: { revision?: number; prepare?: () => Promise<{ ok: boolean; revision: number }> } = {}) {
+async function mount(items: HistoryItem[] | number, opts: { revision?: number; prepare?: () => Promise<{ ok: boolean; revision: number }>; adopt?: boolean } = {}) {
   TestBed.configureTestingModule({
     providers: [provideHttpClient(), provideHttpClientTesting(), { provide: CampaignStore, useValue: { id: signal('c1'), propertyDefs: signal([]) } }],
   });
@@ -51,8 +51,12 @@ async function mount(items: HistoryItem[] | number, opts: { revision?: number; p
   const restored = vi.fn();
   const stale = vi.fn();
   const closed = vi.fn();
-  fixture.componentInstance.restored.subscribe(restored);
-  fixture.componentInstance.stale.subscribe(stale);
+  const busy = vi.fn();
+  fixture.componentRef.setInput('adopt', (p: PageDto, why: 'restored' | 'stale') => {
+    (why === 'restored' ? restored : stale)(p);
+    return opts.adopt ?? true;
+  });
+  fixture.componentInstance.busy.subscribe(busy);
   fixture.componentInstance.closed.subscribe(closed);
   const http = TestBed.inject(HttpTestingController);
   document.body.append(fixture.nativeElement);
@@ -66,7 +70,8 @@ async function mount(items: HistoryItem[] | number, opts: { revision?: number; p
   const restoreBtn = (rev: number) => el.querySelector<HTMLButtonElement>(`[data-restore="${rev}"]`)!;
   const button = (text: string) => Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.includes(text)) as HTMLButtonElement;
   const reload = async (list: HistoryItem[] = Array.isArray(items) ? items : []) => {
-    http.expectOne(`${BASE}?limit=50`).flush({ items: list });
+    // the fresh look at the newest row that comes before the restore request
+    http.expectOne(`${BASE}?limit=1`).flush({ items: list.slice(0, 1) });
     await settle();
   };
   const tickBox = async (rev: number, d?: HistoryDetail) => {
@@ -74,7 +79,7 @@ async function mount(items: HistoryItem[] | number, opts: { revision?: number; p
     if (d) http.expectOne(`${BASE}/${rev}`).flush(d);
     await tick(fixture);
   };
-  return { fixture, el, http, reload, prepare, restored, stale, closed, box, restoreBtn, button, tickBox, rows: () => Array.from(el.querySelectorAll('li')) };
+  return { fixture, el, http, reload, prepare, restored, stale, closed, busy, box, restoreBtn, button, tickBox, rows: () => Array.from(el.querySelectorAll('li')) };
 }
 
 describe('HistoryPanel', () => {
@@ -374,6 +379,107 @@ describe('HistoryPanel', () => {
     expect(el.querySelector('[data-diff]')).toBeNull();
     expect(box(4)).toBeNull();
     expect(el.textContent).toContain('This is the only version so far.');
+  });
+
+  describe.each([
+    ['folds into a newer row', [item(6), item(4)]],
+    ['creates a new row', [item(6), item(5), item(4)]],
+  ])('when the flush before a restore %s and bumps refresh', (_name, serverList: HistoryItem[]) => {
+    it('Undo targets the newest row of the final list, even though the refresh reload is in flight', async () => {
+      const { http, fixture, restoreBtn, button } = await mount([item(5), item(4)], { revision: 5 });
+      fixture.componentRef.setInput('prepare', async () => {
+        // what the editor's real flush does: the save finishes, `savedCount` goes up, the panel's effect reloads the list
+        fixture.componentRef.setInput('refresh', 1);
+        fixture.detectChanges();
+        await settle();
+        return { ok: true, revision: 6 };
+      });
+      restoreBtn(4).click();
+      await settle();
+      const refreshReload = http.expectOne(`${BASE}?limit=50`);
+      const head = http.expectOne(`${BASE}?limit=1`);
+      head.flush({ items: serverList.slice(0, 1) });
+      await settle();
+      const post = http.expectOne(`${BASE}/4/restore`);
+      expect(post.request.body).toEqual({ revision: 6 });
+      refreshReload.flush({ items: serverList });
+      post.flush({ page: page(7), restored: true, warnings: [] });
+      await settle();
+      http.expectOne(`${BASE}?limit=50`).flush({ items: [item(7), ...serverList] });
+      await tick(fixture);
+      fixture.componentRef.setInput('prepare', vi.fn(async () => ({ ok: true, revision: 7 })));
+      button('Undo restore').click();
+      await settle();
+      http.expectOne(`${BASE}?limit=1`).flush({ items: [item(7)] });
+      await settle();
+      expect(http.expectOne(`${BASE}/6/restore`).request.body).toEqual({ revision: 7 });
+    });
+  });
+
+  it('offers no Undo when the newest row could not be read', async () => {
+    const { el, http, fixture, restoreBtn, button } = await mount([item(5), item(4)]);
+    restoreBtn(4).click();
+    await settle();
+    err(http.expectOne(`${BASE}?limit=1`), 500);
+    await settle();
+    http.expectOne(`${BASE}/4/restore`).flush({ page: page(6), restored: true, warnings: [] });
+    await settle();
+    http.expectOne(`${BASE}?limit=50`).flush({ items: [item(6), item(5), item(4)] });
+    await tick(fixture);
+    expect(el.textContent).toContain('Restored version 4.');
+    expect(button('Undo restore')).toBeUndefined();
+  });
+
+  it('tells the editor when a restore starts and ends writing', async () => {
+    const { http, fixture, restoreBtn, reload, busy } = await mount([item(5), item(4)]);
+    restoreBtn(4).click();
+    await settle();
+    await reload();
+    expect(busy.mock.calls).toEqual([[true]]);
+    http.expectOne(`${BASE}/4/restore`).flush({ page: page(6), restored: true, warnings: [] });
+    await settle();
+    http.expectOne(`${BASE}?limit=50`).flush({ items: [item(6), item(5), item(4)] });
+    await tick(fixture);
+    expect(busy.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it('says the typing was kept, and offers no Undo, when the editor refuses a restored page', async () => {
+    const { el, http, fixture, restoreBtn, reload, button, restored } = await mount([item(5), item(4)], { adopt: false });
+    restoreBtn(4).click();
+    await settle();
+    await reload();
+    http.expectOne(`${BASE}/4/restore`).flush({ page: page(6), restored: true, warnings: [] });
+    await settle();
+    http.expectOne(`${BASE}?limit=50`).flush({ items: [item(6), item(5), item(4)] });
+    await tick(fixture);
+    expect(restored).toHaveBeenCalled();
+    expect(el.querySelector('[role="status"]')!.textContent).toContain(
+      'Version 4 was restored. Your unsaved typing was kept and was not saved. Reload the page to see the restored version (this discards the typing).',
+    );
+    expect(button('Undo restore')).toBeUndefined();
+  });
+
+  it('says the typing was kept when the editor refuses the newer page after a 409', async () => {
+    const { el, http, fixture, restoreBtn, reload } = await mount([item(5), item(4)], { adopt: false });
+    restoreBtn(4).click();
+    await settle();
+    await reload();
+    err(http.expectOne(`${BASE}/4/restore`), 409, { error: 'changed', details: { current: page(6) } });
+    await settle();
+    http.expectOne(`${BASE}/4`).flush(detail(4, ['four']));
+    http.expectOne(`${BASE}?limit=50`).flush({ items: [item(6), item(5), item(4)] });
+    await tick(fixture);
+    expect(alerts(el)).toContain('Your unsaved typing was kept and was not saved. Reload the page to see the newest version (this discards the typing).');
+  });
+
+  it('shows a notice when the change is too large to diff line by line', async () => {
+    const lines = Array.from({ length: 1300 }, (_, i) => `x${i}`);
+    const { el, fixture, tickBox } = await mount([item(5), item(4)]);
+    fixture.componentRef.setInput('page', page(5, lines.map((l) => l.replace('x', 'y'))));
+    fixture.detectChanges();
+    await tickBox(4, detail(4, lines));
+    expect(el.textContent).toContain('Large change, shown as a block.');
+    expect(el.querySelectorAll('del').length).toBeGreaterThan(100);
   });
 
   it('says nothing changed when restored is false, with no Undo', async () => {

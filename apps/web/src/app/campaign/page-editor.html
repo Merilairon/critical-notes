@@ -213,7 +213,7 @@
 
     @if (historyOpen() && store.isGm() && !previewing()) {
       @defer (on immediate) {
-        <cn-history-panel [page]="p" [refresh]="savedCount()" [prepare]="prepareHistory" (restored)="adoptHistory($event)" (stale)="adoptHistory($event)" (closed)="closeHistory()" />
+        <cn-history-panel [page]="p" [refresh]="savedCount()" [prepare]="prepareHistory" [adopt]="adoptHistory" (busy)="onHistoryBusy($event)" (closed)="closeHistory()" />
       }
     }
 

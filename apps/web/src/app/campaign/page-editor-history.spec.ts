@@ -72,7 +72,15 @@ async function mount(gm: boolean) {
     await settle();
     fixture.detectChanges();
   };
-  const editor = fixture.componentInstance as unknown as { adoptHistory(p: PageDto): void; queue(c: object): void; page(): PageDto; status(): string };
+  const editor = fixture.componentInstance as unknown as {
+    adoptHistory(p: PageDto): boolean;
+    queue(c: object, immediate?: boolean): void;
+    onHistoryBusy(busy: boolean): void;
+    page(): PageDto;
+    status(): string;
+    pending: object;
+    flush(): Promise<void>;
+  };
   return { fixture, el, http, historyBtn, panel, open, editor };
 }
 
@@ -125,17 +133,52 @@ describe('PageEditor history wiring', () => {
 
   it('adoptHistory replaces the page when nothing is pending', async () => {
     const { editor } = await mount(true);
-    editor.adoptHistory(reply({ title: 'Restored', revision: 4 }) as unknown as PageDto);
+    expect(editor.adoptHistory(reply({ title: 'Restored', revision: 4 }) as unknown as PageDto)).toBe(true);
     expect(editor.page().title).toBe('Restored');
   });
 
   it('adoptHistory keeps edits typed meanwhile and shows the conflict banner instead of losing them', async () => {
     const { editor, fixture, el } = await mount(true);
     editor.queue({ title: 'Typed meanwhile' });
-    editor.adoptHistory(reply({ title: 'Restored', revision: 4 }) as unknown as PageDto);
+    expect(editor.adoptHistory(reply({ title: 'Restored', revision: 4 }) as unknown as PageDto)).toBe(false);
     fixture.detectChanges();
     expect(editor.page().title).toBe('Typed meanwhile');
     expect(editor.status()).toBe('conflict');
     expect(el.textContent).toContain('Someone else changed this page');
+  });
+
+  it('holds the autosave back while a restore is writing, then saves the typing if there was no conflict', async () => {
+    const { editor, http } = await mount(true);
+    editor.onHistoryBusy(true);
+    editor.queue({ title: 'Typed during restore' }, true);
+    await settle();
+    http.expectNone({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' });
+    editor.onHistoryBusy(false);
+    await settle();
+    http.expectOne({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' }).flush(reply({ title: 'Typed during restore', revision: 2 }));
+  });
+
+  it('refuses the restored page when typing arrived during the restore, and does not save it afterwards', async () => {
+    const { editor, http } = await mount(true);
+    editor.onHistoryBusy(true);
+    editor.queue({ title: 'Typed during restore' }, true);
+    await settle();
+    expect(editor.adoptHistory(reply({ title: 'Restored', revision: 4 }) as unknown as PageDto)).toBe(false);
+    editor.onHistoryBusy(false);
+    await settle();
+    http.expectNone({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' });
+    expect(editor.page().title).toBe('Typed during restore');
+    expect(editor.status()).toBe('conflict');
+  });
+
+  it('keeps the unsent changes when a save hits a conflict, so a later restore sees them', async () => {
+    const { editor, http } = await mount(true);
+    editor.queue({ title: 'Mine' }, true);
+    await settle();
+    http.expectOne({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' }).flush({ error: 'changed' }, { status: 409, statusText: 'Conflict' });
+    await settle();
+    expect(editor.status()).toBe('conflict');
+    expect(editor.pending).toEqual({ title: 'Mine' });
+    expect(editor.adoptHistory(reply({ title: 'Restored', revision: 4 }) as unknown as PageDto)).toBe(false);
   });
 });

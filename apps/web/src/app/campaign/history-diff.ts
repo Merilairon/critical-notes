@@ -23,10 +23,8 @@ export const MAX_DIFF_CELLS = 4_000_000;
 export const COLLAPSE_OVER = 6;
 export const CONTEXT_LINES = 3;
 
-type Op = 'equal' | 'removed' | 'added';
-
-/** LCS over two token lists. Returns the edit script. Trims common ends first; falls back to one block above the size guard. */
-function lcsOps(a: readonly string[], b: readonly string[]): { op: Op; a?: string; b?: string }[] {
+/** The common prefix and suffix of two lists: the differing middle is `a[start..endA)` and `b[start..endB)`. */
+export function trimCommon(a: readonly string[], b: readonly string[]): { start: number; endA: number; endB: number } {
   let start = 0;
   while (start < a.length && start < b.length && a[start] === b[start]) start++;
   let endA = a.length;
@@ -35,6 +33,14 @@ function lcsOps(a: readonly string[], b: readonly string[]): { op: Op; a?: strin
     endA--;
     endB--;
   }
+  return { start, endA, endB };
+}
+
+type Op = 'equal' | 'removed' | 'added';
+
+/** LCS over two token lists. Returns the edit script. Trims common ends first; falls back to one block above the size guard. */
+function lcsOps(a: readonly string[], b: readonly string[]): { op: Op; a?: string; b?: string }[] {
+  const { start, endA, endB } = trimCommon(a, b);
   const out: { op: Op; a?: string; b?: string }[] = [];
   for (let i = 0; i < start; i++) out.push({ op: 'equal', a: a[i], b: b[i] });
   const midA = a.slice(start, endA);
@@ -77,14 +83,7 @@ export function diffDegrades(from: string, to: string): boolean {
   const split = (s: string) => (s === '' ? [] : s.replace(/\r\n?/g, '\n').split('\n'));
   const a = split(from);
   const b = split(to);
-  let start = 0;
-  while (start < a.length && start < b.length && a[start] === b[start]) start++;
-  let endA = a.length;
-  let endB = b.length;
-  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) {
-    endA--;
-    endB--;
-  }
+  const { start, endA, endB } = trimCommon(a, b);
   return (endA - start) * (endB - start) > MAX_DIFF_CELLS;
 }
 
