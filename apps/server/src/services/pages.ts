@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { and, asc, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
-import { docLinks, mergePlayerEdit, projectDoc, queryFilterSchema, runQuery, sanitizeDoc, type BlockDocument, type ProjectContext, type QueryablePage, type QueryFilterInput } from '@cn/blocks';
+import { docLinks, mergePlayerEdit, projectDoc, queryFilterSchema, runQuery, sanitizeDoc, type BlockDocument, type BlockNode, type ProjectContext, type QueryablePage, type QueryFilterInput } from '@cn/blocks';
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { generateKeyBetween } from 'fractional-indexing';
 import {
@@ -99,6 +99,7 @@ const REVISION_DELETE_BATCH = 1000;
 
 /** In-memory bound for the import / instantiation fold map. */
 const MAX_OPERATIONS = 20_000;
+const MAX_PLAYER_BLOCK_TEXT = 100_000;
 
 export class PageService {
   /** page id -> operation id of the call that created it (design 4.6); never stored, bounded. */
@@ -718,6 +719,36 @@ export class PageService {
   }
 
   /**
+   * A fixed limit on the text of one inline block of what the player submitted (labels of links count, as the merge turns
+   * a forged link into its label; any other inline node counts 1). It never looks at hidden content: a longer block is
+   * accepted only if it is the block with the same id that the player was shown (compared with their projection), so
+   * existing long blocks can still be saved unchanged. Text and labels that are not strings are refused, not coerced.
+   */
+  private checkPlayerTextSize(stored: BlockDocument | null, submitted: BlockDocument, ctx: ProjectContext) {
+    const refuse = () => badRequest(`A paragraph is too long (max ${MAX_PLAYER_BLOCK_TEXT} characters)`);
+    const part = (c: BlockNode) => {
+      if (c.type === 'text') {
+        if (c.text !== undefined && typeof c.text !== 'string') throw refuse();
+        return c.text ?? '';
+      }
+      if (c.type !== 'pageLink') return '\0';
+      const label = c.attrs?.label;
+      if (label !== undefined && typeof label !== 'string') throw refuse();
+      return label ?? '';
+    };
+    const size = (n: BlockNode) => (n.content ?? []).reduce((sum, c) => sum + (c.type === 'text' || c.type === 'pageLink' ? part(c).length : 1), 0);
+    const key = (n: BlockNode) => (n.content ?? []).map(part).join('');
+    const idOf = (n: BlockNode) => (typeof n.attrs?.id === 'string' ? n.attrs.id : '');
+    const over = (nodes: BlockNode[] | undefined): BlockNode[] => (nodes ?? []).flatMap((n) => [...(size(n) > MAX_PLAYER_BLOCK_TEXT ? [n] : []), ...over(n.content)]);
+    const long = over([submitted as BlockNode]);
+    if (!long.length) return;
+    const shown = new Map<string, string>();
+    const collect = (nodes: BlockNode[] | undefined) => (nodes ?? []).forEach((n) => (size(n) > MAX_PLAYER_BLOCK_TEXT && idOf(n) && shown.set(idOf(n), key(n)), collect(n.content)));
+    collect(projectDoc(stored, ctx)?.content);
+    if (long.some((n) => !idOf(n) || shown.get(idOf(n)) !== key(n))) throw refuse();
+  }
+
+  /**
    * A player's edit of their own character: content, details and (non-DM) properties. Blocks they cannot see
    * are kept; they cannot change type, visibility or who may see the page.
    */
@@ -729,9 +760,9 @@ export class PageService {
     const facetType = facetTypeFor(current.type);
     const dmFields = new Set(facetType ? FACET_DM_ONLY_FIELDS[facetType] : []);
     if (input.facet && Object.keys(input.facet).some((k) => dmFields.has(k) || k === 'playerUserId')) throw badRequest('Those details are for the DM');
-    const body = input.body
-      ? (mergePlayerEdit(current.body as BlockDocument | null, input.body as BlockDocument, this.playerContext(this.properties.list(campaignId), visible)) as BlockDoc)
-      : undefined;
+    const projectCtx = this.playerContext(this.properties.list(campaignId), visible);
+    if (input.body) this.checkPlayerTextSize(current.body as BlockDocument | null, input.body as BlockDocument, projectCtx);
+    const body = input.body ? (mergePlayerEdit(current.body as BlockDocument | null, input.body as BlockDocument, projectCtx) as BlockDoc) : undefined;
     const saved = this.update(campaignId, pageId, { ...input, ...(body ? { body } : {}) }, ctx);
     return this.projectPage(campaignId, saved, visible);
   }

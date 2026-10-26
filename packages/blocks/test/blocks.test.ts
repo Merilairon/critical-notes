@@ -310,6 +310,124 @@ describe('mergePlayerEdit', () => {
       expect(JSON.stringify(merged.content![0])).toContain('"pageId":"hidden-page"');
       expect(docText(merged, 'dm')).toContain('Never met');
     });
+
+    it('stores a forged link to a hidden page id as plain text, and still restores the DM link', () => {
+      const ctx2 = { role: 'player' as const, canSeePage: (id: string) => id !== 'hidden-page' && id !== 'other-hidden' };
+      const seen = projectDoc(storedLinks, ctx2)!;
+      const [first, backstory] = seen.content!;
+      const forged = { type: 'pageLink', attrs: { pageId: 'other-hidden', label: 'Guess' } };
+      const edited = { ...seen, content: [{ ...first!, content: [...first!.content!, forged] }, backstory!] };
+      const merged = mergePlayerEdit(storedLinks, edited, ctx2);
+      const text = JSON.stringify(merged.content![0]);
+      expect(text).not.toContain('other-hidden');
+      expect(text).toContain('Guess');
+      expect(text).toContain('"pageId":"hidden-page"');
+    });
+
+    describe('when the player marks or repeats the label', () => {
+      const link = { type: 'pageLink', attrs: { pageId: 'hidden-page', label: 'vampire' } };
+      const stored = sanitizeDoc(doc({ type: 'paragraph', content: [{ type: 'text', text: 'A vampire story. Met ' }, link, { type: 'text', text: ' once' }] }), { newId }).doc;
+      const edit = (content: unknown[]) => {
+        const seen = projectDoc(stored, linkCtx)!;
+        return mergePlayerEdit(stored, { ...seen, content: [{ ...seen.content![0]!, content: content as never }] }, linkCtx);
+      };
+      const bold = [{ type: 'bold' }];
+      const kinds = (d: BlockDocument) => d.content![0]!.content!.map((c) => (c.type === 'text' ? c.text : `[${c.attrs!.pageId}]`));
+
+      it('keeps the link on a bolded label, with the mark', () => {
+        const merged = edit([{ type: 'text', text: 'A vampire story. Met ' }, { type: 'text', text: 'vampire', marks: bold }, { type: 'text', text: ' once' }]);
+        expect(kinds(merged)).toEqual(['A vampire story. Met ', '[hidden-page]', ' once']);
+        expect(merged.content![0]!.content![1]!.marks).toEqual(bold);
+      });
+
+      it('puts the link on the original occurrence, not an earlier repeat of the word', () => {
+        const merged = edit([{ type: 'text', text: 'A vampire story. Met vampire once' }]);
+        expect(kinds(merged)).toEqual(['A vampire story. Met ', '[hidden-page]', ' once']);
+      });
+
+      it('keeps the link on an italic label inside longer text', () => {
+        const merged = edit([{ type: 'text', text: 'A vampire story. Met the vampires once', marks: [{ type: 'italic' }] }]);
+        expect(kinds(merged)).toEqual(['A vampire story. Met the ', '[hidden-page]', 's once']);
+        expect(merged.content![0]!.content!.every((c) => c.marks?.[0]?.type === 'italic')).toBe(true);
+      });
+
+      it('keeps the link when the label spans two text nodes with different marks', () => {
+        const two = sanitizeDoc(doc({ type: 'paragraph', content: [{ type: 'text', text: 'Met ' }, { type: 'pageLink', attrs: { pageId: 'hidden-page', label: 'the vampire' } }] }), { newId }).doc;
+        const seen = projectDoc(two, linkCtx)!;
+        const content = [{ type: 'text', text: 'Met ' }, { type: 'text', text: 'the ', marks: bold }, { type: 'text', text: 'vampire', marks: [{ type: 'italic' }] }];
+        const merged = mergePlayerEdit(two, { ...seen, content: [{ ...seen.content![0]!, content: content as never }] }, linkCtx);
+        expect(kinds(merged)).toEqual(['Met ', '[hidden-page]']);
+      });
+
+      it('does not restore the link when the label is reworded, and does not crash', () => {
+        const merged = edit([{ type: 'text', text: 'A tale. Met a bloodsucker once' }]);
+        expect(JSON.stringify(merged)).not.toContain('hidden-page');
+        expect(docText(merged, 'dm')).toContain('bloodsucker');
+      });
+
+      it('never gives the player the hidden id after a merge', () => {
+        const merged = edit([{ type: 'text', text: 'A vampire story. Met ' }, { type: 'text', text: 'vampire', marks: bold }]);
+        expect(JSON.stringify(projectDoc(merged, linkCtx))).not.toContain('hidden-page');
+      });
+    });
+
+    it('picks the right repeat after an earlier, longer link was restored', () => {
+      const ctx2 = { role: 'player' as const, canSeePage: (id: string) => !id.startsWith('h') };
+      const long = 'a'.repeat(30);
+      const two = sanitizeDoc(doc({ type: 'paragraph', content: [{ type: 'pageLink', attrs: { pageId: 'h1', label: long } }, { type: 'text', text: ' ' }, { type: 'pageLink', attrs: { pageId: 'h2', label: 'cat' } }, { type: 'text', text: ' x cat' }] }), { newId }).doc;
+      const seen = projectDoc(two, ctx2)!;
+      const merged = mergePlayerEdit(two, { ...seen, content: [{ ...seen.content![0]!, content: [{ type: 'text', text: `${long} cat x cat` }] }] }, ctx2);
+      expect(merged.content![0]!.content!.map((c) => (c.type === 'text' ? c.text : `[${c.attrs!.pageId}]`))).toEqual(['[h1]', ' ', '[h2]', ' x cat']);
+    });
+
+    it('does not let a label with NUL match the place of a non-text node', () => {
+      const nul = sanitizeDoc(doc({ type: 'paragraph', content: [{ type: 'text', text: 'a' }, { type: 'pageLink', attrs: { pageId: 'hidden-page', label: 'a\0' } }] }), { newId }).doc;
+      const seen = projectDoc(nul, linkCtx)!;
+      const tag = { type: 'tag', attrs: { markup: '{@dice 2d6}' } };
+      const merged = mergePlayerEdit(nul, { ...seen, content: [{ ...seen.content![0]!, content: [{ type: 'text', text: 'a' }, tag] }] }, linkCtx);
+      expect(JSON.stringify(merged)).not.toContain('hidden-page');
+    });
+
+    it('drops a forged pageEmbed to a hidden page, keeps one to a visible page and the DM’s stored embed', () => {
+      const withEmbed = sanitizeDoc(doc(p('Intro'), { type: 'pageEmbed', attrs: { pageId: 'hidden-page', mode: 'card' } }), { newId }).doc;
+      const seen = projectDoc(withEmbed, linkCtx)!;
+      const forged = { type: 'pageEmbed', attrs: { pageId: 'other-hidden-embed', mode: 'card' } };
+      const visible = { type: 'pageEmbed', attrs: { pageId: 'open-page', mode: 'card' } };
+      const ctx2 = { role: 'player' as const, canSeePage: (id: string) => id !== 'hidden-page' && id !== 'other-hidden-embed' };
+      const merged = mergePlayerEdit(withEmbed, { ...seen, content: [...seen.content!, forged, visible] } as never, ctx2);
+      const text = JSON.stringify(merged);
+      expect(text).not.toContain('other-hidden-embed');
+      expect(text).toContain('"pageId":"open-page"');
+      expect(text).toContain('"pageId":"hidden-page"');
+    });
+
+    // The timing bound is the real guard: restoring has no cap, so its cost must stay small on its own
+    it.each([[200], [2000]])('stays fast with %i hidden links and 100k characters of the repeated label', (count) => {
+      const labelled = Array.from({ length: count }, () => [{ type: 'text', text: 'x' }, { type: 'pageLink', attrs: { pageId: 'hidden-page', label: 'a' } }]).flat();
+      const big = sanitizeDoc(doc({ type: 'paragraph', content: labelled }), { newId }).doc;
+      const seen = projectDoc(big, linkCtx)!;
+      const t0 = performance.now();
+      const merged = mergePlayerEdit(big, { ...seen, content: [{ ...seen.content![0]!, content: [{ type: 'text', text: 'a'.repeat(100_000) }] }] }, linkCtx);
+      expect(performance.now() - t0).toBeLessThan(500);
+      expect(JSON.stringify(merged).match(/"pageId":"hidden-page"/g)).toHaveLength(count);
+    });
+
+    it('stays fast with 19,000 hidden links and a label found only at the end of a big text', () => {
+      const labelled = Array.from({ length: 19_000 }, () => [{ type: 'text', text: 'x' }, { type: 'pageLink', attrs: { pageId: 'hidden-page', label: 'a' } }]).flat();
+      const big = sanitizeDoc(doc({ type: 'paragraph', content: labelled }), { newId }).doc;
+      const seen = projectDoc(big, linkCtx)!;
+      const t0 = performance.now();
+      const merged = mergePlayerEdit(big, { ...seen, content: [{ ...seen.content![0]!, content: [{ type: 'text', text: `${'b'.repeat(99_999)}a` }] }] }, linkCtx);
+      expect(performance.now() - t0).toBeLessThan(1000);
+      expect(JSON.stringify(merged).match(/"pageId":"hidden-page"/g)).toHaveLength(1);
+    });
+
+    it('keeps a link to a page the player can see', () => {
+      const seen = projectDoc(storedLinks, linkCtx)!;
+      const link = { type: 'pageLink', attrs: { pageId: 'open-page', label: 'Tavern' } };
+      const merged = mergePlayerEdit(storedLinks, { ...seen, content: [{ ...seen.content![0]!, content: [link] }, seen.content![1]!] }, linkCtx);
+      expect(JSON.stringify(merged.content![0])).toContain('"pageId":"open-page"');
+    });
   });
 });
 
