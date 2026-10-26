@@ -24,3 +24,5 @@ export const PHONE_DEVICE = {
   deviceScaleFactor: 2,
   userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36',
 } as const;
+/** A signed-in player, written by `players.spec.ts` so later files can reuse her (sign-ups are rate limited to 8 a minute). */
+export const PLAYER_STATE = 'e2e/.auth/player.json';

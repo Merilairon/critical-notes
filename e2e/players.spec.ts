@@ -5,6 +5,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 import { expectCompactHeader, expectNoSidewaysScroll, smallFields, smallTargets } from './phone-checks';
+import { PLAYER_STATE } from './env';
 import { api, confirmDialog, baseUrl, editor, isPhone, newPage, saved, sharedPage } from './support';
 
 // Only the DM may ever see these: the player's browser must never receive them
@@ -73,6 +74,8 @@ test('a new player registers through the link', async ({ browser }) => {
   await player.locator('input[name=password]').fill('pia password');
   await player.getByRole('button', { name: 'Create account and join' }).click();
   await player.waitForURL(new RegExp(`/c/${campaignId}$`));
+  // Other specs (reveal) reuse this player instead of registering again
+  await player.context().storageState({ path: PLAYER_STATE });
 
   const { members } = await api<{ members: { userId: string; displayName: string; role: string }[] }>(shared.page, 'GET', `/api/campaigns/${campaignId}/members`);
   const pia = members.find((m) => m.displayName === 'Pia');
