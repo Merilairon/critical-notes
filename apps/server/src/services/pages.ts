@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { and, asc, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
-import { docLinks, mergePlayerEdit, projectDoc, queryFilterSchema, runQuery, sanitizeDoc, type BlockDocument, type ProjectContext, type QueryablePage, type QueryFilterInput } from '@cn/blocks';
+import { docLinks, mergePlayerEdit, projectDoc, queryFilterSchema, runQuery, sanitizeDoc, type BlockDocument, type BlockNode, type ProjectContext, type QueryablePage, type QueryFilterInput } from '@cn/blocks';
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { generateKeyBetween } from 'fractional-indexing';
 import {
@@ -99,6 +99,7 @@ const REVISION_DELETE_BATCH = 1000;
 
 /** In-memory bound for the import / instantiation fold map. */
 const MAX_OPERATIONS = 20_000;
+const MAX_PLAYER_BLOCK_TEXT = 100_000;
 
 export class PageService {
   /** page id -> operation id of the call that created it (design 4.6); never stored, bounded. */
@@ -729,6 +730,10 @@ export class PageService {
     const facetType = facetTypeFor(current.type);
     const dmFields = new Set(facetType ? FACET_DM_ONLY_FIELDS[facetType] : []);
     if (input.facet && Object.keys(input.facet).some((k) => dmFields.has(k) || k === 'playerUserId')) throw badRequest('Those details are for the DM');
+    // A fixed limit on what the player submitted (never on what is stored), so it says nothing about hidden content
+    const tooLong = (nodes: BlockNode[] | undefined): boolean =>
+      (nodes ?? []).some((n) => (n.content ?? []).reduce((sum, c) => sum + (c.type === 'text' ? (c.text ?? '').length : 0), 0) > MAX_PLAYER_BLOCK_TEXT || tooLong(n.content));
+    if (input.body && tooLong((input.body as BlockDocument).content)) throw badRequest(`A paragraph is too long (max ${MAX_PLAYER_BLOCK_TEXT} characters)`);
     const body = input.body
       ? (mergePlayerEdit(current.body as BlockDocument | null, input.body as BlockDocument, this.playerContext(this.properties.list(campaignId), visible)) as BlockDoc)
       : undefined;

@@ -516,6 +516,22 @@ describe('what players may change', () => {
     expect(fromPc?.kinds ?? []).not.toContain('embed');
   });
 
+  it('refuses an over-long paragraph the same way whether or not the page holds hidden links', async () => {
+    const long = { type: 'paragraph', content: [{ type: 'text', text: 'a'.repeat(100_001) }] };
+    const submit = async () => {
+      const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+      return player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, body: { ...mine.body, content: [...mine.body.content, long] } });
+    };
+    const first = await submit();
+    expect(first.status).toBe(400);
+    const links = Array.from({ length: 50 }, () => ({ type: 'paragraph', content: [{ type: 'text', text: 'See ' }, { type: 'pageLink', attrs: { pageId: ids['hidden'], label: 'a' } }] }));
+    const before = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
+    expect((await dm.patch(`${base()}/pages/${ids['pc']}`, { revision: before.revision, body: { ...before.body, content: [...before.body.content, ...links] } })).status).toBe(200);
+    const second = await submit();
+    expect(second.status).toBe(400);
+    expect(second.body).toEqual(first.body);
+  });
+
   it('a player cannot reveal: a submitted new block with revealed:true is stored unrevealed', async () => {
     const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
     const forged = { type: 'secret', attrs: { id: 'forged1', revealed: true }, content: [para('Forged secret', { revealed: true })] };

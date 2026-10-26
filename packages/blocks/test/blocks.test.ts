@@ -401,15 +401,15 @@ describe('mergePlayerEdit', () => {
       expect(text).toContain('"pageId":"hidden-page"');
     });
 
-    it('stays fast with many hidden links in a big block, and then keeps the stored block', () => {
-      const labelled = Array.from({ length: 100 }, () => [{ type: 'text', text: 'x' }, { type: 'pageLink', attrs: { pageId: 'hidden-page', label: 'a' } }]).flat();
+    // The timing bound is the real guard: restoring has no cap, so its cost must stay small on its own
+    it.each([[200], [2000]])('stays fast with %i hidden links and 100k characters of the repeated label', (count) => {
+      const labelled = Array.from({ length: count }, () => [{ type: 'text', text: 'x' }, { type: 'pageLink', attrs: { pageId: 'hidden-page', label: 'a' } }]).flat();
       const big = sanitizeDoc(doc({ type: 'paragraph', content: labelled }), { newId }).doc;
       const seen = projectDoc(big, linkCtx)!;
-      const chunks = Array.from({ length: 10 }, () => ({ type: 'text', text: 'a'.repeat(100_000) }));
       const t0 = performance.now();
-      const merged = mergePlayerEdit(big, { ...seen, content: [{ ...seen.content![0]!, content: chunks as never }] }, linkCtx);
+      const merged = mergePlayerEdit(big, { ...seen, content: [{ ...seen.content![0]!, content: [{ type: 'text', text: 'a'.repeat(100_000) }] }] }, linkCtx);
       expect(performance.now() - t0).toBeLessThan(500);
-      expect(JSON.stringify(merged).match(/hidden-page/g)).toHaveLength(100);
+      expect(JSON.stringify(merged).match(/"pageId":"hidden-page"/g)).toHaveLength(count);
     });
 
     it('keeps a link to a page the player can see', () => {
