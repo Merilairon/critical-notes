@@ -9,6 +9,16 @@ let campaignId: string, ariaId: string, trackerUrl: string;
 /** The table screen (the player view), open next to the DM's tracker. */
 let table: Page;
 
+/**
+ * After a viewport change the tracker switches its layout in a media-query handler, one change later: on a phone
+ * the setup toolbar leaves the sticky block and goes below it. Measure the sticky block only once that has happened,
+ * else it still holds the wrapped setup buttons (about 260 px) for a moment.
+ */
+const phoneLayoutSettled = async (page: Page) => {
+  await expect(page.locator('div.sticky').getByRole('toolbar', { name: 'Combat setup' })).toHaveCount(0);
+  await expect(page.getByRole('toolbar', { name: 'Combat setup' })).toBeVisible();
+};
+
 const order = (page: Page) => page.locator('ol[aria-label="Initiative order"] li');
 
 test('a campaign with two characters', async () => {
@@ -116,6 +126,7 @@ test('conditions count down with the rounds', async () => {
 test('the sticky Combat block and the row actions fit at 200% text on a phone', async () => {
   const { page } = shared;
   await page.setViewportSize({ width: 390, height: 844 });
+  await phoneLayoutSettled(page);
   await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
   const sticky = page.locator('div.sticky');
   expect((await sticky.boundingBox())!.height).toBeLessThanOrEqual(160);
@@ -137,6 +148,7 @@ test('a recharge note and a dying character fit a phone at 100% and 200% text', 
   await page.setViewportSize({ width: 390, height: 844 });
   const note = page.locator('[data-trk=recharge-note]');
   await expect(note).toBeVisible();
+  await phoneLayoutSettled(page);
   expect((await page.locator('div.sticky:has([data-trk=next])').boundingBox())!.height, 'sticky block with one roll, 100%').toBeLessThanOrEqual(130);
   await page.evaluate(() => (document.documentElement.style.fontSize = '200%'));
   expect((await page.locator('div.sticky:has([data-trk=next])').boundingBox())!.height, 'sticky block with one roll, 200%').toBeLessThanOrEqual(300);
@@ -380,6 +392,11 @@ test('the player view shows readied actions of characters only, and nothing DM-o
   const tracker = await api<{ state: { combatants: { id: string; name: string }[] } }>(page, 'GET', `/api/campaigns/${campaignId}/trackers/${bossId}`);
   const dragonId = tracker.state.combatants.find((c) => c.name === dragon)!.id;
   await api(page, 'POST', `/api/campaigns/${campaignId}/trackers/${bossId}/actions`, { type: 'update', id: dragonId, patch: { notes: 'DM-only dragon note' } });
+  // A monster flagged "Makes death saves", at 0 HP: the DM's tracker has it dying, the table must not know
+  const act = (a: object) => api<{ state: { combatants: { id: string; name: string; dying?: { status: string } }[] } }>(page, 'POST', `/api/campaigns/${campaignId}/trackers/${bossId}/actions`, a);
+  const ghoulId = (await act({ type: 'add', combatants: [{ name: 'Ghoul', kind: 'monster', initiative: 5, hpMax: 22, deathSaves: true }] })).state.combatants.find((c) => c.name === 'Ghoul')!.id;
+  const downed = await act({ type: 'update', id: ghoulId, patch: { hp: 0 } });
+  expect(downed.state.combatants.find((c) => c.id === ghoulId)!.dying?.status, 'the flagged monster is dying on the DM side').toBe('dying');
   await ready(dragon, 'secret dragon trigger');
   await ready('Aria', 'if the dragon inhales');
 
@@ -410,6 +427,10 @@ test('the player view shows readied actions of characters only, and nothing DM-o
   const entry = raw.combatants.find((c) => c.name === dragon)!;
   expect(Object.keys(entry).sort()).toEqual(['conditions', 'dying', 'health', 'hp', 'id', 'initiative', 'kind', 'name', 'readied']);
   expect(entry).toMatchObject({ kind: 'monster', hp: null, dying: null, readied: null, conditions: [], initiative: 30 });
+  // The flagged monster at 0 HP: only a health word, never dying (that is for characters)
+  await expect(tableRow('Ghoul')).toBeVisible();
+  await expect(tableRow('Ghoul')).not.toContainText(/Dying|Stable|Dead|Successes|Failures/i);
+  expect(raw.combatants.find((c) => c.name === 'Ghoul')).toMatchObject({ kind: 'monster', hp: null, dying: null, health: 'down' });
   expect(JSON.stringify(raw)).not.toContain('secret dragon trigger');
   expect(JSON.stringify(raw)).not.toContain('DM-only dragon note');
   await table.context().close();
