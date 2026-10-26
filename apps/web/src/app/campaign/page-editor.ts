@@ -106,6 +106,14 @@ export class PageEditor implements OnDestroy {
       // Only the route id is a dependency: flush() and load() read and write page state
       untracked(() => void this.flush().finally(() => this.load(id)));
     });
+    // The editor owns the "restore is writing" flag: whenever the panel goes away (Close, Escape, another page, the player preview)
+    // the flag resets here, because a destroyed panel can no longer report that it finished
+    effect(() => {
+      if (this.historyOpen()) return;
+      untracked(() => {
+        if (this.historyBusy()) this.onHistoryBusy(false);
+      });
+    });
     // The live stream refreshes this page through this handle, and never over unsaved edits
     effect((onCleanup) => {
       const live = this.live;
@@ -175,12 +183,7 @@ export class PageEditor implements OnDestroy {
   protected queue(change: Omit<UpdatePageInput, 'revision'>, immediate = false) {
     const p = this.page();
     if (!p) return;
-    this.pending = {
-      ...this.pending,
-      ...change,
-      ...(change.facet ? { facet: { ...(this.pending.facet ?? {}), ...change.facet } } : {}),
-      ...(change.props ? { props: { ...(this.pending.props ?? {}), ...change.props } } : {}),
-    };
+    this.pending = mergeChanges(this.pending, change);
     // Reflect summary changes immediately in the UI
     const local: Partial<PageDto> = {};
     if (change.title !== undefined) local.title = change.title;
@@ -196,7 +199,8 @@ export class PageEditor implements OnDestroy {
 
   /** The debounced save. Held back while a history restore is writing: the restore decides what happens to the typing (see `adoptHistory`). */
   private autoFlush() {
-    if (this.historyBusy()) return;
+    // A conflict cannot be saved over: do not retry a doomed PATCH on every keystroke
+    if (this.historyBusy() || this.status() === 'conflict') return;
     void this.flush();
   }
 
@@ -219,10 +223,12 @@ export class PageEditor implements OnDestroy {
       } catch (err) {
         if (err instanceof HttpErrorResponse && err.status === 409) {
           // Keep what was not saved, so the typing stays on screen and a history restore sees it
-          this.pending = { ...change, ...this.pending };
+          // `change` is older than whatever was typed since
+          this.pending = mergeChanges(change, this.pending);
           this.status.set('conflict');
         } else {
-          this.pending = { ...change, ...this.pending };
+          // `change` is older than whatever was typed since
+          this.pending = mergeChanges(change, this.pending);
           this.status.set('error');
           this.error.set(errorMessage(err));
         }
@@ -468,6 +474,16 @@ export class PageEditor implements OnDestroy {
     clearTimeout(this.shareTimer);
     void this.flush();
   }
+}
+
+/** `older` and `newer` unsaved changes as one: the newer wins per field, `facet` and `props` merge per key. */
+function mergeChanges(older: Omit<UpdatePageInput, 'revision'>, newer: Omit<UpdatePageInput, 'revision'>): Omit<UpdatePageInput, 'revision'> {
+  return {
+    ...older,
+    ...newer,
+    ...(older.facet || newer.facet ? { facet: { ...(older.facet ?? {}), ...(newer.facet ?? {}) } } : {}),
+    ...(older.props || newer.props ? { props: { ...(older.props ?? {}), ...(newer.props ?? {}) } } : {}),
+  };
 }
 
 function withoutNulls(values: Record<string, unknown>): Record<string, unknown> {

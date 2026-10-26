@@ -181,4 +181,76 @@ describe('PageEditor history wiring', () => {
     expect(editor.pending).toEqual({ title: 'Mine' });
     expect(editor.adoptHistory(reply({ title: 'Restored', revision: 4 }) as unknown as PageDto)).toBe(false);
   });
+
+  it('closing the panel mid-restore frees the autosave and sends the typing that waited', async () => {
+    const { editor, http, fixture, open } = await mount(true);
+    await open();
+    editor.onHistoryBusy(true);
+    editor.queue({ title: 'Typed during restore' }, true);
+    await settle();
+    http.expectNone({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' });
+    // the panel is destroyed before it can report the end of the restore
+    (fixture.componentInstance as unknown as { closeHistory(): void }).closeHistory();
+    fixture.detectChanges();
+    await settle();
+    http.expectOne({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' }).flush(reply({ title: 'Typed during restore', revision: 2 }));
+    await settle();
+    editor.queue({ title: 'Later' }, true);
+    await settle();
+    http.expectOne({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' }).flush(reply({ title: 'Later', revision: 3 }));
+  });
+
+  it('a page change mid-restore frees the autosave', async () => {
+    const { editor, http, fixture, open } = await mount(true);
+    await open();
+    editor.onHistoryBusy(true);
+    fixture.componentRef.setInput('pageId', 'p2');
+    fixture.detectChanges();
+    await settle();
+    http.match((r) => r.url === '/api/campaigns/c1/pages/p2').forEach((r) => r.flush(reply({ id: 'p2' })));
+    await settle();
+    fixture.detectChanges();
+    editor.queue({ title: 'On the new page' }, true);
+    await settle();
+    http.expectOne({ method: 'PATCH', url: '/api/campaigns/c1/pages/p2' }).flush(reply({ id: 'p2', title: 'On the new page', revision: 2 }));
+  });
+
+  it('turning on the player preview mid-restore frees the autosave', async () => {
+    const { editor, http, fixture, open, el } = await mount(true);
+    await open();
+    editor.onHistoryBusy(true);
+    Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.includes('Preview as player'))!.click();
+    await settle();
+    http.expectOne((r) => r.url === '/api/campaigns/c1/pages/p1' && r.params.get('as') === 'player').flush(reply());
+    await settle();
+    fixture.detectChanges();
+    editor.queue({ title: 'Typed in preview' }, true);
+    await settle();
+    http.expectOne({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' }).flush(reply({ title: 'Typed in preview', revision: 2 }));
+  });
+
+  it('puts an unsent save back with facet and props merged per key', async () => {
+    const { editor, http } = await mount(true);
+    editor.queue({ facet: { kind: 'site' }, props: { mood: 'calm' } }, true);
+    await settle();
+    const req = http.expectOne({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' });
+    // typed while that save was in flight: another key of each map, and a newer value for one key
+    editor.queue({ facet: { role: 'host' }, props: { mood: 'tense' } });
+    req.flush({ error: 'changed' }, { status: 409, statusText: 'Conflict' });
+    await settle();
+    expect(editor.pending).toMatchObject({ facet: { kind: 'site', role: 'host' }, props: { mood: 'tense' } });
+  });
+
+  it('does not retry a doomed save on every keystroke while in conflict', async () => {
+    const { editor, http } = await mount(true);
+    editor.queue({ title: 'One' }, true);
+    await settle();
+    http.expectOne({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' }).flush({ error: 'changed' }, { status: 409, statusText: 'Conflict' });
+    await settle();
+    expect(editor.status()).toBe('conflict');
+    editor.queue({ title: 'Two' }, true);
+    editor.queue({ title: 'Three' }, true);
+    await settle();
+    http.expectNone({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' });
+  });
 });
