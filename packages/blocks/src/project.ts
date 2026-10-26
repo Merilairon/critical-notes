@@ -144,7 +144,17 @@ function mergeLevel(stored: BlockNode[], submitted: BlockNode[], ctx: ProjectCon
  * (blocks are matched by id). The player only ever received the projection, so they could not have
  * edited those blocks.
  */
-export function mergePlayerEdit(stored: BlockDocument | null, submitted: BlockDocument, ctx: ProjectContext): BlockDocument {
+export function mergePlayerEdit(stored: BlockDocument | null, submittedDoc: BlockDocument, ctx: ProjectContext): BlockDocument {
+  // A link the player submits to a page they cannot see is forged (they never received such a link): keep its label as text.
+  // The DM's own links come back from the stored block in restoreHiddenLinks.
+  const flattenHiddenLinks = (node: BlockNode): BlockNode[] => {
+    if (node.type === 'pageLink' && !ctx.canSeePage(String(node.attrs?.pageId))) {
+      const text = String(node.attrs?.label ?? '');
+      return text ? [{ type: 'text', text }] : [];
+    }
+    return [node.content ? { ...node, content: node.content.flatMap(flattenHiddenLinks) } : node];
+  };
+  const submitted = { ...submittedDoc, content: submittedDoc.content?.flatMap(flattenHiddenLinks) };
   if (!stored?.content?.length) return { ...submitted, content: submitted.content?.map(clearRevealed) };
   // The player never held an id of a block they cannot see, so any submitted block carrying one (at any depth) gets a new id on save
   const hiddenIds = new Set<string>();

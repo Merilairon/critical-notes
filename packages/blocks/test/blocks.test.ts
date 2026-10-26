@@ -310,6 +310,26 @@ describe('mergePlayerEdit', () => {
       expect(JSON.stringify(merged.content![0])).toContain('"pageId":"hidden-page"');
       expect(docText(merged, 'dm')).toContain('Never met');
     });
+
+    it('stores a forged link to a hidden page id as plain text, and still restores the DM link', () => {
+      const ctx2 = { role: 'player' as const, canSeePage: (id: string) => id !== 'hidden-page' && id !== 'other-hidden' };
+      const seen = projectDoc(storedLinks, ctx2)!;
+      const [first, backstory] = seen.content!;
+      const forged = { type: 'pageLink', attrs: { pageId: 'other-hidden', label: 'Guess' } };
+      const edited = { ...seen, content: [{ ...first!, content: [...first!.content!, forged] }, backstory!] };
+      const merged = mergePlayerEdit(storedLinks, edited, ctx2);
+      const text = JSON.stringify(merged.content![0]);
+      expect(text).not.toContain('other-hidden');
+      expect(text).toContain('Guess');
+      expect(text).toContain('"pageId":"hidden-page"');
+    });
+
+    it('keeps a link to a page the player can see', () => {
+      const seen = projectDoc(storedLinks, linkCtx)!;
+      const link = { type: 'pageLink', attrs: { pageId: 'open-page', label: 'Tavern' } };
+      const merged = mergePlayerEdit(storedLinks, { ...seen, content: [{ ...seen.content![0]!, content: [link] }, seen.content![1]!] }, linkCtx);
+      expect(JSON.stringify(merged.content![0])).toContain('"pageId":"open-page"');
+    });
   });
 });
 
