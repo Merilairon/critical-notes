@@ -165,8 +165,14 @@ export function playRoutes(deps: {
       open: (ch) => {
         ch.send({ event: 'state', data: JSON.stringify(first) });
         return trackers.subscribe(id, (e) => {
-          if (ch.closed || !stillAllowed(ch)) return;
-          ch.send({ event: 'state', data: JSON.stringify(view === 'dm' ? e.dm : e.player) });
+          // Fail closed: a throwing check cuts this viewer only
+          try {
+            if (ch.closed || !stillAllowed(ch)) return;
+            ch.send({ event: 'state', data: JSON.stringify(view === 'dm' ? e.dm : e.player) });
+          } catch (err) {
+            console.error('Tracker stream delivery failed; closing the stream', err instanceof Error ? err.message : 'unknown error');
+            ch.close();
+          }
         });
       },
     });

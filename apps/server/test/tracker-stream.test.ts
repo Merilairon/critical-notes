@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { sessions, users } from '../src/db/schema';
 import { EventReader } from './events-helpers';
 import { createFixture, createSignedInApp, TestClient, type Fixture, type TestApp } from './helpers';
@@ -7,6 +7,7 @@ import { createFixture, createSignedInApp, TestClient, type Fixture, type TestAp
 /** H1.4: the tracker stream re-checks session, user state, membership and role while it is open. */
 let fx: Fixture;
 let app: TestApp;
+let services: Awaited<ReturnType<typeof createSignedInApp>>['services'];
 let dm: TestClient;
 let cid: string;
 let tid: string;
@@ -36,7 +37,7 @@ let beast: string;
 beforeAll(async () => {
   fx = await createFixture();
   fx.config.eventsHeartbeatMs = HEARTBEAT;
-  ({ app, client: dm } = await createSignedInApp(fx));
+  ({ app, client: dm, services } = await createSignedInApp(fx));
   cid = (await dm.post('/api/campaigns', { name: 'Streams', ruleset: '2014' })).body.id;
   const t = (await dm.post(`${base()}/trackers`, {
     name: 'Live',
@@ -101,6 +102,27 @@ describe('tracker stream re-validation', () => {
     await poke('expired');
     await e.until((f) => f.event === 'bye');
     expect(e.events.map((f) => f.event)).toEqual(['state', 'bye']);
+  });
+
+  it('a throwing re-check closes only that stream, on a heartbeat and on a delivery, and the process survives', async () => {
+    const real = services.eventStreams.currentRole.bind(services.eventStreams);
+    const bad = await join('player', 'bad');
+    const b = await open(bad.client, 'player');
+    const g = await open(dm, 'player');
+    const spy = vi.spyOn(services.eventStreams, 'currentRole').mockImplementation((info) => {
+      if (info.userId === bad.userId) throw new Error('SQLITE_BUSY');
+      return real(info);
+    });
+    try {
+      expect(await b.endedWithin(1500)).toBe(true); // heartbeat path
+      expect(g.ended).toBe(false);
+      await poke('delivery');
+      await g.until((f) => f.event === 'state', 2500, 1);
+      expect(g.ended).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+    await g.cancel();
   });
 
   it('stops the DM view of a demoted co-DM but keeps the player view working', async () => {

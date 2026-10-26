@@ -746,9 +746,8 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 **Acceptance Criteria**: the finding in `docs/qa/` or the task note; if a property can be removed without confirmation, a fix with a test; keyboard-only operation of the panel documented
 **Depends on**: none
 
-### [x] Task H1.4: Re-check the tracker stream membership while it is open
+### [ ] Task H1.4: Re-check the tracker stream membership while it is open
 **Owner**: Realtime Collaboration Engineer · **QA**: Application Security Engineer
-**Done:** 2026-10-26. Tracker stream re-checks on each heartbeat and delivery, closes with `bye {reason: access}`; tests in `apps/server/test/tracker-stream.test.ts`.
 **Description**: The tracker's event stream (`/trackers/:id/events`) checks campaign membership only when it connects, so a member who is removed keeps receiving tracker state until the connection ends. The campaign event stream from N3.2 already re-checks session and membership on every heartbeat and delivery. The shared `lib/sse.ts` has an `onHeartbeat` hook for this. Re-check session, user state, membership and (for the player view) role on each heartbeat and each delivery, close with `bye`, and keep the tracker's DM/player projection as it is.
 **Acceptance Criteria**: tests for a removed member, a disabled user, a logged-out session and a demoted co-DM on the tracker stream; the sentinel crawl stays green
 **Depends on**: none
