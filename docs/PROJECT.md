@@ -17,7 +17,7 @@
 | **1.0** | Trustworthy to self-host | M1 License, M2 Accounts, M3 Backup, M4 Trash, M5 Release process, M6 Phone-width | 43 tasks, 10 waves (§5) |
 | **1.1.0 to 1.2.0** | Post-1.0 follow-ups (shipped 2026-10-22) | Sign out other sessions, player-visible page count, accessibility backlog, keyboard block menu, page titles | Not planned here; see [CHANGELOG.md](../CHANGELOG.md) |
 | **1.3** | Prep and play loop | N1 Page history, N3 Reveal to players, I1 Keep hidden links, I3 Tracker additions, I2 Query views | 22 tasks, 5 waves (§6) |
-| **1.3.1** | Hardening and follow-ups | Rest of the player-merge hardening (I1.4 to I1.6), cheaper queries (I2.4 to I2.7), offline-gap toast (N3.6), test health (H1.1 to H1.6) | 15 tasks (14 plus the gate), 4 waves (§6b) |
+| **1.3.1** | Hardening and follow-ups | Rest of the player-merge hardening (I1.6, S1.1, S1.2), stream and history-panel follow-ups (S1.3, S1.4), cheaper queries (I2.4 to I2.7), offline-gap toast (N3.6), test health (H1.1 to H1.3, H1.5) | 15 tasks (14 plus the gate), 4 waves (§6b) |
 | **1.4** | Stay in sync | N2, N4, I4, I5, I10 | Assigned, broken down when scheduled (§7) |
 | **Later** | Grow | N5–N17, I6–I18 | Assigned, broken down when scheduled (§7) |
 
@@ -657,11 +657,12 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 | Wave | Tasks |
 |---|---|
 | 1 | I1.1, N1.1, N3.1, I3.1, I2.1 |
-| patch | I1.3 (data-loss fix, done 2026-10-23; I1.4 to I1.6 moved to release 1.3.1, §6b) |
+| patch | I1.3 (data-loss fix, done 2026-10-23; I1.6 moved to release 1.3.1, §6b; I1.4 and I1.5 pulled back into 1.3 on 2026-10-26) |
 | 2 | I1.2, N1.2, N3.2, I3.2, I2.2 (all done 2026-10-24) |
 | 3 | N1.3, N3.3, N3.4, I3.3, I2.3 (all done 2026-10-24 and 2026-10-25) |
 | 4 | N1.4, N1.5, N3.5, I3.4 |
-| 5 | N1.6 (done 2026-10-26), H1.6 (moved here from release 1.3.1: its flake fails the full `pnpm e2e`), then G2.1 |
+| 5 | N1.6, H1.6 (moved here from 1.3.1: its flake fails the full `pnpm e2e`), then G2.1 |
+| 5b | I1.4, I1.5 and H1.4 (moved here from 1.3.1 by the owner on 2026-10-26 after the first G2.1 run reproduced the gaps), the docs, the upgrade check; then G2.1 again |
 
 ## 6b. Release 1.3.1: Hardening and follow-ups
 
@@ -669,18 +670,20 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 
 **Theme:** nothing new for players. The player merge becomes stricter, queries get cheaper, the live reveal says more after a gap, and the test suite stops failing under load.
 
-**Not in 1.3.1:** wave 4 and 5 of release 1.3 (N1.4, N1.5, N1.6, N3.5, I3.4, G2.1) stay in §6. The restore drill against the built bundle (H1.2) is also a step of the 1.3 gate: until H1.2 is done, G2.1 runs it by hand.
+**Not in 1.3.1:** wave 4 and 5 of release 1.3 (N1.4, N1.5, N1.6, N3.5, I3.4, H1.6, I1.4, I1.5, H1.4, G2.1) stay in §6. The restore drill against the built bundle (H1.2) is also a step of the 1.3 gate: until H1.2 is done, G2.1 runs it by hand.
 
 ### 6b.1 Epic I1b: Harden the player merge (continued from §6.1b)
 
-### [ ] Task I1.4: Drop links to pages the player cannot see (P2)
+### [x] Task I1.4: Drop links to pages the player cannot see (P2)
 **Owner**: Minimal Change Engineer · **QA**: Application Security Engineer
+**Done:** 2026-10-26 (pulled into release 1.3 by the owner after the G2.1 certification), with I1.5. Code Reviewer PASS, QA Application Security Engineer: APPROVED after four fix rounds. `mergePlayerEdit` flattens a player-submitted `pageLink` or drops a `pageEmbed` to a page the player cannot see, at every depth, before the merge; the response is identical for hidden, nonexistent, other-campaign, trashed and selected-other ids. New limits (all independent of hidden data, so no oracle): a player block may hold at most 100,000 characters of text plus link labels (uniform 400; an existing longer block saves unchanged only if the player's own projection has a block with the same id and identical text), a non-string `text` or label is refused, and the player page PATCH has a 2 MB body limit (GMs unlimited). 30,000 plus 4,000 fuzz runs lost no DM link. Follow-ups: S1.1 to S1.4 (§6b).
 **Description**: A `pageLink` a player submits to a page they cannot see is removed (kept as its label text) unless it is restored from the stored block (I1.2). Closes the forged-link path: a player who guesses an id cannot create a link or probe whether a page exists.
 **Acceptance Criteria**: test: a forged link to a hidden page id is stored as plain text, and a restored DM link is still kept; the sentinel crawl stays green
 **Depends on**: I1.3
 
-### [ ] Task I1.5: Restore the right link when the label is marked or repeated (P3)
+### [x] Task I1.5: Restore the right link when the label is marked or repeated (P3)
 **Owner**: Minimal Change Engineer · **QA**: Code Reviewer
+**Done:** 2026-10-26 (pulled into release 1.3), Code Reviewer PASS (a brute-force oracle fuzz of 8,000 runs matches; negative control: the new tests fail on the old code), QA Application Security Engineer: APPROVED. `restoreHiddenLinks` finds the label across text nodes and marks, picks the occurrence nearest the link's original place (outward `indexOf` search over the unchanged text, a mask of used regions, exhausted labels remembered), restores each link once and in order; the link comes back without bold or italic (stored inline nodes keep no marks). Cost: 100 links in a 1 MB paragraph takes 1 to 2 ms (was up to 35 s in a first draft); worst DM-built shape (10,000 links, 50-character repeated label, 100k repeated text) about 0.7 s. Known limits (STATUS.md): a reworded label loses the link; if the linked page becomes visible between the player's load and save the player's text overwrites the link; a hidden link with an empty label is dropped on a player edit; a long DM paragraph over 100,000 characters cannot be saved by a player.
 **Description**: `restoreHiddenLinks` matches the label as a substring of unmarked text. Make it also find a label inside marked text (bold, italic; the link keeps the mark) and prefer the occurrence nearest to where the link was, so a repeated word does not get the link.
 **Acceptance Criteria**: tests: a bolded label keeps the DM's link; with the label word earlier in the paragraph, the link lands on the original occurrence
 **Depends on**: I1.4
@@ -766,6 +769,30 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 **Acceptance Criteria**: the file passes 20 times in a row, also while another e2e run loads the machine; a planted `dying` leak on a flagged monster fails the spec
 **Depends on**: none
 
+### [ ] Task S1.1: Players cannot probe pages through page-link properties
+**Owner**: Backend Architect · **QA**: Application Security Engineer
+**Description**: Found in the I1.4/I1.5 security QA (F3): `PATCH` with a page-link property (`props.<key> = <page id>`) returns 200 for a hidden or selected-other page and 400 "Linked page ... not found in this campaign" for a nonexistent, other-campaign or trashed id (`assertPageInCampaign` ignores the viewer). A player with a real id can confirm that a hidden page exists, and the id is stored in the DM's view. For players, validate against the pages they can see and answer the same error for everything else (or clear the value, as the merge does for links); check facet and template pageLink fields too.
+**Acceptance Criteria**: identical response for hidden, nonexistent, other-campaign, trashed and selected-other ids; a visible id still works; sentinel crawl green
+**Depends on**: none
+
+### [ ] Task S1.2: A moved paragraph keeps the DM's hidden link
+**Owner**: Minimal Change Engineer · **QA**: Application Security Engineer
+**Description**: F4 from the I1.4/I1.5 security QA: `mergeLevel` matches a stored block by id at the same nesting level only, so a player moving a paragraph that holds a hidden link into a container (or out of one) loses the link without trace. Match stored blocks by id across levels, or restore the link to the block with that id wherever it ended up. Also malformed player shapes (F5: `content: [null]`, `content: {}` give 500; the merge recursion overflows around 3,000 levels of nesting): refuse with a uniform 400 before the merge.
+**Acceptance Criteria**: tests for move into and out of a container and for the malformed shapes; no leak; I1.6 (attribute re-id) can be done in the same pass
+**Depends on**: none
+
+### [ ] Task S1.3: Tracker and campaign stream follow-ups
+**Owner**: Realtime Collaboration Engineer · **QA**: Application Security Engineer
+**Description**: From the H1.4 QA: tracker streams are not counted in the per-user, per-campaign and global stream caps (one player opened 40); the campaign stream closes without `bye` on access loss (clients reconnect and get 404/401); the tracker delivery guard in `routes/play.ts` has no test of its own (set a long heartbeat so the delivery path closes the stream first); the MCP client `path` helper leaves `.` and `..` unencoded (N1.5; reject them for all tools).
+**Acceptance Criteria**: tracker streams go through `admit()`; tests for each; sentinel crawl green
+**Depends on**: none
+
+### [ ] Task S1.4: History panel follow-ups
+**Owner**: Frontend Developer · **QA**: Evidence Collector
+**Description**: From the N1.4 QA: a save for the old page that resolves after a page change can overwrite the new page in the editor (guard `page.set` by page id; this also existed for timer saves); closing and reopening the panel during a restore can race a PATCH against the POST; the list reloads up to three times per restore; the restore-warnings box, DM-only properties in 'Other changes', dark mode at 200% text and forced colours on a real OS were not browser-tested.
+**Acceptance Criteria**: a test per race; the Evidence Collector re-runs the untested items
+**Depends on**: none
+
 ### 6b.5 Release gate and waves
 
 ### [ ] Task G3.1: Release 1.3.1 certification
@@ -775,9 +802,9 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 
 | Wave | Tasks |
 |---|---|
-| 1 | I1.4, I2.4, I2.5, N3.6, H1.1, H1.2, H1.3, H1.4, H1.5, H1.6 (independent of each other) |
-| 2 | I1.5 (after I1.4), I2.6 (after I2.5; needs the Product Manager decision first) |
-| 3 | I1.6 (after I1.5), I2.7 (after I2.4 and I2.5; only if campaigns pass about 5,000 pages) |
+| 1 | I2.4, I2.5, N3.6, H1.1, H1.2, H1.3, H1.5, S1.1, S1.3, S1.4 (independent of each other) |
+| 2 | S1.2 (with I1.6), I2.6 (after I2.5; needs the Product Manager decision first) |
+| 3 | I2.7 (after I2.4 and I2.5; only if campaigns pass about 5,000 pages) |
 | 4 | G3.1 |
 
 ## 7. Backlog: assigned, broken down when scheduled
