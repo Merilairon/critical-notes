@@ -371,6 +371,23 @@ describe('mergePlayerEdit', () => {
       });
     });
 
+    it('picks the right repeat after an earlier, longer link was restored', () => {
+      const ctx2 = { role: 'player' as const, canSeePage: (id: string) => !id.startsWith('h') };
+      const long = 'a'.repeat(30);
+      const two = sanitizeDoc(doc({ type: 'paragraph', content: [{ type: 'pageLink', attrs: { pageId: 'h1', label: long } }, { type: 'text', text: ' ' }, { type: 'pageLink', attrs: { pageId: 'h2', label: 'cat' } }, { type: 'text', text: ' x cat' }] }), { newId }).doc;
+      const seen = projectDoc(two, ctx2)!;
+      const merged = mergePlayerEdit(two, { ...seen, content: [{ ...seen.content![0]!, content: [{ type: 'text', text: `${long} cat x cat` }] }] }, ctx2);
+      expect(merged.content![0]!.content!.map((c) => (c.type === 'text' ? c.text : `[${c.attrs!.pageId}]`))).toEqual(['[h1]', ' ', '[h2]', ' x cat']);
+    });
+
+    it('does not let a label with NUL match the place of a non-text node', () => {
+      const nul = sanitizeDoc(doc({ type: 'paragraph', content: [{ type: 'text', text: 'a' }, { type: 'pageLink', attrs: { pageId: 'hidden-page', label: 'a\0' } }] }), { newId }).doc;
+      const seen = projectDoc(nul, linkCtx)!;
+      const tag = { type: 'tag', attrs: { markup: '{@dice 2d6}' } };
+      const merged = mergePlayerEdit(nul, { ...seen, content: [{ ...seen.content![0]!, content: [{ type: 'text', text: 'a' }, tag] }] }, linkCtx);
+      expect(JSON.stringify(merged)).not.toContain('hidden-page');
+    });
+
     it('keeps a link to a page the player can see', () => {
       const seen = projectDoc(storedLinks, linkCtx)!;
       const link = { type: 'pageLink', attrs: { pageId: 'open-page', label: 'Tavern' } };

@@ -58,18 +58,31 @@ function restoreHiddenLinks(before: BlockNode, n: BlockNode, ctx: ProjectContext
   const seenLength = (c: BlockNode) => (c.type === 'text' ? (c.text ?? '').length : hidden(c) ? String(c.attrs?.label ?? '').length : 1);
   let content = n.content ?? [];
   let seenAt = 0;
+  let shrunk = 0;
   for (const link of before.content ?? []) {
     if (!hidden(link)) {
       seenAt += seenLength(link);
       continue;
     }
-    const was = seenAt;
+    // Restored links count 1 in `content` but their label length in the text the player saw
+    const was = seenAt - shrunk;
     seenAt += seenLength(link);
     const label = String(link.attrs?.label ?? '');
     const flat = content.map((c) => (c.type === 'text' ? (c.text ?? '') : '\0')).join('');
+    // Positions of non-text inline nodes: a match may not cover one (even if the label itself contains NUL)
+    const gaps: number[] = [];
+    let p = 0;
+    for (const c of content) {
+      if (c.type !== 'text') gaps.push(p);
+      p += c.type === 'text' ? (c.text ?? '').length : 1;
+    }
     let at = -1;
-    for (let i = label ? flat.indexOf(label) : -1; i >= 0; i = flat.indexOf(label, i + 1)) if (at < 0 || Math.abs(i - was) < Math.abs(at - was)) at = i;
+    for (let i = label ? flat.indexOf(label) : -1; i >= 0; i = flat.indexOf(label, i + 1)) {
+      if (gaps.some((g) => g >= i && g < i + label.length)) continue;
+      if (at < 0 || Math.abs(i - was) < Math.abs(at - was)) at = i;
+    }
     if (at < 0) continue;
+    shrunk += label.length - 1;
     const end = at + label.length;
     const next: BlockNode[] = [];
     let pos = 0;
