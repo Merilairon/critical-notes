@@ -1,5 +1,5 @@
 # 5etools data and images: never commit or redistribute (see README, Licensing)
-/5etools-data/
+/5etools-data
 
 # App runtime data (DB, search index, uploads)
 /var/
