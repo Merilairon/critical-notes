@@ -131,16 +131,26 @@ export class EventStreamHub {
 
   /** The member's current role, or null when the session expired, the user is disabled or the membership ended. */
   private validRole(conn: StreamConnection): CampaignRole | null {
+    return this.currentRole(conn);
+  }
+
+  /**
+   * The same re-validation for any long-lived stream (the tracker stream uses it too). With a browser session the session must be
+   * unexpired and its user enabled; without one (an internal token call) the user must be enabled. Never extends the session.
+   */
+  currentRole(info: { campaignId: string; userId: string; sessionId?: string }): CampaignRole | null {
     const { db, campaigns } = this.deps;
-    const session = db
-      .select({ id: sessions.id })
-      .from(sessions)
-      .innerJoin(users, eq(users.id, sessions.userId))
-      .where(and(eq(sessions.id, conn.sessionId), eq(sessions.userId, conn.userId), gt(sessions.expiresAt, Date.now()), isNull(users.disabledAt)))
-      .get();
-    if (!session) return null;
+    const live = info.sessionId
+      ? db
+          .select({ id: sessions.id })
+          .from(sessions)
+          .innerJoin(users, eq(users.id, sessions.userId))
+          .where(and(eq(sessions.id, info.sessionId), eq(sessions.userId, info.userId), gt(sessions.expiresAt, Date.now()), isNull(users.disabledAt)))
+          .get()
+      : db.select({ id: users.id }).from(users).where(and(eq(users.id, info.userId), isNull(users.disabledAt))).get();
+    if (!live) return null;
     try {
-      return campaigns.access(conn.campaignId, conn.userId).role;
+      return campaigns.access(info.campaignId, info.userId).role;
     } catch {
       return null;
     }

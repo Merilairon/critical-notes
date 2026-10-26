@@ -8,6 +8,7 @@ import {
   combatantInput,
   createEncounterInput,
   trackerAction,
+  isGameMaster,
   updateEncounterInput,
   updateInventoryItemInput,
   projectInventoryForPlayers,
@@ -17,7 +18,8 @@ import {
 import { requireUser, type AppEnv } from '../auth/session';
 import { writeContext } from '../auth/write-context';
 import { forbidden, validate } from '../lib/http';
-import { sseResponse } from '../lib/sse';
+import { sseResponse, type SseChannel } from '../lib/sse';
+import type { EventStreamHub } from '../services/event-streams';
 import type { CampaignService } from '../services/campaigns';
 import type { EncounterService } from '../services/encounters';
 import type { InventoryService } from '../services/inventory';
@@ -36,8 +38,9 @@ export function playRoutes(deps: {
   trackers: TrackerService;
   inventory: InventoryService;
   visibility: VisibilityService;
+  eventStreams: EventStreamHub;
 }) {
-  const { campaigns, encounters, trackers, inventory, visibility } = deps;
+  const { campaigns, encounters, trackers, inventory, visibility, eventStreams } = deps;
   const app = new Hono<AppEnv>();
   app.use('*', requireUser);
   const uid = (c: { get(key: 'user'): AppEnv['Variables']['user'] }) => c.get('user')!.id;
@@ -146,10 +149,25 @@ export function playRoutes(deps: {
     if (view === 'dm') campaigns.requireDm(campaignId, uid(c));
     else campaigns.access(campaignId, uid(c));
     const first = view === 'dm' ? trackers.get(campaignId, id) : trackers.playerView(campaignId, id);
+    const userId = uid(c);
+    const sessionId = c.get('sessionId');
+    // Session, user state, membership and (for the DM view) the game-master role, checked again on every heartbeat and every
+    // delivery; whoever fails is told `bye` and cut. The projection itself is unchanged.
+    const stillAllowed = (ch: SseChannel) => {
+      const role = eventStreams.currentRole({ campaignId, userId, sessionId });
+      if (role && (view === 'player' || isGameMaster(role))) return true;
+      ch.end({ event: 'bye', data: JSON.stringify({ reason: 'access' }) });
+      return false;
+    };
     return sseResponse(c, {
+      heartbeatMs: eventStreams.heartbeatMs,
+      onHeartbeat: (ch) => void stillAllowed(ch),
       open: (ch) => {
         ch.send({ event: 'state', data: JSON.stringify(first) });
-        return trackers.subscribe(id, (e) => void ch.send({ event: 'state', data: JSON.stringify(view === 'dm' ? e.dm : e.player) }));
+        return trackers.subscribe(id, (e) => {
+          if (ch.closed || !stillAllowed(ch)) return;
+          ch.send({ event: 'state', data: JSON.stringify(view === 'dm' ? e.dm : e.player) });
+        });
       },
     });
   });
