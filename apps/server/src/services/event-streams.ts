@@ -95,7 +95,7 @@ export class EventStreamHub {
     };
     try {
       let replay: CampaignEvent[] | null = null;
-      const role = this.validRole(conn);
+      const role = this.currentRole(conn);
       if (!role) {
         channel.close();
       } else {
@@ -110,7 +110,14 @@ export class EventStreamHub {
         for (const e of replay ?? []) this.write(conn, e);
       }
       // Same tick as the replay read: no event can fall between the two
-      unsubscribe = bus.subscribe(conn.campaignId, (e) => this.deliver(conn, e));
+      unsubscribe = bus.subscribe(conn.campaignId, (e) => {
+        try {
+          this.deliver(conn, e);
+        } catch (err) {
+          console.error('Event stream delivery failed; closing the stream', err instanceof Error ? err.message : 'unknown error');
+          channel.close();
+        }
+      });
     } catch (e) {
       console.error('Opening an event stream failed', e);
       release();
@@ -121,7 +128,7 @@ export class EventStreamHub {
 
   /** Heartbeat tick: closes the stream when the session, the user or the membership is gone. Never extends the session. */
   heartbeat(conn: StreamConnection): void {
-    if (!this.validRole(conn)) conn.channel?.close();
+    if (!this.currentRole(conn)) conn.channel?.close();
   }
 
   /** Shutdown: tells every client to reconnect (with jitter) to the next process. */
@@ -129,18 +136,23 @@ export class EventStreamHub {
     for (const conn of [...this.conns]) conn.channel?.end({ event: 'bye', data: JSON.stringify({ reason: 'restart' }) });
   }
 
-  /** The member's current role, or null when the session expired, the user is disabled or the membership ended. */
-  private validRole(conn: StreamConnection): CampaignRole | null {
+  /**
+   * The member's current role, or null when the session expired, the user is disabled or the membership ended.
+   * Also used by the tracker stream. With a browser session the session must be unexpired and its user enabled; without one (an internal token call) the user must be enabled. Never extends the session.
+   */
+  currentRole(info: { campaignId: string; userId: string; sessionId?: string }): CampaignRole | null {
     const { db, campaigns } = this.deps;
-    const session = db
-      .select({ id: sessions.id })
-      .from(sessions)
-      .innerJoin(users, eq(users.id, sessions.userId))
-      .where(and(eq(sessions.id, conn.sessionId), eq(sessions.userId, conn.userId), gt(sessions.expiresAt, Date.now()), isNull(users.disabledAt)))
-      .get();
-    if (!session) return null;
+    const live = info.sessionId
+      ? db
+          .select({ id: sessions.id })
+          .from(sessions)
+          .innerJoin(users, eq(users.id, sessions.userId))
+          .where(and(eq(sessions.id, info.sessionId), eq(sessions.userId, info.userId), gt(sessions.expiresAt, Date.now()), isNull(users.disabledAt)))
+          .get()
+      : db.select({ id: users.id }).from(users).where(and(eq(users.id, info.userId), isNull(users.disabledAt))).get();
+    if (!live) return null;
     try {
-      return campaigns.access(conn.campaignId, conn.userId).role;
+      return campaigns.access(info.campaignId, info.userId).role;
     } catch {
       return null;
     }
@@ -163,7 +175,7 @@ export class EventStreamHub {
 
   private deliver(conn: StreamConnection, e: CampaignEvent) {
     if (conn.closed || !conn.channel || conn.channel.closed) return;
-    const role = this.validRole(conn);
+    const role = this.currentRole(conn);
     if (!role) {
       conn.channel.close();
       return;
@@ -193,12 +205,17 @@ export class EventStreamHub {
         const pending = slot.pending;
         slot.pending = undefined;
         if (!pending || conn.closed || !conn.channel || conn.channel.closed) return;
-        // Re-checked at flush time: the page may have been hidden again meanwhile
-        const r = this.validRole(conn);
-        if (!r) return void conn.channel.close();
-        if (!this.allowed(conn, pending.event, r)) return;
-        slot.lastSent = Date.now();
-        this.write(conn, pending.event);
+        try {
+          // Re-checked at flush time: the page may have been hidden again meanwhile
+          const r = this.currentRole(conn);
+          if (!r) return void conn.channel.close();
+          if (!this.allowed(conn, pending.event, r)) return;
+          slot.lastSent = Date.now();
+          this.write(conn, pending.event);
+        } catch (err) {
+          console.error('Event stream flush failed; closing the stream', err instanceof Error ? err.message : 'unknown error');
+          conn.channel.close();
+        }
       }, Math.max(0, slot.lastSent + this.limits.coalesceMs - now)),
     };
   }

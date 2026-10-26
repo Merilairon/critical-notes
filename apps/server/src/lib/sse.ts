@@ -109,7 +109,15 @@ export function sseResponse(c: Context, opts: SseOptions): Response {
     stream.onAbort(() => finish(false));
     const cleanup = opts.open(channel);
     const timer = setInterval(() => {
-      opts.onHeartbeat?.(channel);
+      // Fail closed: a throwing re-check (busy or closed database, disk error) must cut this stream, never crash the process
+      try {
+        opts.onHeartbeat?.(channel);
+      } catch (e) {
+        console.error('SSE heartbeat check failed; closing the stream', e instanceof Error ? e.message : 'unknown error');
+        clearInterval(timer);
+        channel.close();
+        return;
+      }
       channel.send({ event: 'ping' });
     }, opts.heartbeatMs ?? HEARTBEAT_MS);
     await done;
