@@ -720,19 +720,32 @@ export class PageService {
 
   /**
    * A fixed limit on the text of one inline block of what the player submitted (labels of links count, as the merge turns
-   * a forged link into its label). It never looks at hidden content: a longer block is accepted only if it is exactly a
-   * block the player was shown (compared with their projection), so existing long blocks can still be saved unchanged.
+   * a forged link into its label; any other inline node counts 1). It never looks at hidden content: a longer block is
+   * accepted only if it is the block with the same id that the player was shown (compared with their projection), so
+   * existing long blocks can still be saved unchanged. Text and labels that are not strings are refused, not coerced.
    */
   private checkPlayerTextSize(stored: BlockDocument | null, submitted: BlockDocument, ctx: ProjectContext) {
-    const parts = (n: BlockNode) => (n.content ?? []).map((c) => (c.type === 'text' ? (c.text ?? '') : c.type === 'pageLink' ? String(c.attrs?.label ?? '') : ''));
-    const size = (n: BlockNode) => parts(n).reduce((sum, t) => sum + t.length, 0);
+    const refuse = () => badRequest(`A paragraph is too long (max ${MAX_PLAYER_BLOCK_TEXT} characters)`);
+    const part = (c: BlockNode) => {
+      if (c.type === 'text') {
+        if (c.text !== undefined && typeof c.text !== 'string') throw refuse();
+        return c.text ?? '';
+      }
+      if (c.type !== 'pageLink') return '\0';
+      const label = c.attrs?.label;
+      if (label !== undefined && typeof label !== 'string') throw refuse();
+      return label ?? '';
+    };
+    const size = (n: BlockNode) => (n.content ?? []).reduce((sum, c) => sum + (c.type === 'text' || c.type === 'pageLink' ? part(c).length : 1), 0);
+    const key = (n: BlockNode) => (n.content ?? []).map(part).join('');
+    const idOf = (n: BlockNode) => (typeof n.attrs?.id === 'string' ? n.attrs.id : '');
     const over = (nodes: BlockNode[] | undefined): BlockNode[] => (nodes ?? []).flatMap((n) => [...(size(n) > MAX_PLAYER_BLOCK_TEXT ? [n] : []), ...over(n.content)]);
-    const long = over(submitted.content);
+    const long = over([submitted as BlockNode]);
     if (!long.length) return;
-    const shown = new Set<string>();
-    const collect = (nodes: BlockNode[] | undefined) => (nodes ?? []).forEach((n) => (size(n) > MAX_PLAYER_BLOCK_TEXT && shown.add(parts(n).join('')), collect(n.content)));
+    const shown = new Map<string, string>();
+    const collect = (nodes: BlockNode[] | undefined) => (nodes ?? []).forEach((n) => (size(n) > MAX_PLAYER_BLOCK_TEXT && idOf(n) && shown.set(idOf(n), key(n)), collect(n.content)));
     collect(projectDoc(stored, ctx)?.content);
-    if (long.some((n) => !shown.has(parts(n).join('')))) throw badRequest(`A paragraph is too long (max ${MAX_PLAYER_BLOCK_TEXT} characters)`);
+    if (long.some((n) => !idOf(n) || shown.get(idOf(n)) !== key(n))) throw refuse();
   }
 
   /**

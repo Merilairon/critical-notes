@@ -240,7 +240,7 @@ export function campaignRoutes(deps: {
   app.patch(
     '/:campaignId/pages/:pageId',
     (c, next) =>
-      seen(c).viewer.gm
+      campaigns.viewer(c.req.param('campaignId'), uid(c)).gm
         ? next()
         : bodyLimit({
             maxSize: MAX_PLAYER_PAGE_BODY_BYTES,
@@ -248,18 +248,20 @@ export function campaignRoutes(deps: {
               throw badRequest('That page is too large to save');
             },
           })(c, next),
-    validate('json', updatePageInput), (c) => {
-    const { campaignId, viewer, visible } = seen(c);
-    const pageId = c.req.param('pageId');
-    let page;
-    if (viewer.gm) page = pages.update(campaignId, pageId, c.req.valid('json'), writeContext(c, 'edit'));
-    else if (visibility.canEdit(campaignId, viewer, pageId))
-      page = pages.updateAsPlayer(campaignId, pageId, c.req.valid('json'), visible, writeContext(c, 'edit', true));
-    else if (visible.has(pageId)) throw forbidden('Only the DM can edit this page');
-    else throw notFound('Page not found');
-    campaigns.touch(campaignId);
-    return c.json(page);
-  });
+    validate('json', updatePageInput),
+    (c) => {
+      const { campaignId, viewer, visible } = seen(c);
+      const pageId = c.req.param('pageId');
+      let page;
+      if (viewer.gm) page = pages.update(campaignId, pageId, c.req.valid('json'), writeContext(c, 'edit'));
+      else if (visibility.canEdit(campaignId, viewer, pageId))
+        page = pages.updateAsPlayer(campaignId, pageId, c.req.valid('json'), visible, writeContext(c, 'edit', true));
+      else if (visible.has(pageId)) throw forbidden('Only the DM can edit this page');
+      else throw notFound('Page not found');
+      campaigns.touch(campaignId);
+      return c.json(page);
+    },
+  );
 
   // region page history (task N1.3; docs/design/page-history.md). GM only: the check runs before validation, the page lookup and
   // any read of `page_revisions`, so a player learns nothing about history, or about a page beyond what they already see.

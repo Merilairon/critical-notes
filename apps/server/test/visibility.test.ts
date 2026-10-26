@@ -548,6 +548,22 @@ describe('what players may change', () => {
     expect(second.body).toEqual(first.body);
   });
 
+  it('refuses text that is not a string with the same 400 whether or not the page holds hidden links', async () => {
+    const submit = async (text: unknown) => {
+      const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+      return player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, body: { ...mine.body, content: [...mine.body.content, { type: 'paragraph', content: [{ type: 'text', text }] }] } });
+    };
+    const bad = [['b'.repeat(1000), 'a'], { x: 1 }];
+    const first = await Promise.all(bad.map(submit));
+    expect(first.map((r) => r.status)).toEqual([400, 400]);
+    const before = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
+    const links = Array.from({ length: 30 }, () => ({ type: 'paragraph', content: [{ type: 'text', text: 'See ' }, { type: 'pageLink', attrs: { pageId: ids['hidden'], label: 'a' } }] }));
+    expect((await dm.patch(`${base()}/pages/${ids['pc']}`, { revision: before.revision, body: { ...before.body, content: [...before.body.content, ...links] } })).status).toBe(200);
+    const second = await Promise.all(bad.map(submit));
+    expect(second.map((r) => r.status)).toEqual([400, 400]);
+    expect(second.map((r) => r.body)).toEqual(first.map((r) => r.body));
+  });
+
   it('lets a player save an existing long paragraph unchanged, but not change it', async () => {
     const big = { type: 'paragraph', attrs: { id: 'bigpara' }, content: [{ type: 'text', text: 'a'.repeat(90_000) }, { type: 'text', text: 'b'.repeat(90_000), marks: [{ type: 'bold' }] }] };
     const before = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
@@ -557,6 +573,9 @@ describe('what players may change', () => {
     const again = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
     const grown = again.body.content.map((b: { attrs?: { id?: string }; content: unknown[] }) => (b.attrs?.id === 'bigpara' ? { ...b, content: [...b.content, { type: 'text', text: 'c' }] } : b));
     expect((await player.patch(`${base()}/pages/${ids['pc']}`, { revision: again.revision, body: { ...again.body, content: grown } })).status).toBe(400);
+    // The same long text copied into another block is refused
+    const copied = { type: 'paragraph', attrs: { id: 'copycat' }, content: again.body.content.find((b: { attrs?: { id?: string } }) => b.attrs?.id === 'bigpara').content };
+    expect((await player.patch(`${base()}/pages/${ids['pc']}`, { revision: again.revision, body: { ...again.body, content: [...again.body.content, copied] } })).status).toBe(400);
     const cleaned = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
     expect((await dm.patch(`${base()}/pages/${ids['pc']}`, { revision: cleaned.revision, body: { ...cleaned.body, content: cleaned.body.content.filter((b: { attrs?: { id?: string } }) => b.attrs?.id !== 'bigpara') } })).status).toBe(200);
   });
