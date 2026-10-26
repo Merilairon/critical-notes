@@ -25,6 +25,7 @@ import { AutosizeTitle, singleLine } from './autosize-title';
 import { pcDigest } from './facet-digest';
 import { BacklinksPanel } from './backlinks-panel';
 import { CampaignStore } from './campaign.store';
+import { HistoryPanel, type HistoryPrepared } from './history-panel';
 import { FacetForm } from './facet-form';
 import { LiveService } from './live/live.service';
 import { NpcStatblock } from './npc-statblock';
@@ -38,7 +39,7 @@ const VISIBILITY_LABELS: Record<PageVisibility, string> = { dm: 'DM only', all: 
 
 @Component({
   selector: 'cn-page-editor',
-  imports: [RouterLink, AutosizeTitle, BlockEditor, BlockView, FacetForm, NpcStatblock, PropertiesPanel, BacklinksPanel, PageTemplateDialog],
+  imports: [RouterLink, AutosizeTitle, BlockEditor, BlockView, FacetForm, NpcStatblock, PropertiesPanel, BacklinksPanel, PageTemplateDialog, HistoryPanel],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './page-editor.html',
 })
@@ -66,6 +67,8 @@ export class PageEditor implements OnDestroy {
   protected readonly previewing = signal(false);
   protected readonly showProps = signal(false);
   protected readonly applying = signal(false);
+  protected readonly historyOpen = signal(false);
+  private readonly historyBtn = viewChild<ElementRef<HTMLElement>>('historyBtn');
   private readonly layout = inject(LayoutService);
   /** On a phone (portrait, or short landscape) the character sheet is a collapsible section; otherwise it is always open. */
   protected readonly collapsible = this.layout.phone;
@@ -130,6 +133,7 @@ export class PageEditor implements OnDestroy {
     this.clearShare();
     this.notFound.set(false);
     this.previewing.set(false);
+    this.historyOpen.set(false);
     this.playerView.set(null);
     try {
       const page = await firstValueFrom(this.http.get<PageDto>(`/api/campaigns/${this.store.id()}/pages/${id}`));
@@ -340,6 +344,7 @@ export class PageEditor implements OnDestroy {
     const p = this.page();
     if (!p) return;
     await this.flush();
+    this.historyOpen.set(false);
     try {
       this.playerView.set(await firstValueFrom(this.http.get<PageDto>(`/api/campaigns/${this.store.id()}/pages/${p.id}`, { params: { as: 'player' } })));
       this.previewing.set(true);
@@ -347,6 +352,36 @@ export class PageEditor implements OnDestroy {
       this.status.set('error');
       this.error.set(errorMessage(err));
     }
+  }
+
+  protected toggleHistory() {
+    if (this.historyOpen()) this.closeHistory();
+    else this.historyOpen.set(true);
+  }
+
+  protected closeHistory() {
+    this.historyOpen.set(false);
+    setTimeout(() => this.historyBtn()?.nativeElement.focus());
+  }
+
+  /** The History panel restores over the saved page: save pending edits first and report the revision. */
+  protected readonly prepareHistory = async (): Promise<HistoryPrepared> => {
+    await this.flush();
+    const ok = this.status() !== 'conflict' && this.status() !== 'error';
+    return { ok, revision: this.page()?.revision ?? 0 };
+  };
+
+  /** A restore (or the newer page after a stale restore) replaces what the editor shows. */
+  protected adoptHistory(page: PageDto) {
+    if (page.id !== this.page()?.id) return;
+    this.pending = {};
+    clearTimeout(this.timer);
+    this.page.set(page);
+    this.loadedDoc.set(page.body);
+    this.showProps.set(Object.keys(page.props).length > 0);
+    this.status.set('idle');
+    this.store.patchSummary(page);
+    this.savedCount.update((n) => n + 1);
   }
 
   protected async openApply() {

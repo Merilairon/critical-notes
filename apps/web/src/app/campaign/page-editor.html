@@ -93,6 +93,9 @@
           👁 Preview as player
         </button>
         <button type="button" class="cn-btn px-2 py-1 text-sm font-normal text-muted" (click)="openApply()">🧩 Apply template</button>
+        @if (!previewing()) {
+          <button #historyBtn type="button" class="cn-btn px-2 py-1 text-sm font-normal text-muted" aria-controls="cn-history-panel" [attr.aria-expanded]="historyOpen()" (click)="toggleHistory()">🕑 History</button>
+        }
         <button type="button" class="cn-btn px-2 py-1 text-sm font-normal text-muted" (click)="addSubpage()">+ Subpage</button>
         <button type="button" class="cn-btn px-2 py-1 text-sm font-normal text-muted hover:text-accent" [attr.aria-disabled]="deleting() || null" [attr.aria-busy]="deleting() || null" (click)="remove()">Delete</button>
       </div>
@@ -206,6 +209,12 @@
 
     @if (applying()) {
       <cn-page-template-dialog [campaignId]="store.id()!" [pageId]="p.id" (done)="applied($event)" (closed)="applying.set(false)" />
+    }
+
+    @if (historyOpen() && store.isGm() && !previewing()) {
+      @defer (on immediate) {
+        <cn-history-panel [page]="p" [refresh]="savedCount()" [prepare]="prepareHistory" (restored)="adoptHistory($event)" (stale)="adoptHistory($event)" (closed)="closeHistory()" />
+      }
     }
 
     <section class="mt-6 border-t border-line pt-3">
