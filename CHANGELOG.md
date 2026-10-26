@@ -110,7 +110,9 @@ destroys the DM's hidden links. **This release changes the database and the chan
 6. The new settings are optional and their defaults suit most tables: `HISTORY_KEEP_ALL_DAYS` (30),
    `HISTORY_COALESCE_MINUTES` (2), `HISTORY_MONTHLY_AFTER_DAYS` (365), `HISTORY_MAX_PER_PAGE` (200),
    `HISTORY_MAX_MB_PER_CAMPAIGN` (500), `EVENTS_MAX_CONNECTIONS` (500) and `EVENTS_MAX_PER_CAMPAIGN` (100). See the
-   [README](README.md#configuration).
+   [README](README.md#configuration). With Docker, the new settings reach the container only through the new
+   `docker-compose.yml`: if you changed your copy of that file, copy the new lines (`HISTORY_*`, `EVENTS_*`) into it,
+   or the values you put in `.env` have no effect.
 7. **There is no downgrade.** To go back, stop the app, set `CN_VERSION` back to your old version and restore the
    backup you made before updating:
    `docker compose run --rm app node admin.mjs restore /data/app/backups/<file> --yes`. This discards everything
@@ -129,6 +131,8 @@ destroys the DM's hidden links. **This release changes the database and the chan
   Planned for 1.3.1.
 - When a player moves a paragraph into a container, such as a callout, it may lose the DM's hidden link. Planned
   for 1.3.1.
+- Tracker streams (the live combat view) are not counted in the per-user stream limit, so one player can open many of
+  them. Planned for 1.3.1.
 - A player who was offline when something was revealed is not told about reveals on pages they did not have open. They
   see the change when they open the page.
 - History folds saves by the same author within 2 minutes into one version, so a paste you regret can overwrite up to 2
