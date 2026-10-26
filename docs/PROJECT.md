@@ -17,7 +17,7 @@
 | **1.0** | Trustworthy to self-host | M1 License, M2 Accounts, M3 Backup, M4 Trash, M5 Release process, M6 Phone-width | 43 tasks, 10 waves (§5) |
 | **1.1.0 to 1.2.0** | Post-1.0 follow-ups (shipped 2026-10-22) | Sign out other sessions, player-visible page count, accessibility backlog, keyboard block menu, page titles | Not planned here; see [CHANGELOG.md](../CHANGELOG.md) |
 | **1.3** | Prep and play loop | N1 Page history, N3 Reveal to players, I1 Keep hidden links, I3 Tracker additions, I2 Query views | 22 tasks, 5 waves (§6) |
-| **1.3.1** | Hardening and follow-ups | Rest of the player-merge hardening (I1.4 to I1.6), cheaper queries (I2.4 to I2.7), offline-gap toast (N3.6), test health (H1.1 to H1.5) | 14 tasks (13 plus the gate), 4 waves (§6b) |
+| **1.3.1** | Hardening and follow-ups | Rest of the player-merge hardening (I1.4 to I1.6), cheaper queries (I2.4 to I2.7), offline-gap toast (N3.6), test health (H1.1 to H1.6) | 15 tasks (14 plus the gate), 4 waves (§6b) |
 | **1.4** | Stay in sync | N2, N4, I4, I5, I10 | Assigned, broken down when scheduled (§7) |
 | **Later** | Grow | N5–N17, I6–I18 | Assigned, broken down when scheduled (§7) |
 
@@ -617,8 +617,9 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 **Description**: Controls in `play/tracker-page.html` (death save pips, legendary counters, recharge roll, delay/ready) and their display in `tracker-player.ts`; keyboard shortcuts documented.
 **Depends on**: I3.2 · **Design**: UX Architect
 
-### [ ] Task I3.4: Tracker tests
+### [x] Task I3.4: Tracker tests
 **Owner**: Test Automation Engineer · **QA**: Reality Checker
+**Done:** 2026-10-26, Code Reviewer PASS (1 fix round: the player-view absence checks needed a later sync point), QA Reality Checker: PASS with caveats. 7 new serial tests in `e2e/combat.spec.ts` (Adult Red Dragon legendary actions and resistance; death-save pips, Nat 1, Nat 20, Stable, Dead; the player view and `/player` JSON hide DM-only data, exact key set). Full e2e 122 passed, 8 skipped; 5 of 6 planted leaks and rule bugs fail the spec. Caveats: a leak of `dying` on a monster flagged for death saves is not caught (needs a flagged monster); the existing test 'a recharge note and a dying character fit a phone' (sticky block 263 px against 130 px) failed in 2 of 7 runs on a loaded machine and stops the later tests in the file: filed as H1.6. Merged 2026-10-26.
 **Description**: Extend `e2e/combat.spec.ts` with a legendary creature and a dying character.
 **Depends on**: I3.3
 
@@ -754,6 +755,12 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 **Acceptance Criteria**: each of the four cases has a decision in `docs/design/tracker-rules.md` and a test
 **Depends on**: none
 
+### [ ] Task H1.6: Steady the phone-sizing test in combat.spec.ts
+**Owner**: Test Automation Engineer · **QA**: Reality Checker
+**Description**: Found in the I3.4 QA: 'a recharge note and a dying character fit a phone at 100% and 200% text' failed in 2 of 7 runs on a loaded machine (sticky block 263 px against a 130 px limit), and because the file runs in order it stops every later test. Find out whether the measure is taken before layout settles or the limit is wrong, and fix the cause. Also add a monster flagged for death saves so a leak of `dying` on a non-PC fails the player-view test.
+**Acceptance Criteria**: the file passes 20 times in a row, also while another e2e run loads the machine; a planted `dying` leak on a flagged monster fails the spec
+**Depends on**: none
+
 ### 6b.5 Release gate and waves
 
 ### [ ] Task G3.1: Release 1.3.1 certification
@@ -763,7 +770,7 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 
 | Wave | Tasks |
 |---|---|
-| 1 | I1.4, I2.4, I2.5, N3.6, H1.1, H1.2, H1.3, H1.4, H1.5 (independent of each other) |
+| 1 | I1.4, I2.4, I2.5, N3.6, H1.1, H1.2, H1.3, H1.4, H1.5, H1.6 (independent of each other) |
 | 2 | I1.5 (after I1.4), I2.6 (after I2.5; needs the Product Manager decision first) |
 | 3 | I1.6 (after I1.5), I2.7 (after I2.4 and I2.5; only if campaigns pass about 5,000 pages) |
 | 4 | G3.1 |
