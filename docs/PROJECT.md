@@ -558,8 +558,9 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 **Description**: `get_page_history` (read) and `restore_page_version` (write), so an assistant can undo its own edit.
 **Depends on**: N1.3
 
-### [ ] Task N1.6: History tests
+### [x] Task N1.6: History tests
 **Owner**: Test Automation Engineer · **QA**: Reality Checker
+**Done:** 2026-10-26, Code Reviewer PASS, QA Reality Checker: PASS. `e2e/history.spec.ts` (4 new tests) and `e2e/rights-history.spec.ts` (the player test, split out so it sorts after `players.spec.ts` and reuses its session within the sign-up budget). A real write token over `/mcp` edits a page: the History panel shows 'Jan via AI assistant (token name)', the GM restores the earlier version in the browser with no reload ('Restored from version N'), the assistant undoes its own edit through `get_page_history` and `restore_page_version`, and a real player gets 403 on the history routes and no History button. 6 of 6 solo runs of each spec; 5 planted bugs each fail the spec. Full suite: 127 passed, 1 failed, 17 skipped: the known H1.6 test failed again and skipped the later phone combat tests, so H1.6 is moved ahead of G2.1. Merged 2026-10-26.
 **Description**: `e2e/history.spec.ts`: an MCP edit shows as "via AI assistant" and can be restored in the browser.
 **Depends on**: N1.4, N1.5
 
@@ -660,7 +661,7 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 | 2 | I1.2, N1.2, N3.2, I3.2, I2.2 (all done 2026-10-24) |
 | 3 | N1.3, N3.3, N3.4, I3.3, I2.3 (all done 2026-10-24 and 2026-10-25) |
 | 4 | N1.4, N1.5, N3.5, I3.4 |
-| 5 | N1.6, then G2.1 |
+| 5 | N1.6 (done 2026-10-26), H1.6 (moved here from release 1.3.1: its flake fails the full `pnpm e2e`), then G2.1 |
 
 ## 6b. Release 1.3.1: Hardening and follow-ups
 
