@@ -324,6 +324,53 @@ describe('mergePlayerEdit', () => {
       expect(text).toContain('"pageId":"hidden-page"');
     });
 
+    describe('when the player marks or repeats the label', () => {
+      const link = { type: 'pageLink', attrs: { pageId: 'hidden-page', label: 'vampire' } };
+      const stored = sanitizeDoc(doc({ type: 'paragraph', content: [{ type: 'text', text: 'A vampire story. Met ' }, link, { type: 'text', text: ' once' }] }), { newId }).doc;
+      const edit = (content: unknown[]) => {
+        const seen = projectDoc(stored, linkCtx)!;
+        return mergePlayerEdit(stored, { ...seen, content: [{ ...seen.content![0]!, content: content as never }] }, linkCtx);
+      };
+      const bold = [{ type: 'bold' }];
+      const kinds = (d: BlockDocument) => d.content![0]!.content!.map((c) => (c.type === 'text' ? c.text : `[${c.attrs!.pageId}]`));
+
+      it('keeps the link on a bolded label, with the mark', () => {
+        const merged = edit([{ type: 'text', text: 'A vampire story. Met ' }, { type: 'text', text: 'vampire', marks: bold }, { type: 'text', text: ' once' }]);
+        expect(kinds(merged)).toEqual(['A vampire story. Met ', '[hidden-page]', ' once']);
+        expect(merged.content![0]!.content![1]!.marks).toEqual(bold);
+      });
+
+      it('puts the link on the original occurrence, not an earlier repeat of the word', () => {
+        const merged = edit([{ type: 'text', text: 'A vampire story. Met vampire once' }]);
+        expect(kinds(merged)).toEqual(['A vampire story. Met ', '[hidden-page]', ' once']);
+      });
+
+      it('keeps the link on an italic label inside longer text', () => {
+        const merged = edit([{ type: 'text', text: 'A vampire story. Met the vampires once', marks: [{ type: 'italic' }] }]);
+        expect(kinds(merged)).toEqual(['A vampire story. Met the ', '[hidden-page]', 's once']);
+        expect(merged.content![0]!.content!.every((c) => c.marks?.[0]?.type === 'italic')).toBe(true);
+      });
+
+      it('keeps the link when the label spans two text nodes with different marks', () => {
+        const two = sanitizeDoc(doc({ type: 'paragraph', content: [{ type: 'text', text: 'Met ' }, { type: 'pageLink', attrs: { pageId: 'hidden-page', label: 'the vampire' } }] }), { newId }).doc;
+        const seen = projectDoc(two, linkCtx)!;
+        const content = [{ type: 'text', text: 'Met ' }, { type: 'text', text: 'the ', marks: bold }, { type: 'text', text: 'vampire', marks: [{ type: 'italic' }] }];
+        const merged = mergePlayerEdit(two, { ...seen, content: [{ ...seen.content![0]!, content: content as never }] }, linkCtx);
+        expect(kinds(merged)).toEqual(['Met ', '[hidden-page]']);
+      });
+
+      it('does not restore the link when the label is reworded, and does not crash', () => {
+        const merged = edit([{ type: 'text', text: 'A tale. Met a bloodsucker once' }]);
+        expect(JSON.stringify(merged)).not.toContain('hidden-page');
+        expect(docText(merged, 'dm')).toContain('bloodsucker');
+      });
+
+      it('never gives the player the hidden id after a merge', () => {
+        const merged = edit([{ type: 'text', text: 'A vampire story. Met ' }, { type: 'text', text: 'vampire', marks: bold }]);
+        expect(JSON.stringify(projectDoc(merged, linkCtx))).not.toContain('hidden-page');
+      });
+    });
+
     it('keeps a link to a page the player can see', () => {
       const seen = projectDoc(storedLinks, linkCtx)!;
       const link = { type: 'pageLink', attrs: { pageId: 'open-page', label: 'Tavern' } };

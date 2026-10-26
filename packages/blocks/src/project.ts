@@ -51,18 +51,44 @@ function hiddenDescendants(node: BlockNode, ctx: ProjectContext): BlockNode[] {
   return (node.content ?? []).flatMap((c) => (droppedForPlayers(c, ctx) ? [c] : hiddenDescendants(c, ctx)));
 }
 
-/** Puts back the links to hidden pages that the player only saw as their label text, if that text is still there. */
+/** Puts back the links to hidden pages that the player only saw as their label text, if that text is still there (marked or not; the occurrence nearest to where the link was). */
 function restoreHiddenLinks(before: BlockNode, n: BlockNode, ctx: ProjectContext): BlockNode {
+  const hidden = (c: BlockNode) => c.type === 'pageLink' && !ctx.canSeePage(String(c.attrs?.pageId));
+  // Length each node had in the text the player saw (a hidden link was its label, other inline nodes count 1)
+  const seenLength = (c: BlockNode) => (c.type === 'text' ? (c.text ?? '').length : hidden(c) ? String(c.attrs?.label ?? '').length : 1);
   let content = n.content ?? [];
+  let seenAt = 0;
   for (const link of before.content ?? []) {
-    if (link.type !== 'pageLink' || ctx.canSeePage(String(link.attrs?.pageId))) continue;
+    if (!hidden(link)) {
+      seenAt += seenLength(link);
+      continue;
+    }
+    const was = seenAt;
+    seenAt += seenLength(link);
     const label = String(link.attrs?.label ?? '');
-    const i = label ? content.findIndex((c) => c.type === 'text' && !c.marks?.length && c.text?.includes(label)) : -1;
-    if (i < 0) continue;
-    const t = content[i]!;
-    const at = t.text!.indexOf(label);
-    const parts = [{ ...t, text: t.text!.slice(0, at) }, link, { ...t, text: t.text!.slice(at + label.length) }].filter((x) => x.type !== 'text' || x.text);
-    content = [...content.slice(0, i), ...parts, ...content.slice(i + 1)];
+    const flat = content.map((c) => (c.type === 'text' ? (c.text ?? '') : '\0')).join('');
+    let at = -1;
+    for (let i = label ? flat.indexOf(label) : -1; i >= 0; i = flat.indexOf(label, i + 1)) if (at < 0 || Math.abs(i - was) < Math.abs(at - was)) at = i;
+    if (at < 0) continue;
+    const end = at + label.length;
+    const next: BlockNode[] = [];
+    let pos = 0;
+    let placed = false;
+    for (const c of content) {
+      const start = pos;
+      pos += c.type === 'text' ? (c.text ?? '').length : 1;
+      if (c.type !== 'text' || pos <= at || start >= end) {
+        next.push(c);
+        continue;
+      }
+      const left = c.text!.slice(0, Math.max(at - start, 0));
+      const right = c.text!.slice(end - start);
+      if (left) next.push({ ...c, text: left });
+      if (!placed) next.push(c.marks?.length ? { ...link, marks: c.marks } : link);
+      placed = true;
+      if (right) next.push({ ...c, text: right });
+    }
+    content = next;
   }
   return { ...n, content };
 }

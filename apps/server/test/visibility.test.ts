@@ -487,6 +487,23 @@ describe('what players may change', () => {
     expect(JSON.stringify(asDm.body)).toContain(`"pageId":"${ids['hidden']}"`);
   });
 
+  it('keeps the DM’s link to a hidden page when the player bolds its label', async () => {
+    const link = { type: 'paragraph', content: [{ type: 'text', text: 'Fears ' }, { type: 'pageLink', attrs: { pageId: ids['hidden'], label: 'a rival' } }, { type: 'text', text: ' most' }] };
+    const before = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
+    expect((await dm.patch(`${base()}/pages/${ids['pc']}`, { revision: before.revision, body: { ...before.body, content: [...before.body.content, link] } })).status).toBe(200);
+
+    const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+    expect(JSON.stringify(mine.body)).not.toContain(ids['hidden']);
+    const bolded = { type: 'paragraph', content: [{ type: 'text', text: 'Fears ' }, { type: 'text', text: 'a rival', marks: [{ type: 'bold' }] }, { type: 'text', text: ' most' }] };
+    const content = mine.body.content.map((b: { content?: { text?: string }[] }) => (b.content?.[0]?.text === 'Fears ' ? { ...b, content: bolded.content } : b));
+    const res = await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, body: { ...mine.body, content } });
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(res.body)).not.toContain(ids['hidden']);
+
+    const asDm = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
+    expect(JSON.stringify(asDm.body)).toContain(`"pageId":"${ids['hidden']}","label":"a rival"`);
+  });
+
   it('a player cannot reveal: a submitted new block with revealed:true is stored unrevealed', async () => {
     const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
     const forged = { type: 'secret', attrs: { id: 'forged1', revealed: true }, content: [para('Forged secret', { revealed: true })] };
