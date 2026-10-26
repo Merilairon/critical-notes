@@ -69,10 +69,17 @@ describe('diffLines', () => {
   });
 });
 
-describe('blank separator lines', () => {
-  it('are not shown as added or removed rows', () => {
-    const d = diffLines('one\n\ntwo', 'one\n\nthree\n\nfour');
-    expect(d.filter((l) => l.kind !== 'equal' && l.parts.every((p) => p.text === ''))).toEqual([]);
+describe('blank lines', () => {
+  it('a change that is only a paragraph break is reported, not identical', () => {
+    const d = diffLines('a\n\nb', 'a\nb');
+    expect(d.some((l) => l.kind !== 'equal')).toBe(true);
+    expect(summarize(d).places).toBe(1);
+  });
+
+  it('a real change and a blank-line change are both shown', () => {
+    const d = diffLines('a\n\nb\nc', 'a\nb\nC');
+    expect(d.some((l) => l.kind === 'removed' && text(l) === '')).toBe(true);
+    expect(d.some((l) => l.kind === 'added' && text(l).includes('C'))).toBe(true);
   });
 });
 
