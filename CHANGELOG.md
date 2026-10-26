@@ -9,9 +9,130 @@ Before you update, read the entries between your version and the new one, and
 
 ## [Unreleased]
 
+The prep and play release. The DM gets a history of every page with compare and restore, can reveal secrets and
+handouts to the players while they are reading, and gets more help at the combat table. A player's save no longer
+destroys the DM's hidden links. **This release changes the database and the change cannot be undone: back up first**
+(see [Upgrade notes](#upgrade-notes) below).
+
+### Added
+
+- **Page history (game master only).**
+  - Every change to a page is saved as a version: edits in the web editor, a player's edits to their character,
+    edits by an AI assistant, restores, templates, imports and edition changes. Open a page and choose **History** in
+    the toolbar (it is hidden for players and in "Preview as player").
+  - Saves by the same person within 2 minutes become one version, so typing does not create hundreds of entries.
+    Change this with `HISTORY_COALESCE_MINUTES` (0 keeps every save).
+  - Each entry shows who made the change and when. Changes made through an AI token are marked **via AI assistant**
+    with the token's name.
+  - **Compare** a version with the current page, or two versions with each other. Changes are shown as added and
+    removed text, marked with `+` and `-`, underline and strike-through, and with spoken words for screen readers.
+    Changes to the title, type, details and properties are listed under "Other changes".
+  - **Restore** brings an earlier version back as a new version, so you can **Undo restore**. A restore brings back
+    content only: title, type, text, details and properties. It does not change who can see the page, its parent, tags,
+    icon or who owns a player character.
+  - Old versions are thinned so history does not grow without end: every version is kept for 30 days, then one per
+    day, then one per month after a year, and a page or campaign over its limit is thinned early (oldest first, never
+    the last 30 days). The settings are `HISTORY_KEEP_ALL_DAYS`, `HISTORY_COALESCE_MINUTES`,
+    `HISTORY_MONTHLY_AFTER_DAYS`, `HISTORY_MAX_PER_PAGE` and `HISTORY_MAX_MB_PER_CAMPAIGN`; the defaults are in the
+    [README](README.md#configuration). Thinning stops history from growing; it does not make the database file smaller.
+  - Players never see history, and a campaign export does not include it.
+  - AI assistants with a game master's token get two new tools: `get_page_history` (list the versions of a page, or read
+    one in full) and `restore_page_version` (needs a read and write token).
+- **Reveal to players.**
+  - **Reveal now** in a block's options menu (`Ctrl+.`) reveals a DM secret or a DM-only block at once, with a 15
+    second **Undo**. **Share now** (and **Share with chosen players**) does the same for a handout page.
+  - Players see it while they play, without reloading: a short message ("New: ...", "New details on this page"), a
+    **New** label in the page tree and on the page, and a highlight on the revealed block. A player who is typing on
+    that page is offered **Reload** instead of having their text replaced.
+  - The message only tells the player's browser to look again. It never carries a title or text; the browser then
+    asks for the page like any other request, so the usual rules about what a player may see still apply.
+  - If the live connection fails for a long time, the browser falls back to checking now and then. Live updates need one
+    server process, which is what the shipped `docker-compose.yml` runs. The limits are `EVENTS_MAX_CONNECTIONS` and
+    `EVENTS_MAX_PER_CAMPAIGN`.
+- **Combat tracker.**
+  - **Death saves** for player characters: success and failure marks, a d20 field and **Roll for me**, Natural 20
+    (back up at 1 HP) and Natural 1 (two failures), **Stable** and **Dead**, and extra failures for damage at 0 HP
+    (two for a critical hit). Damage that brings a character past 0 HP by at least their maximum HP kills at once.
+    Damage that temporary HP absorbs adds no failure; this is a table convention, and the help text in the tracker
+    says so. Players see these marks for characters only.
+  - **Legendary actions** (spend and undo; they refill when the creature's turn starts) and **Legendary Resistance**
+    (use and give back; a new round never resets it), read from the statblock when you add the creature. Players never
+    see either.
+  - **Recharge** abilities: mark one as used, and at the start of the creature's turn the tracker rolls the d6 and
+    shows the roll to you only.
+  - **Lair actions**: a hidden row on initiative 20 that loses ties, and a toggle for creatures that are in their lair.
+    While a hidden row acts, players see no highlighted turn.
+  - **Ready** (with a trigger; players see it for player characters only) and **Move after**, which moves a combatant
+    to just after another one. Move after is the tracker's way to handle Delay, a table convention rather than a rule
+    printed in the core books. When the active creature moves, the turn passes on at once and its conditions do not
+    tick.
+  - A **More** section on each row, two toolbar groups, and one-key shortcuts on a row (press `?` for the list).
+- **Query block views.** A query block can show its pages as a **table** or as **cards** as well as a list. A column
+  picker chooses and orders the columns (type, tags, dates, details and properties). Anyone who views a table can sort
+  it by clicking a header; that sorting is not saved. Players see only the rows and columns they may see.
+
+### Changed
+
+- Empty values in a query now sort last in both directions.
+- A backup may now compress its database up to 200 to 1 instead of 50 to 1 when it is checked, because a database with
+  a lot of history compresses very well. Backups and restores work as before.
+
 ### Fixed
 
-- A player saving a page no longer destroys the game master's content on it. Links the player cannot see (to hidden pages) now survive when the player edits another paragraph or the text around them, and a callout or other container saved without its contents keeps its DM-only blocks. Repeated or reused block ids can no longer duplicate DM-only blocks or take over their ids. Players still never receive the hidden pages' ids or DM-only text. There is nothing to do when updating; no database change is needed.
+- A player saving a page no longer destroys the game master's content on it.
+  - Links to pages the player cannot see survive when the player edits another paragraph or the text around them, also
+    when the link's label is bold or italic or appears more than once in the paragraph. The link comes back without
+    bold or italic.
+  - A callout or other container saved without its contents keeps its DM-only blocks. Repeated or reused block ids can
+    no longer duplicate DM-only blocks or take over their ids.
+  - A link or embed that a player adds to a page they cannot see is dropped from their save (a link becomes plain text),
+    so a save cannot be used to find out which pages exist.
+  - A player cannot mark a block as revealed.
+  - Players still never receive the hidden pages' ids or DM-only text. To keep this safe, a player's save has limits: a
+    paragraph can hold at most 100,000 characters (text plus link labels) and a page at most 2 MB. See Known issues.
+- The live combat view closes when someone loses access while it is open (removed from the campaign, disabled, signed
+  out, password changed, or no longer a co-DM for the DM view). It used to check only when it opened. The check runs
+  at least every 25 seconds.
+
+### Upgrade notes
+
+1. **Back up first**, with the version that is running now, and copy the backup off the machine:
+   - Docker: `docker compose exec app node admin.mjs backup`
+   - Without Docker: `node apps/server/dist/admin.mjs backup`
+2. **Update.**
+   - Docker: set `CN_VERSION` to the new version in `.env` (or follow `latest`), then
+     `docker compose pull && docker compose up -d`.
+   - Without Docker: check out the new tag, run `pnpm install && pnpm build`, and restart the server.
+3. **Migration 0007 adds the page history table.** It runs when the server starts and **cannot be undone**.
+4. History starts empty. The first time a page is edited after the upgrade, its earlier state is stored as a
+   "before history was recorded" version, so you can get back to what the page was before that edit.
+5. Sessions and logins keep working. Nobody is signed out.
+6. The new settings are optional and their defaults suit most tables: `HISTORY_KEEP_ALL_DAYS` (30),
+   `HISTORY_COALESCE_MINUTES` (2), `HISTORY_MONTHLY_AFTER_DAYS` (365), `HISTORY_MAX_PER_PAGE` (200),
+   `HISTORY_MAX_MB_PER_CAMPAIGN` (500), `EVENTS_MAX_CONNECTIONS` (500) and `EVENTS_MAX_PER_CAMPAIGN` (100). See the
+   [README](README.md#configuration).
+7. **There is no downgrade.** To go back, stop the app, set `CN_VERSION` back to your old version and restore the
+   backup you made before updating:
+   `docker compose run --rm app node admin.mjs restore /data/app/backups/<file> --yes`. This discards everything
+   written since that backup, signs everyone out, and revokes API tokens and invite links.
+   Starting an older version on an upgraded database is not refused, but it is not supported.
+8. Backups made by 1.3 are refused by 1.2.x (exit code 66, "update first"). Backups from 1.2.x restore into 1.3 and are
+   migrated on the way.
+
+### Known issues
+
+- If a player rewrites the label of a link to a page they cannot see, the link is lost when they save. When a link is
+  kept on a bold or italic label, it comes back without bold or italic.
+- A player cannot make a paragraph longer than 100,000 characters (text plus link labels). If the DM wrote a longer one, the player can still save the page as long as that paragraph is left unchanged or made shorter, but cannot edit it while it stays that long.
+- Players can save pages only up to 2 MB.
+- The check on page-link properties can confirm to a player who already knows a hidden page's id that the page exists.
+  Planned for 1.3.1.
+- When a player moves a paragraph into a container, such as a callout, it may lose the DM's hidden link. Planned
+  for 1.3.1.
+- A player who was offline when something was revealed is not told about reveals on pages they did not have open. They
+  see the change when they open the page.
+- History folds saves by the same author within 2 minutes into one version, so a paste you regret can overwrite up to 2
+  minutes of earlier state. Lower `HISTORY_COALESCE_MINUTES` for finer versions.
 
 ## [1.2.0] - 2026-10-22
 

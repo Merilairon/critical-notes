@@ -16,7 +16,8 @@ The rules (spells, monsters, items, …) come from your own local copy of the 5e
 - **Homebrew** in the 5etools format: form and JSON editors with a live preview, variants of official
   creatures, revisions, import and export of 5etools homebrew files.
 - **Templates** for blocks and whole pages, with typed fields; linked copies follow template changes.
-- **Encounters and combat.** Difficulty by the campaign's rules, an initiative tracker, and a live view for
+- **Encounters and combat.** Difficulty by the campaign's rules, an initiative tracker with death saves,
+  legendary actions and resistance, recharge, lair actions, Ready and Delay, and a live view for
   the players' screen that never shows hidden creatures. Loot goes to the party's inventory.
 - **Players.** Invite links, a co-DM role, players editing their own character. What the DM hides is never
   sent to a player's browser: the server leaves it out of every response.
@@ -24,6 +25,10 @@ The rules (spells, monsters, items, …) come from your own local copy of the 5e
 - **Accounts and administration.** Everyone changes their own name and password on the Account page; the admin
   manages users, resets passwords with one-time links and can always recover a locked-out account from the command
   line ([Locked out?](#locked-out-recover-an-account)).
+- **Page history.** The DM sees every earlier version of a page, compares versions and restores one, with an Undo.
+  Edits made by an AI assistant are labelled ([Using it](#using-it)).
+- **Reveal to players.** "Reveal now" on a secret or "Share now" on a handout shows up on the players' screens
+  while they play, without reloading.
 - **Backups and trash.** One-click or scheduled instance backups with a tested restore ([Backups](#backups)), and a
   30-day trash for deleted pages and templates with Undo and Restore.
 - **Phone-friendly for players** (tested in Chrome's phone emulation). Reading, your own character, the inventory, dice and the combat screen work on
@@ -174,6 +179,13 @@ forward, and the older code does not know the new tables. If an update goes wron
    **inside the container**, like `/data/app/backups/backup-<time>.zip` (a copy from elsewhere needs the `-v` mount shown
    there). Restoring **discards everything written after that backup** and signs everyone out; the newer data is moved
    aside to `pre-restore-<time>/`, not deleted.
+
+**Page history and rolling back.** Version 1.3 adds the page history table (migration 0007). It is created when the
+server starts, history starts empty (a page's first edit stores its earlier state as a "before history was recorded"
+version), sessions and logins keep working, and the migration cannot be undone. Starting an older version on a
+database that 1.3 has used is not refused, but it is not supported. To go back, use the steps above: restore the
+backup from before the update. That discards everything written since, including all history. The history of a page
+in the app is a different kind of rollback: it restores one page's content and never touches the app version.
 
 The reverse also holds: a backup made by a **newer** version is refused by an older one (exit code 66, "update first"),
 so update the app before you restore such a backup. An older backup restores into a newer version and is migrated on
@@ -682,7 +694,7 @@ some odd mounts file locking does not work at all; restore on a local disk.
   database, make a new backup, and restore that.
 - `The new backup failed its verification pass`: the backup was made, read back and did not pass, so nothing was
   kept (and no older backup was deleted). It happens, rarely, with a database full of repeated blocks that
-  compresses more than 50 to 1. Try again; if it keeps happening, report it.
+  compresses more than 200 to 1 (the limit was 50 to 1 before version 1.3). Try again; if it keeps happening, report it.
 
 **`Refusing to start: The backup folder ... is not writable by this user` (the command-line `backup` prints the same
 sentence and exits 73).** The app user cannot write in `BACKUP_DIR` (or the mount is read-only: remove `:ro`), usually because the host folder did not exist before
@@ -787,7 +799,59 @@ before it changes anything.
 **What players see.** New pages are visible to the DM only. A page can be shared with everyone or with chosen
 players; a player always sees their own character. Inside a shared page, "DM secret" blocks and blocks marked
 DM-only (`Ctrl+Shift+D`) stay hidden until you mark them revealed (`Ctrl+Shift+R`). "Preview as player" shows a
-page exactly as a player receives it.
+page exactly as a player receives it. A player can never mark a block as revealed.
+
+**Revealing during play.** Press `Ctrl+.` in a secret or DM-only block and choose **Reveal now**: the block is
+revealed at once, and a notice offers **Undo** for 15 seconds. On a handout page, **Share now** shares the page with
+everyone and **Share with chosen players** picks who. Both are ordinary saves, so a failed save says "Not saved"
+and changes nothing. Players who have the campaign open see a short message ("New: ...", "New details on this
+page") and a **New** label on the page and the block, with no reload and no automatic scrolling; a player who is
+in the middle of typing on that page gets a **Reload** button instead, so nothing they typed is replaced. The
+message only tells the player's browser to look again, so it carries no title or text, and the player's browser
+gets the page like any other request: what the player may not see stays out. A player who was offline when it
+happened sees the new page or block when they open it, but is not told about a reveal on a page they did not
+have open. Live messages need one server process (what `docker-compose.yml` runs); with several processes
+sharing one database, players would not get them. See `EVENTS_MAX_CONNECTIONS` in [Configuration](#configuration).
+
+**Page history.** The DM (and a co-DM) can open **History** in a page's toolbar (players and "Preview as player"
+do not have it). Every change to the page is a version: a web edit, a player's edit of their character, an edit by an AI
+assistant (marked **via AI assistant** with the token's name), a restore, a template, an import or an edition
+change. Saves by the same person within 2 minutes fold into one version (`HISTORY_COALESCE_MINUTES`; a paste you
+regret can overwrite at most that much earlier state). Tick one version to compare it with the current page, or
+two to compare them: added and removed text is marked with `+` and `-`, underline and strike-through, and
+changes to the title, type, details and properties are listed as "Other changes". **Restore** brings an earlier
+version back as a new version, without asking, and **Undo restore** undoes it. A restore brings back content only
+(title, type, text, details, properties), not who can see the page, its parent, tags, icon or who owns a character.
+Players never see history, and a campaign export does not contain it. Old versions are thinned: all are kept for
+30 days, then one per day, then one per month after a year, and a page or campaign over its limit is thinned
+early (see the `HISTORY_*` settings in [Configuration](#configuration)). Thinning stops history from growing; it
+does not make the database file smaller. History starts when you update to 1.3: a page's first edit after that
+stores its earlier state as a "before history was recorded" version. History is part of the database, so it is
+in every [backup](#what-is-in-a-backup).
+
+**Combat tracker.** In the initiative tracker (press `?` on the page for the keys and a short rules note):
+- *Death saves* for player characters: marks for successes and failures, a d20 field or **Roll for me**, Natural 20
+  (up again at 1 HP) and Natural 1 (two failures), **Stable**, **Dead**, and extra failures for damage at 0 HP (two for
+  a critical hit). Damage past 0 HP of at least the character's maximum HP kills at once. Damage that temporary HP
+  absorbs adds no failure: that is a table convention, not printed rules text. The table sees these marks for
+  player characters only.
+- *Legendary actions* (spend and undo; they refill when that creature's turn starts) and *Legendary Resistance* (use
+  and give back; it is never reset by a new round), filled in from the statblock when you add the creature.
+- *Recharge*: mark an ability used, and when the creature's turn starts the tracker rolls the d6 and shows the roll
+  to you only.
+- *Lair actions*: a hidden row on initiative 20 (it loses ties), and a switch for creatures that are in their lair.
+  While a hidden row has the turn, players see no highlighted turn.
+- *Ready* (a trigger, shown to players for characters only) and *Move after*, the tracker's way to Delay: a
+  combatant takes its place just after another one. When the active creature does this, the turn passes on at
+  once and its conditions do not tick. Delay is a table convention, not a rule from the core books.
+- Players never see legendary actions, resistance, recharge, lair rows that are hidden, or any of these for
+  monsters. If someone loses access while the live combat view is open (removed from the campaign, disabled,
+  signed out, password changed), the view closes within about 25 seconds.
+
+**Queries.** A query block ("all NPCs in this town") shows a list, a **table** or **cards**. In a table or cards, the
+column picker chooses and orders the columns (type, tags, dates, details and properties). Anyone, players included, can
+sort a table by clicking a column header; that sort is not saved. Players get only the rows and columns they may
+see. On a phone the table scrolls sideways with the title column kept in view; choose cards for a phone-first block.
 
 **Writing.** Type `/` for blocks, `[[` to link (or create) a page, `{@` to insert a rules reference such as
 `{@spell fireball|XPHB}`, and dice like `{@dice 2d6+3}`.
@@ -866,6 +930,14 @@ them to the model when it connects):
 
 Edits through Markdown change only what changed: everything else, including blocks Markdown can't show and
 blocks a player can't see, stays exactly as it was. Revoke a token on the Account page at any time.
+
+**Page history for assistants.** The server offers 34 tools (13 that only read, 21 that also change things; a read
+only token gets the 13). Two of them work with [page history](#using-it), for a game master's token only:
+`get_page_history` lists the saved versions of a page without their text, or reads one version in full, and marks the
+edits an assistant made; `restore_page_version` brings an earlier version back as a new version (it needs a read and
+write token, and the page's current revision, so it refuses if the page changed since the assistant read it). An
+assistant can therefore undo its own edit. Every edit an assistant makes is recorded in the history as "via AI
+assistant" with the token's name, so you can compare it and restore the page.
 
 ## Development
 
