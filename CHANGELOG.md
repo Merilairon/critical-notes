@@ -9,6 +9,8 @@ Before you update, read the entries between your version and the new one, and
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-26
+
 The prep and play release. The DM gets a history of every page with compare and restore, can reveal secrets and
 handouts to the players while they are reading, and gets more help at the combat table. A player's save no longer
 destroys the DM's hidden links. **This release changes the database and the change cannot be undone: back up first**
@@ -335,7 +337,8 @@ What to test:
 The changes in 1.0.0 are listed in the draft above, under "Unreleased". A release candidate publishes only the tag
 `1.0.0-rc.1`; it does not move `1.0` or `latest`.
 
-[Unreleased]: https://github.com/Merilairon/critical-notes/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/Merilairon/critical-notes/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/Merilairon/critical-notes/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Merilairon/critical-notes/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/Merilairon/critical-notes/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/Merilairon/critical-notes/compare/v1.1.0...v1.1.1
