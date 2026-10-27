@@ -2,7 +2,7 @@
 
 Budget: a query block on a 2,000-page campaign answers in **under 300 ms on the server** (PLAN deviation (d): the DSL runs in memory over the campaign's live pages).
 
-**Verdict: PASS.** Every scenario is between 105 and 205 ms at p50 and under 220 ms at p95 (cold first request: at most 250 ms), as DM and as player. The margin is thin for what the code does, though: about 100 ms of every request is fixed cost that does not depend on the query, mostly parsing page bodies the query never uses. Follow-ups I2.4 to I2.7 below remove it; they are cheap and should be scheduled before campaigns grow past roughly 4,000 pages or bodies past 25 KB.
+**Verdict: PASS (I2.3 baseline, before I2.4 and I2.5).** Every scenario is between 105 and 205 ms at p50 and under 220 ms at p95 (cold first request: at most 250 ms), as DM and as player. The margin is thin for what the code does, though: about 100 ms of every request is fixed cost that does not depend on the query, mostly parsing page bodies the query never uses. Follow-ups I2.4 to I2.7 below remove it; they are cheap and should be scheduled before campaigns grow past roughly 4,000 pages or bodies past 25 KB.
 
 ## Method
 
@@ -41,7 +41,7 @@ Players receive fewer rows (only pages shared with them: 478 of 800 NPCs), so th
 
 **Does seeding or history affect query time? No.** The query never reads `page_revisions`. Created vs history phases differ by at most 10 ms, inside run-to-run noise. The file grows 2.4x, which only matters for backup size and page-cache pressure. Seeding cost, for the record: 6.6 ms per page create and 7.7 ms per edit through HTTP, including the revision row.
 
-## Where the time goes (warm p50, DM or player alike)
+## Where the time goes (I2.3 baseline, before I2.4 and I2.5; warm p50, DM or player alike)
 
 | Stage | ms |
 |---|---|
@@ -58,14 +58,57 @@ Players receive fewer rows (only pages shared with them: 478 of 800 NPCs), so th
 | player projection (hidden props, facet projection, DTO) | about 3 |
 | `JSON.stringify` of 500 rows | 1 |
 
-Findings:
+Findings (I2.3 baseline; the figures below describe the code before I2.4 and I2.5):
 
 1. **Body JSON parsing is the main cost.** The query result never contains a body, yet `livePages()` selects whole rows, so each request reads about 17.5 MB and parses it into objects that are thrown away: 80 of the roughly 110 ms. Cost grows with total body bytes, not with the query. At about 4.6 ms per MB, the 300 ms budget is reached near 60 MB of bodies for the cheap scenarios: about 7,000 pages of this size, or 2,000 pages of 30 KB. That extrapolation holds only for the linear body-parse cost; a sort on tags (85 ms of sorting that grows faster than linearly) hits the budget earlier, at about 3,500 pages, until the sort follow-up (I2.5) lands. Hence "schedule before about 4,000 pages". `livePages()` is also used by `tree()` and at `pages.ts` around lines 454, 602 and 657, so the body parse is paid there too.
 2. **String sorts are slow because `localeCompare` is called with an options object**, which builds a collator per call: title sort 10 ms, `tags` sort 85 ms (the array is turned into a string on every comparison, with `fieldValue` called twice per comparison). Sorting on a page-link facet orders by the target's id, which is also not what a reader expects (a title would be).
 3. The player projection is cheap: the same work on fewer rows plus a few ms.
 4. Filtering is not a cost at this size.
 
-## After I2.5 (cheaper sorting)
+## Merged state: I2.4 + I2.5 (final measurement)
+
+Code: merged main (HEAD 3ad7353), which contains both I2.4 (`livePageSummaries()`, no bodies) and I2.5 (shared collator, precomputed sort keys). Command: `pnpm --filter @cn/server bench:query --runs 60 --cold-runs 5`, 2,000 pages, three independent full runs (each seeds a fresh campaign), about 4 minutes each.
+
+**Load caveat.** Measured at 1-minute load 4.9 to 5.9 from unrelated desktop use (a game and other desktop apps on the 16-core machine; no tests or benchmarks of ours were running, checked with `pgrep` before each run). The machine was not idle, so treat the absolute numbers as an upper bound; about one busy core on 16 barely affects a single-threaded benchmark, and the spread between runs is small (below). Four attempts were made under the rule "start at load 6.0 or below, accept only if load after is 6.0 or below"; one (load 6.5 after) was rejected and an earlier batch started at load above 6 was discarded.
+
+| Run | Load before | Load after |
+|---|---|---|
+| 1 | 5.91 | 5.34 |
+| 2 | 5.34 | 5.33 |
+| 3 | 5.33 | 4.87 |
+
+Warm, ms: median over the 3 runs of p50 / median of p95, with the min-max range of the p50 across runs in brackets (the spread):
+
+| Scenario | DM created | DM history | Player created | Player history |
+|---|---|---|---|---|
+| list: all pages, title sort, limit 100 (block default) | 34 / 38 (33-34) | 32 / 36 (30-32) | 34 / 39 (34-34) | 34 / 39 (30-35) |
+| list: all pages, title sort, limit 500 | 33 / 39 (33-34) | 33 / 37 (32-33) | 34 / 40 (31-36) | 33 / 39 (30-36) |
+| table: npcs, 6 columns worth of data, sort prop.cr desc, limit 500 | 34 / 40 (34-35) | 32 / 39 (32-34) | 35 / 41 (35-36) | 35 / 41 (33-35) |
+| sort on a select prop (prop.threat_level), npcs, limit 100 | 34 / 40 (33-35) | 32 / 37 (32-33) | 34 / 39 (34-35) | 34 / 39 (34-35) |
+| sort on a page-link facet (facet.factionPageId), npcs, limit 100 | 34 / 39 (33-34) | 33 / 37 (32-34) | 34 / 40 (34-36) | 35 / 40 (32-36) |
+| sort on tags, all pages, limit 100 | 36 / 41 (36-37) | 35 / 41 (33-37) | 36 / 41 (33-36) | 36 / 41 (35-36) |
+| filter: npc + tag + 4 where-conditions, sort updatedAt desc | 32 / 36 (31-33) | 32 / 36 (29-33) | 33 / 38 (33-34) | 33 / 39 (32-35) |
+| contextual: npcs located at the current page (facet.locationPageId = $ctx) | 32 / 37 (29-32) | 33 / 36 (31-33) | 35 / 39 (35-35) | 34 / 39 (33-35) |
+
+Worst warm p50 in any cell and run: 37 ms (DM tags sort). The spread of p50 across the 3 runs is at most 6 ms in any cell. Created and history phases do not differ beyond that.
+
+**Stage profile (p50 over the 3 runs):** summary query 7.3 to 7.8 ms (p95 8.8 to 9.5; was 80 at the I2.3 baseline); `queryable()` 27.5 to 29.4; `queryFor` total 29.6 to 31.0 (DM) and 29.0 to 30.5 (player). `runQuery` only:
+
+| Sort | I2.3 baseline | Merged, p50 over 3 runs |
+|---|---|---|
+| title (default), limit 100 / 500 | 10.0 / 9.4 | 0.5 to 0.6 (p95 0.6 to 0.8) |
+| select prop, NPCs | 19.2 | 0.7 to 0.8 |
+| page-link facet, NPCs | 27.3 | 1.4 to 1.6 |
+| `tags`, all pages | 81.3 to 85 | 4.0 to 4.1 (p95 4.4 to 4.7) |
+
+**Cold first request** (fresh process, 5 samples per scenario and role): p50 per scenario across the 3 runs DM 43 to 71 ms (max 82), player 53 to 69 ms (max 94). Was 152 to 248 ms at the I2.3 baseline.
+
+**Verdicts**
+
+- **I2.4: PASS.** Every scenario, DM and player, created and history, is at most 37 ms p50 against the 80 ms criterion (p95 at most 44 ms). campaigns, visibility, pages-d and `packages/blocks` tests pass whole (56 and 63 tests).
+- **I2.5: PASS.** Tags sort in `runQuery` is 4.0 to 4.1 ms p50 (criterion under 15; was 85); title sort is 0.5 to 0.6 ms (criterion under 5; was 10). Ordering-equivalence tests pass.
+
+## After I2.5 (cheaper sorting, earlier measurement)
 
 `runQuery` now uses one module-level `Intl.Collator` and computes each page's sort key once before sorting. `bench:query --profile-only`, 2,000 pages, same machine, stage profile `runQuery` only (warm p50 / p95 ms):
 
@@ -76,7 +119,7 @@ Findings:
 | page-link facet, NPCs | 27.3 | 1.1 |
 | `tags`, all pages | 81.3 (p95 108.9) | 3.5 (p95 4.6) |
 
-Targets met: tags under 15 ms, title under 5 ms. Order unchanged (ordering-equivalence tests in `packages/blocks/test/query-sort.test.ts`); the only difference is the title tie-break, which now uses the same collator (case and accent insensitive, numeric) instead of the default `localeCompare`.
+Targets met: tags under 15 ms, title under 5 ms. Final merged-state numbers are in the section above. Order unchanged (ordering-equivalence tests in `packages/blocks/test/query-sort.test.ts`); the only difference is the title tie-break, which now uses the same collator (case and accent insensitive, numeric) instead of the default `localeCompare`.
 
 ## Follow-up tasks (not done here: the verdict is PASS and the fixes touch query behaviour)
 
@@ -90,7 +133,7 @@ Targets met: tags under 15 ms, title under 5 ms. Order unchanged (ordering-equiv
 
 In-process requests (no network, TLS or reverse proxy); one client at a time. Queries are synchronous and block the Node event loop for their whole duration, so concurrent users add up: ten simultaneous table blocks cost about a second of loop time today, which I2.4 would cut to a few hundred ms. A blocked event loop also delays every other request on that process (saves, live updates, health checks), not only queries. A page with N query blocks multiplies it: each block adds about 110 ms of loop time today. Synthetic text bodies of one size; one machine; OS file cache warm in the cold samples; no `selected`-visibility viewer rows for the player.
 
-## After I2.4 (page reads no longer load bodies)
+## After I2.4 (page reads no longer load bodies, earlier measurement)
 
 `PageService.livePages()` is replaced by `livePageSummaries()` (explicit summary columns, no `body`). Callers checked: `tree()`, `queryable()`, `move()` (cycle check, uses `id`/`parentId`), `remove()` (subtree walk, `id`/`parentId`) and `projectForPlayers()` (`id`/`visibility`) read no body; the only body readers (`row`, `get`, `reindex`) have their own selects. No behaviour change. The stage profile's old "livePages select *" row is now the summary query.
 
@@ -109,4 +152,4 @@ Run: `pnpm --filter @cn/server bench:query --runs 60 --cold-runs 5`, 2,000 pages
 
 Stage profile (p50): summary query 8 ms (was 80), `queryable()` 32 ms (was 106), title sort in `runQuery` 9 ms, tags sort in `runQuery` 82 ms. Cold first request: 76 to 177 ms (was 152 to 248).
 
-**Result.** Every scenario except the tags sort is now 31 to 60 ms p50. The DM tags sort is 120 ms p50 and the player's 85 to 91 ms: the remaining time is the 82 ms `runQuery` tags sort (I2.5: shared collator and precomputed sort keys), which is outside I2.4. The "under 80 ms for every scenario" criterion therefore needs I2.5 to pass for that one scenario; re-measure after I2.5.
+**Result.** Every scenario except the tags sort is now 31 to 60 ms p50. The DM tags sort is 120 ms p50 and the player's 85 to 91 ms: the remaining time is the 82 ms `runQuery` tags sort (I2.5: shared collator and precomputed sort keys), which is outside I2.4. The "under 80 ms for every scenario" criterion therefore needs I2.5 to pass for that one scenario; re-measured after I2.5: see the merged-state section above (PASS).
