@@ -76,3 +76,24 @@ Findings:
 ## Limits of this measurement
 
 In-process requests (no network, TLS or reverse proxy); one client at a time. Queries are synchronous and block the Node event loop for their whole duration, so concurrent users add up: ten simultaneous table blocks cost about a second of loop time today, which I2.4 would cut to a few hundred ms. A blocked event loop also delays every other request on that process (saves, live updates, health checks), not only queries. A page with N query blocks multiplies it: each block adds about 110 ms of loop time today. Synthetic text bodies of one size; one machine; OS file cache warm in the cold samples; no `selected`-visibility viewer rows for the player.
+
+## After I2.4 (page reads no longer load bodies)
+
+`PageService.livePages()` is replaced by `livePageSummaries()` (explicit summary columns, no `body`). Callers checked: `tree()`, `queryable()`, `move()` (cycle check, uses `id`/`parentId`), `remove()` (subtree walk, `id`/`parentId`) and `projectForPlayers()` (`id`/`visibility`) read no body; the only body readers (`row`, `get`, `reindex`) have their own selects. No behaviour change. The stage profile's old "livePages select *" row is now the summary query.
+
+Run: `pnpm --filter @cn/server bench:query --runs 60 --cold-runs 5`, 2,000 pages, load average 13 at start (shared machine). Warm p50 / p95 ms:
+
+| Scenario | DM created | DM history | Player created | Player history |
+|---|---|---|---|---|
+| list: title sort, limit 100 | 48 / 68 | 43 / 52 | 47 / 62 | 45 / 66 |
+| list: limit 500 | 44 / 57 | 47 / 66 | 45 / 59 | 39 / 49 |
+| table: NPCs, sort prop.cr desc, limit 500 | 33 / 43 | 38 / 49 | 35 / 44 | 36 / 46 |
+| sort on select prop | 53 / 71 | 52 / 70 | 50 / 75 | 48 / 53 |
+| sort on page-link facet | 60 / 77 | 59 / 92 | 50 / 76 | 46 / 50 |
+| sort on tags, all pages | **121 / 158** | **120 / 160** | 85 / 108 | 91 / 137 |
+| filter: NPC + tag + 4 where | 32 / 41 | 31 / 43 | 33 / 42 | 38 / 46 |
+| contextual (`$ctx`) | 35 / 42 | 33 / 39 | 42 / 63 | 38 / 45 |
+
+Stage profile (p50): summary query 8 ms (was 80), `queryable()` 32 ms (was 106), title sort in `runQuery` 9 ms, tags sort in `runQuery` 82 ms. Cold first request: 76 to 177 ms (was 152 to 248).
+
+**Result.** Every scenario except the tags sort is now 31 to 60 ms p50. The DM tags sort is 120 ms p50 and the player's 85 to 91 ms: the remaining time is the 82 ms `runQuery` tags sort (I2.5: shared collator and precomputed sort keys), which is outside I2.4. The "under 80 ms for every scenario" criterion therefore needs I2.5 to pass for that one scenario; re-measure after I2.5.

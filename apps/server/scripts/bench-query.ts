@@ -319,7 +319,7 @@ async function main() {
     if (!PROFILE_ONLY) await measure('history');
 
     // Stage profile (DM path, whole campaign), warm
-    const pg = services.pages as unknown as { livePages(c: string): unknown[]; queryable(c: string): { id: string }[] };
+    const pg = services.pages as unknown as { livePageSummaries(c: string): unknown[]; queryable(c: string): { id: string }[] };
     const stages: Record<string, number[]> = {};
     const time = <T,>(name: string, fn: () => T): T => {
       const t = performance.now();
@@ -333,7 +333,7 @@ async function main() {
     const rawWithBody = sqlite.prepare(`select * from pages where campaign_id = ? and deleted_at is null order by sort_key`);
     const filter = queryFilterSchema.parse(SCENARIOS[2]!.body(ids).filter);
     for (let i = 0; i < 60; i++) {
-      time('1 pages SQL via drizzle (select *, body JSON.parse)', () => pg.livePages(campaignId));
+      time('1 pages SQL via drizzle (summary columns, no body)', () => pg.livePageSummaries(campaignId));
       time('1a raw SQL, with body column (no parse)', () => rawWithBody.all(campaignId));
       time('1b raw SQL, without body column', () => rawNoBody.all(campaignId));
       const rows = time('2 queryable() = pages + tags + facets + props joins', () => pg.queryable(campaignId));
