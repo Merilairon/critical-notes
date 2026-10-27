@@ -77,7 +77,7 @@ export interface PageChange {
   after: PageState;
 }
 
-export function toSummary(p: PageRow): PageSummaryDto {
+export function toSummary(p: Pick<PageRow, 'id' | 'parentId' | 'sortKey' | 'type' | 'title' | 'icon' | 'visibility' | 'updatedAt'>): PageSummaryDto {
   return {
     id: p.id,
     parentId: p.parentId,
@@ -233,9 +233,20 @@ export class PageService {
     return rows.length;
   }
 
-  private livePages(campaignId: string) {
+  /** Live pages of a campaign without their bodies (no caller needs one; a body is read per page by `row`/`get`). */
+  private livePageSummaries(campaignId: string) {
     return this.db
-      .select()
+      .select({
+        id: pages.id,
+        parentId: pages.parentId,
+        sortKey: pages.sortKey,
+        type: pages.type,
+        title: pages.title,
+        icon: pages.icon,
+        visibility: pages.visibility,
+        createdAt: pages.createdAt,
+        updatedAt: pages.updatedAt,
+      })
       .from(pages)
       .where(and(eq(pages.campaignId, campaignId), isNull(pages.deletedAt)))
       .orderBy(asc(pages.sortKey))
@@ -243,7 +254,7 @@ export class PageService {
   }
 
   tree(campaignId: string): PageSummaryDto[] {
-    return this.livePages(campaignId).map(toSummary);
+    return this.livePageSummaries(campaignId).map(toSummary);
   }
 
   private row(campaignId: string, pageId: string): PageRow {
@@ -456,7 +467,7 @@ export class PageService {
     if (parentId) {
       this.assertPageInCampaign(campaignId, parentId);
       // Prevent cycles: the new parent must not be the page itself or one of its descendants
-      const all = this.livePages(campaignId);
+      const all = this.livePageSummaries(campaignId);
       const parentOf = new Map(all.map((p) => [p.id, p.parentId]));
       for (let cur: string | null | undefined = parentId; cur; cur = parentOf.get(cur)) {
         if (cur === pageId) throw badRequest('Cannot move a page into itself');
@@ -604,7 +615,7 @@ export class PageService {
   /** Soft-deletes a page and its descendants. Returns the deleted ids. */
   remove(campaignId: string, pageId: string): string[] {
     this.row(campaignId, pageId);
-    const all = this.livePages(campaignId);
+    const all = this.livePageSummaries(campaignId);
     const children = new Map<string | null, string[]>();
     for (const p of all) children.set(p.parentId, [...(children.get(p.parentId) ?? []), p.id]);
     const ids: string[] = [];
@@ -659,7 +670,7 @@ export class PageService {
 
   /** The DM's "preview as player": what a player who is shown every shared page receives. */
   projectForPlayers(campaignId: string, page: PageDto): PageDto {
-    const shared = new Set(this.livePages(campaignId).filter((p) => p.visibility === 'all').map((p) => p.id));
+    const shared = new Set(this.livePageSummaries(campaignId).filter((p) => p.visibility === 'all').map((p) => p.id));
     return this.projectPage(campaignId, page, shared);
   }
 
@@ -790,7 +801,7 @@ export class PageService {
 
   /** All live pages of a campaign in queryable form (facets, tags, props). */
   queryable(campaignId: string): (QueryablePage & { summary: PageSummaryDto })[] {
-    const rows = this.livePages(campaignId);
+    const rows = this.livePageSummaries(campaignId);
     const ids = rows.map((r) => r.id);
     const tags = new Map<string, string[]>();
     if (ids.length) for (const t of this.db.select().from(pageTags).where(inArray(pageTags.pageId, ids)).all()) tags.set(t.pageId, [...(tags.get(t.pageId) ?? []), t.tag]);
