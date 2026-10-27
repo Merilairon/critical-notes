@@ -27,7 +27,7 @@ import { BacklinksPanel } from './backlinks-panel';
 import { CampaignStore } from './campaign.store';
 import { HistoryPanel, type HistoryPrepared } from './history-panel';
 import { FacetForm } from './facet-form';
-import { LiveService } from './live/live.service';
+import { blockIdsOf, LiveService } from './live/live.service';
 import { NpcStatblock } from './npc-statblock';
 import { PropertiesPanel } from './properties-panel';
 import { PageTemplateDialog } from '../templates/page-template-dialog';
@@ -123,6 +123,7 @@ export class PageEditor implements OnDestroy {
         live.registerOpen({
           id,
           isDirty: () => Object.keys(this.pending).length > 0 || this.saving !== null || this.status() === 'saving',
+          blockIds: () => blockIdsOf(this.page()?.body),
           apply: (page) => this.applyLive(page),
           reload: () => void this.saveAndReload(id),
         }),
