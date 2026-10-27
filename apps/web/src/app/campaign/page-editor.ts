@@ -70,6 +70,11 @@ export class PageEditor implements OnDestroy {
   protected readonly historyOpen = signal(false);
   /** A history restore is writing: the debounced autosave waits. */
   private readonly historyBusy = signal(false);
+  /** Restores writing right now. A restore outlives its panel (Close, another page, the preview), so the flag is counted, not reset on close. */
+  private busyCount = 0;
+  private busyDone: (() => void) | null = null;
+  /** Resolves when no restore is writing. A reopened panel waits on it, so its PATCH never races the earlier restore's POST. */
+  private restoreSettled: Promise<void> = Promise.resolve();
   private readonly historyBtn = viewChild<ElementRef<HTMLElement>>('historyBtn');
   private readonly layout = inject(LayoutService);
   /** On a phone (portrait, or short landscape) the character sheet is a collapsible section; otherwise it is always open. */
@@ -105,14 +110,6 @@ export class PageEditor implements OnDestroy {
       const id = this.pageId();
       // Only the route id is a dependency: flush() and load() read and write page state
       untracked(() => void this.flush().finally(() => this.load(id)));
-    });
-    // The editor owns the "restore is writing" flag: whenever the panel goes away (Close, Escape, another page, the player preview)
-    // the flag resets here, because a destroyed panel can no longer report that it finished
-    effect(() => {
-      if (this.historyOpen()) return;
-      untracked(() => {
-        if (this.historyBusy()) this.onHistoryBusy(false);
-      });
     });
     // The live stream refreshes this page through this handle, and never over unsaved edits
     effect((onCleanup) => {
@@ -215,12 +212,16 @@ export class PageEditor implements OnDestroy {
     this.saving = (async () => {
       try {
         const saved = await firstValueFrom(this.http.patch<PageDto>(`/api/campaigns/${this.store.id()}/pages/${p.id}`, { ...change, revision: p.revision }));
+        this.store.patchSummary(saved);
+        // The editor may show another page by now: a late answer for the old one must not overwrite it
+        if (this.page()?.id !== p.id) return;
         // Keep local unsaved edits (e.g. typing during the request) and adopt the server's state otherwise
         this.page.set({ ...saved, body: this.page()?.body ?? saved.body });
-        this.store.patchSummary(saved);
         this.status.set('saved');
         this.savedCount.update((n) => n + 1);
       } catch (err) {
+        // The change belongs to the old page: it cannot be put back as pending on the new one
+        if (this.page()?.id !== p.id) return;
         if (err instanceof HttpErrorResponse && err.status === 409) {
           // Keep what was not saved, so the typing stays on screen and a history restore sees it
           // `change` is older than whatever was typed since
@@ -382,16 +383,23 @@ export class PageEditor implements OnDestroy {
 
   /** The History panel restores over the saved page: save pending edits first and report the revision. */
   protected readonly prepareHistory = async (): Promise<HistoryPrepared> => {
+    await this.restoreSettled;
     await this.flush();
     const ok = this.status() !== 'conflict' && this.status() !== 'error';
     return { ok, revision: this.page()?.revision ?? 0 };
   };
 
   /** The panel's restore starts or ends. When it ends without a conflict, typing that waited is saved. */
-  protected onHistoryBusy(busy: boolean) {
-    this.historyBusy.set(busy);
+  protected readonly onHistoryBusy = (busy: boolean): void => {
+    if (busy) {
+      if (this.busyCount++ === 0) this.restoreSettled = new Promise<void>((resolve) => (this.busyDone = resolve));
+    } else if (this.busyCount > 0 && --this.busyCount === 0) {
+      this.busyDone?.();
+      this.busyDone = null;
+    }
+    this.historyBusy.set(this.busyCount > 0);
     if (!busy && this.status() !== 'conflict' && Object.keys(this.pending).length) this.autoFlush();
-  }
+  };
 
   /**
    * A restore (or the newer page after a stale restore) replaces what the editor shows. Returns false, changing nothing, when the

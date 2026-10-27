@@ -56,7 +56,7 @@ async function mount(items: HistoryItem[] | number, opts: { revision?: number; p
     (why === 'restored' ? restored : stale)(p);
     return opts.adopt ?? true;
   });
-  fixture.componentInstance.busy.subscribe(busy);
+  fixture.componentRef.setInput('onBusy', busy);
   fixture.componentInstance.closed.subscribe(closed);
   const http = TestBed.inject(HttpTestingController);
   document.body.append(fixture.nativeElement);
@@ -396,13 +396,13 @@ describe('HistoryPanel', () => {
       });
       restoreBtn(4).click();
       await settle();
-      const refreshReload = http.expectOne(`${BASE}?limit=50`);
+      // the refresh bump during a restore does not reload the list: the restore reloads it once at its end
+      http.expectNone(`${BASE}?limit=50`);
       const head = http.expectOne(`${BASE}?limit=1`);
       head.flush({ items: serverList.slice(0, 1) });
       await settle();
       const post = http.expectOne(`${BASE}/4/restore`);
       expect(post.request.body).toEqual({ revision: 6 });
-      refreshReload.flush({ items: serverList });
       post.flush({ page: page(7), restored: true, warnings: [] });
       await settle();
       http.expectOne(`${BASE}?limit=50`).flush({ items: [item(7), ...serverList] });
@@ -414,6 +414,50 @@ describe('HistoryPanel', () => {
       await settle();
       expect(http.expectOne(`${BASE}/6/restore`).request.body).toEqual({ revision: 7 });
     });
+  });
+
+  it('reloads the list once per restore, although the editor bumps refresh for its flush and for the adopted page', async () => {
+    const { http, fixture, restoreBtn } = await mount([item(5), item(4)]);
+    fixture.componentRef.setInput('prepare', async () => {
+      fixture.componentRef.setInput('refresh', 1);
+      fixture.detectChanges();
+      await settle();
+      return { ok: true, revision: 5 };
+    });
+    fixture.componentRef.setInput('adopt', () => {
+      fixture.componentRef.setInput('refresh', 2);
+      return true;
+    });
+    restoreBtn(4).click();
+    await settle();
+    http.expectOne(`${BASE}?limit=1`).flush({ items: [item(5)] });
+    await settle();
+    http.expectOne(`${BASE}/4/restore`).flush({ page: page(6), restored: true, warnings: [] });
+    await settle();
+    fixture.detectChanges();
+    await settle();
+    // exactly one list request after the POST
+    http.expectOne(`${BASE}?limit=50`).flush({ items: [item(6), item(5), item(4)] });
+    await tick(fixture);
+    http.expectNone(`${BASE}?limit=50`);
+    // an ordinary save afterwards still reloads quietly
+    fixture.componentRef.setInput('refresh', 3);
+    fixture.detectChanges();
+    await settle();
+    http.expectOne(`${BASE}?limit=50`).flush({ items: [item(6), item(5), item(4)] });
+  });
+
+  it('keeps reporting the restore when the panel is closed mid-restore, without reloading or throwing', async () => {
+    const { http, fixture, restoreBtn, reload, busy } = await mount([item(5), item(4)]);
+    restoreBtn(4).click();
+    await settle();
+    await reload();
+    expect(busy.mock.calls).toEqual([[true]]);
+    fixture.destroy();
+    http.expectOne(`${BASE}/4/restore`).flush({ page: page(6), restored: true, warnings: [] });
+    await settle();
+    expect(busy.mock.calls).toEqual([[true], [false]]);
+    http.expectNone(`${BASE}?limit=50`);
   });
 
   it('offers no Undo when the newest row could not be read', async () => {

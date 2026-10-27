@@ -182,25 +182,44 @@ describe('PageEditor history wiring', () => {
     expect(editor.adoptHistory(reply({ title: 'Restored', revision: 4 }) as unknown as PageDto)).toBe(false);
   });
 
-  it('closing the panel mid-restore frees the autosave and sends the typing that waited', async () => {
+  it('closing the panel mid-restore keeps the autosave held until the restore ends, then sends the typing that waited', async () => {
     const { editor, http, fixture, open } = await mount(true);
     await open();
     editor.onHistoryBusy(true);
     editor.queue({ title: 'Typed during restore' }, true);
     await settle();
-    http.expectNone({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' });
-    // the panel is destroyed before it can report the end of the restore
     (fixture.componentInstance as unknown as { closeHistory(): void }).closeHistory();
     fixture.detectChanges();
     await settle();
+    // the restore POST is still in flight: no PATCH may race it
+    http.expectNone({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' });
+    editor.onHistoryBusy(false);
+    await settle();
     http.expectOne({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' }).flush(reply({ title: 'Typed during restore', revision: 2 }));
-    await settle();
-    editor.queue({ title: 'Later' }, true);
-    await settle();
-    http.expectOne({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' }).flush(reply({ title: 'Later', revision: 3 }));
   });
 
-  it('a page change mid-restore frees the autosave', async () => {
+  it('a panel reopened mid-restore waits for the restore before it flushes', async () => {
+    const { editor, http, fixture, open } = await mount(true);
+    await open();
+    editor.onHistoryBusy(true);
+    editor.queue({ title: 'Typed during restore' }, true);
+    (fixture.componentInstance as unknown as { closeHistory(): void }).closeHistory();
+    fixture.detectChanges();
+    await settle();
+    const prepared = (fixture.componentInstance as unknown as { prepareHistory(): Promise<{ ok: boolean; revision: number }> }).prepareHistory();
+    let done = false;
+    void prepared.then(() => (done = true));
+    await settle();
+    expect(done).toBe(false);
+    http.expectNone({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' });
+    editor.onHistoryBusy(false);
+    await settle();
+    http.expectOne({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' }).flush(reply({ title: 'Typed during restore', revision: 2 }));
+    await settle();
+    expect(done).toBe(true);
+  });
+
+  it('a page change mid-restore holds the autosave until the restore ends', async () => {
     const { editor, http, fixture, open } = await mount(true);
     await open();
     editor.onHistoryBusy(true);
@@ -212,21 +231,36 @@ describe('PageEditor history wiring', () => {
     fixture.detectChanges();
     editor.queue({ title: 'On the new page' }, true);
     await settle();
+    http.expectNone({ method: 'PATCH', url: '/api/campaigns/c1/pages/p2' });
+    editor.onHistoryBusy(false);
+    await settle();
     http.expectOne({ method: 'PATCH', url: '/api/campaigns/c1/pages/p2' }).flush(reply({ id: 'p2', title: 'On the new page', revision: 2 }));
   });
 
-  it('turning on the player preview mid-restore frees the autosave', async () => {
-    const { editor, http, fixture, open, el } = await mount(true);
-    await open();
-    editor.onHistoryBusy(true);
-    Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.includes('Preview as player'))!.click();
+  it('a save for the old page that answers after a page change does not overwrite the new page', async () => {
+    const { editor, http, fixture } = await mount(true);
+    editor.queue({ title: 'Old edit' }, true);
     await settle();
-    http.expectOne((r) => r.url === '/api/campaigns/c1/pages/p1' && r.params.get('as') === 'player').flush(reply());
+    const patch = http.expectOne({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' });
+    // the editor now shows another page (as a finished load would)
+    (fixture.componentInstance as unknown as { page: { set(p: PageDto): void } }).page.set(reply({ id: 'p2', title: 'New page' }) as unknown as PageDto);
+    patch.flush(reply({ title: 'Old edit', revision: 9 }));
     await settle();
-    fixture.detectChanges();
-    editor.queue({ title: 'Typed in preview' }, true);
+    expect(editor.page().id).toBe('p2');
+    expect(editor.page().title).toBe('New page');
+    expect(editor.status()).not.toBe('saved');
+  });
+
+  it('a failed save for the old page does not put its change back as pending on the new page', async () => {
+    const { editor, http, fixture } = await mount(true);
+    editor.queue({ title: 'Old edit' }, true);
     await settle();
-    http.expectOne({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' }).flush(reply({ title: 'Typed in preview', revision: 2 }));
+    const patch = http.expectOne({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' });
+    (fixture.componentInstance as unknown as { page: { set(p: PageDto): void } }).page.set(reply({ id: 'p2', title: 'New page' }) as unknown as PageDto);
+    patch.flush({ error: 'changed' }, { status: 409, statusText: 'Conflict' });
+    await settle();
+    expect(editor.pending).toEqual({});
+    expect(editor.status()).not.toBe('conflict');
   });
 
   it('puts an unsent save back with facet and props merged per key', async () => {
