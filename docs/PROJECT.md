@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Release 1.0 shipped (v1.0.0, 2026-10-22); 1.1.0 to 1.2.0 shipped as post-1.0 follow-ups (not in this file); release 1.3 shipped (v1.3.0, 2026-10-26); release 1.3.1 (hardening and follow-ups, §6b) is planned next; 1.4 and later are assigned but not yet broken down |
+| Status | Release 1.0 shipped (v1.0.0, 2026-10-22); 1.1.0 to 1.2.0 shipped as post-1.0 follow-ups (not in this file); release 1.3 shipped (v1.3.0, 2026-10-26); release 1.3.1 (hardening and follow-ups, §6b) is planned next; release 1.5 (Characters: sheet, builder, level-up, PDF; §6c) is planned, nothing built; 1.4 and later are assigned but not yet broken down |
 | Date | 2026-10-13, updated 2026-10-26 |
 | Specification | [PRD.md](PRD.md) (what and why). This file is the task list (who and how). |
 | Engineering state | [STATUS.md](STATUS.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [PLAN.md](PLAN.md) |
@@ -19,7 +19,8 @@
 | **1.3** | Prep and play loop | N1 Page history, N3 Reveal to players, I1 Keep hidden links, I3 Tracker additions, I2 Query views | 22 tasks, 5 waves (§6) |
 | **1.3.1** | Hardening and follow-ups | Rest of the player-merge hardening (I1.6, S1.1, S1.2), stream and history-panel follow-ups (S1.3, S1.4), cheaper queries (I2.4 to I2.7), offline-gap toast (N3.6), test health (H1.1 to H1.3, H1.5) | 15 tasks (14 plus the gate), 4 waves (§6b) |
 | **1.4** | Stay in sync | N2, N4, I4, I5, I10 | Assigned, broken down when scheduled (§7) |
-| **Later** | Grow | N5–N17, I6–I18 | Assigned, broken down when scheduled (§7) |
+| **1.5** | Characters | N13 sheet, N18 builder, N19 level-up, N20 PDF export (2014 and 2024) | 31 tasks (29 plus 2 stretch), 10 waves (§6c); planned 2026-10-26 |
+| **Later** | Grow | N5–N12, N14–N17, I6–I18 | Assigned, broken down when scheduled (§7) |
 
 **Technical stack (exact):** pnpm 11 monorepo, TypeScript 6.0.3, Node 24. Server: Hono, Drizzle ORM on better-sqlite3 (Postgres mirror schema), zod 4, `@modelcontextprotocol/server` 2.3.1. Web: Angular 22 (standalone, signals, zoneless, `httpResource`), Tailwind v4, TipTap v3. Tests: Vitest (unit/API), Playwright (`e2e/`, system Chrome, real 5etools data). Delivery: esbuild server bundle, Docker (non-root), docker-compose.
 
@@ -41,7 +42,7 @@ Agents are referred to by their name in the repository; the file is in brackets.
 | **UX Architect** (`design/design-ux-architect`) | The "ArchitectUX" step for each epic with UI: flows, layouts, Tailwind patterns developers follow. |
 | **UI Designer** (`design/design-ui-designer`) | Visual consistency of new screens (Account, Admin, Trash, History) in light and dark themes. |
 | **UX Researcher** (`design/design-ux-researcher`) | Runs the "first evening" tests (PRD §4) and validates demand before big bets (N13). |
-| **Game Designer** (`game-development/game-designer`) | D&D rules expert for combat and generators (I3, N4): exact 2014/2024 rules, what players may see. |
+| **Game Designer** (`game-development/game-designer`) | D&D rules expert for combat, generators and characters (I3, N4, N13/N18/N19): exact 2014/2024 rules, what players may see. Owns the character rules spec and the golden characters' expected numbers (§6c). |
 | **Narrative Designer** (`game-development/narrative-designer`) | Session recaps and story structure (N12), the "table moment" of reveals (N3). |
 
 ### Engineering
@@ -808,9 +809,260 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 | 3 | I2.7 (after I2.4 and I2.5; only if campaigns pass about 5,000 pages) |
 | 4 | G3.1 |
 
+## 6c. Release 1.5: Characters
+
+Planned 2026-10-26 by the Senior Project Manager at the owner's request. **Plan only: nothing is built, no code or schema has changed.** The owner asked for four things: a character sheet, a PDF export in the familiar D&D layout, a character builder that follows the rules, and a level-up that follows the rules, all respecting the campaign's ruleset (2014 or 2024). This promotes PRD N13 ("Character sheet depth", P3) to P1 and splits it into N13 sheet, N18 builder, N19 level-up and N20 PDF export (C0.1 writes them into the PRD). The owner's request outranks the PRD's "validate demand first" risk; the demand check shrinks to the first-evening test in G4.3.
+
+**Release number.** Placed as 1.5 because 1.4 (N2, N4, I4, I5, I10) is already assigned; the owner may swap them (decision D8). Release 1.3.1 is independent and may ship first.
+
+### Definition of "follows the rules" (scope boundary for every task)
+
+Without a boundary this epic has no end (about 12 classes, 100+ subclasses, two rulesets, hundreds of feats and spells). The boundary:
+
+| Tier | Content | What the app does |
+|---|---|---|
+| **A: enforced** | The core books of the campaign's ruleset (2014: PHB; 2024: XPHB) plus the SRD content inside them | Every choice is validated: the builder offers only legal options; level-up cannot skip a step; derived numbers (proficiency, modifiers, saves, skills, HP, spell slots, spells prepared) are computed, not typed |
+| **B: structured** | Other official sources enabled in the campaign whose data has the same shape (supplement classes, species, feats, subclasses) | Validated wherever the data is structured; a choice the data does not describe becomes a "choose by hand" step with a visible warning |
+| **C: manual** | Homebrew and unstructured content (class forms are I12, out of scope) | Accepted as typed; shown with a "not checked" badge |
+
+A character is built under **one ruleset**, recorded on the sheet, and keeps it. Changing the campaign's edition later does not rewrite characters (a mapping is I14, later). The Game Designer's rules spec (C0.3) defines every rule inside tier A for both rulesets; examples it must cover, to be verified against the books and not assumed: ability scores come from the species in 2014 and from the background in 2024; the 2024 background also gives an origin feat; subclass levels differ (2014 varies by class, 2024 uses one level); Ability Score Improvement is its own feat in 2024; the 2024 epic boon level; prepared-spell counts and swapping differ; starting equipment is chosen differently. Edition differences live only in `packages/fivetools/src/ruleset` (§4: no edition string comparisons elsewhere).
+
+**GM override.** The DM is the referee (as in the tracker rules): a player cannot save an illegal build, but a GM can override any rule check; the sheet then shows a "GM override" note and the page history records it (decision D11).
+
+**Out of scope (ideas go to the Product Manager):** NPC and monster builders; the official WotC PDF or its art, logos and fonts; form-fillable PDFs; automatic combat or attack rolls; converting a character between rulesets (I14); homebrew class forms (I12); level down; leveling the whole party at once; languages other than English; rest automation (stretch C3.4 only).
+
+### 6c.0 Epic C0: Scope, rules, design and legal (first; nothing is built before these pass)
+
+### [ ] Task C0.1: PRD update and success criteria
+**Owner**: Product Manager · **QA**: Senior Project Manager
+**Description**: Promote N13 to P1, add N18 (builder), N19 (level-up) and N20 (PDF export) to PRD §9 with value, effort and priority; add release 1.5 to §11; add the scope boundary above and the out-of-scope list to the PRD; state the success measures: (1) a new player builds a legal level-1 character in under 15 minutes without outside help, (2) every golden character (C1.4) matches the books in both rulesets, (3) the PDF opens and prints cleanly on A4 and US Letter in Chrome, Firefox and a system viewer, (4) no DM-only content in any sheet response or PDF.
+**Acceptance Criteria**: PRD updated; the "Unclear demand for deep character sheets" risk marked as accepted by the owner's request with the G4.3 mitigation; no other PRD text changed
+**Reference**: PRD §9 N13, §11, §12
+
+### [ ] Task C0.2: Legal brief for the sheet and the PDF
+**Owner**: Legal Compliance Checker · **QA**: Product Manager
+**Description**: The official character sheet's layout, artwork, logos and fonts belong to Wizards of the Coast. Advise what the PDF may look like (an original layout with the familiar sections, no WotC art, logo, fonts or wording of the printed form), whether printing rules text from the user's own 5etools data on a PDF they export is within the project's "bring your own data" position (README "Licensing", DATA_NOTES §9), what the SRD 5.1/5.2 (CC-BY-4.0) allows without the data, font licenses (embed only SIL OFL or similar fonts; add them to `THIRD_PARTY_NOTICES.md`) and the attribution line the PDF footer needs. Not legal advice; states so.
+**Acceptance Criteria**: `docs/legal/character-sheet.md` with a clear allowed / not allowed list for the layout, the text, the fonts and the footer; names what the owner must confirm (D12)
+**Reference**: PRD §12 (legal position of reading 5etools data)
+
+### [ ] Task C0.3: Character rules specification (2014 and 2024)
+**Owner**: Game Designer · **QA**: Product Manager, Code Reviewer
+**Description**: One document for the rules engine and the UI. For both rulesets: creation order and what each step grants; ability score methods (standard array, point buy, rolled) and caps; species and background effects; proficiencies, expertise and saves; hit points at level 1 and per level (average, rolled, manual); proficiency bonus; spell slots including multiclass slots and pact magic; cantrips, spells known and spells prepared per class; feats and their prerequisites; Ability Score Improvement and epic boon levels; subclass levels; multiclass prerequisites and the proficiencies a multiclass gains; starting equipment and starting gold; the level-up checklist per class level; which values are derived and which are chosen. Each rule gets a source (book and page, "owner to fill" as in I3.1), is paraphrased in a few words (no rules text copied, §4 Data rule), and is marked "same in both", "2014 only" or "2024 only". A table maps each rule to the 5etools data field that carries it, taken from the real data and `DATA_NOTES.md`, and lists what the data does not carry (those become tier B/C "choose by hand" steps). Ends with a verification checklist the QA agents use.
+**Acceptance Criteria**: `docs/design/character-rules.md`; every tier A rule has a source; a list of 20 reference characters per ruleset to build (feeds C1.4); the Product Manager has accepted the list of "choose by hand" cases
+**Reference**: PRD §9 N18, N19
+
+### [ ] Task C0.4: Architecture and data model
+**Owner**: Software Architect · **QA**: Database Reliability Engineer, Security Architect
+**Description**: `docs/design/character-sheet.md`: (1) the data model: where the structured sheet lives (new table next to `character_facets`, or inside it), the build ruleset, the choices log and the level-up log; which values are stored and which derived; versioning of the sheet JSON; (2) how the existing `pc` facet fields (`classes`, `hpMax`, `ac`, `abilities`, `speed`, `passivePerception`) stay the single source for the tracker, party view and encounter difficulty (the sheet writes them in the same transaction); (3) where the rules engine lives (pure functions in `@cn/fivetools` and `@cn/shared`, used by server and browser) and that the server is the authority; (4) how equipment relates to the inventory feature (one source, no duplicate item lists); (5) page history, undo of a level-up, and how a sheet is covered by campaign export/import and ownership transfer; (6) the player projection and who may read, create and edit a sheet (D9); (7) the PDF pipeline (engine from C5.1, fonts, page size, size and time budgets, rate limit); (8) the MCP surface (C6.1); (9) the threats: leaking DM-only data through the sheet or the PDF, oversized fields, crafted names in PDF text, request flooding the renderer.
+**Acceptance Criteria**: design approved by both QA agents; every open question is in §8 for the owner; no edition string comparison outside the ruleset folder
+**Depends on**: C0.3, C5.1
+
+### [ ] Task C0.5: Builder, level-up and sheet UX
+**Owner**: UX Architect · **QA**: UI Designer
+**Description**: `docs/design/character-builder-ui.md`: the builder as a stepper whose steps follow the ruleset (not one fixed order), a live "rule check" panel (errors block, warnings inform, GM override), choices that depend on earlier choices, a draft that can be left and resumed; the level-up flow (what changed at this level, then only the choices that level needs, then a summary with the HP result, then Confirm); the structured sheet on the PC page (view and edit, what a player can and cannot edit); the PDF button and its options (page size, which pages); phone layout following `docs/design/phone-layout.md` (320 px, 44 px targets, no sideways scroll); keyboard and screen-reader behaviour of the stepper and the rule-check panel; light and dark themes from existing tokens.
+**Acceptance Criteria**: flows and screen sketches for creation (both rulesets), level-up (plain, multiclass, subclass, ASI/feat, spells) and the sheet; every state (loading, error, stale, rule violation, override) has a design; an accessibility section the Accessibility Auditor can test against
+**Depends on**: C0.3 · **Design**: this task
+
+### [ ] Task C0.6: PDF layout specification
+**Owner**: UI Designer · **QA**: Legal Compliance Checker, Game Designer
+**Description**: `docs/design/character-sheet-pdf.md`: the page grid for A4 and US Letter, page 1 (identity, ability scores with saves and skills, proficiency, initiative, AC, HP and hit dice, speed, attacks, features and traits, proficiencies and languages, equipment), page 2 (background, personality, appearance, allies, extra features; and in 2014 or 2024 the sections that differ: species traits, origin feat, weapon mastery), page 3 (spellcasting: ability, save DC, attack bonus, slots, spell list by level). Rules for text that does not fit (smaller type down to a floor, then a continuation page), fonts (embedded, OFL), black-and-white print, a footer with the attribution from C0.2, and a font-coverage fallback for unusual characters. An original design that follows the familiar arrangement, not the WotC form.
+**Acceptance Criteria**: dimensions in points for every box; text overflow rules; the legal checks from C0.2 ticked; a list of which fields differ by ruleset
+**Depends on**: C0.2, C0.3, C5.1
+
+### [ ] Task C0.7: Owner decisions D8 to D12
+**Owner**: **Owner (human)**, prepared by Product Manager · **QA**: none
+**Description**: Decide D8 to D12 in §8 (release placement, who creates characters, PDF engine, rule strictness, content sources and the legal position of the PDF). The options and a recommendation are already in the table.
+**Depends on**: C0.2, C0.4, C5.1
+
+### 6c.1 Epic C5 (first part): PDF engine spike
+
+### [ ] Task C5.1: PDF engine spike
+**Owner**: Backend Architect · **QA**: DevOps Automator, Performance Benchmarker
+**Description**: Build the same one-page sample sheet three ways and measure on the real Docker image (non-root, `linux/amd64` and `arm64`): (a) a pure JavaScript PDF library on the server (for example pdf-lib or pdfkit); (b) the browser's own printing from an Angular print view (`window.print`); (c) a headless browser on the server. Measure: image size added, memory, time for a three-page sheet, new native dependencies, behaviour of embedded fonts and unusual characters, determinism (same input, same bytes apart from the date), and whether it can be tested without a browser. Recommend one. Expected recommendation (to be proved or rejected): (a), because a headless browser doubles the image and (b) is not a file the server can control.
+**Acceptance Criteria**: `docs/qa/pdf-engine-spike.md` with the table and a recommendation; the spike code is thrown away or kept under `apps/server/scripts/` and not wired in; licenses of the candidate libraries checked against Apache-2.0 compatibility (M1.1 method)
+**Reference**: PRD §3 (self-hosting, small image)
+
+### 6c.2 Epic C1: Rules engine (shared, pure, no I/O)
+
+### [ ] Task C1.1: Ruleset character basics
+**Owner**: Backend Architect · **QA**: Game Designer, Code Reviewer
+**Description**: Add a `character` section to the `Ruleset` (`packages/fivetools/src/ruleset/`, beside `encounter`) with the derived numbers: ability modifier, proficiency bonus by level, saving throws and skills (with proficiency, expertise and half-proficiency), passive scores, initiative, hit point calculation, spell save DC and attack bonus, spell slots for single-class and multiclass casters and pact magic, and the per-ruleset differences from C0.3. Extend `RulesetFeatures` where a new difference needs a flag.
+**Acceptance Criteria**: table-driven unit tests for levels 1 to 20 in both rulesets; no edition string comparison outside the ruleset folder (lint); numbers match the rules spec's checklist
+**Files**: `packages/fivetools/src/ruleset/`, tests
+**Depends on**: C0.3
+
+### [ ] Task C1.2: Rules content readers
+**Owner**: Backend Architect · **QA**: Game Designer
+**Description**: Read the 5etools class, subclass, class feature, species, background, feat, spell and equipment data into a typed options model: "what choices does this class offer at level N", prerequisites, granted proficiencies, spellcasting progression, starting equipment. Handle the 2014 and 2024 data shapes and reprints through the existing `edition` module; homebrew entities with the same shape work the same way; content the data does not describe is returned as a "choose by hand" marker (tier B/C), never guessed.
+**Acceptance Criteria**: for every class in the core book of each ruleset, level 1 to 20 gives a complete, ordered list of grants and choices (a test against the real data, skipped without the clone as the e2e suite is); unknown shapes produce markers, not exceptions; no rules text is stored in test fixtures (§4)
+**Files**: `packages/fivetools/src/` (new `character/` folder), tests
+**Depends on**: C1.1
+
+### [ ] Task C1.3: Build validator and level-up engine
+**Owner**: Backend Architect · **QA**: Game Designer, Code Reviewer
+**Description**: Pure functions: `validateBuild(build, ruleset, content)` returns the derived sheet, errors (block) and warnings (inform); `planLevelUp(sheet, classUid)` lists the choices the next level needs and the multiclass prerequisites; `applyLevelUp(sheet, choices)` returns the new sheet, including HP, new features, slots, spells and any ASI or feat. Same code runs in the browser for live feedback and on the server as the authority. GM override is an explicit input, recorded in the result.
+**Acceptance Criteria**: each rule in C0.3 has a passing and a failing test; invalid input never throws (returns errors); a level-up of an already-illegal legacy sheet reports what is wrong instead of crashing
+**Files**: `packages/fivetools/src/character/`, tests
+**Depends on**: C1.1, C1.2
+
+### [ ] Task C1.4: Golden characters
+**Owner**: Test Automation Engineer · **QA**: Game Designer, Reality Checker
+**Description**: Build the 20 reference characters per ruleset from C0.3 (all core classes at level 1, 5 and 20 where they differ in kind, two multiclass casters, a pact caster, a character with a feat, a character whose subclass starts at level 1 in 2014) as stored builds with expected derived numbers written by the Game Designer from the books. The suite runs the builder and the level-up path from level 1 to the target level and compares every derived number.
+**Acceptance Criteria**: all pass; a planted rule bug (wrong slot table, wrong proficiency bonus, ASI at the wrong level) fails at least one golden character (mutation check by the Reality Checker); fixtures hold choices and numbers only, no rules text
+**Depends on**: C1.3
+
+### 6c.3 Epic C2: Storage and API
+
+### [ ] Task C2.1: Schema for the sheet
+**Owner**: Backend Architect · **QA**: Database Reliability Engineer
+**Description**: Add the storage decided in C0.4 to `apps/server/src/db/schema.ts` and `schema.pg.ts`; generate both migrations; shared zod schema for the sheet in `packages/shared/src/` (limits on every string and array); existing characters keep working without a sheet (legacy sheet: the old facet fields stay valid). If D9 says players may create characters, add the campaign setting here.
+**Acceptance Criteria**: migrations for SQLite and Postgres, parity test green; a populated copy of `var/` upgrades without loss; the schema-allowlist test (backup) is reviewed and updated if the migration needs it; backup and restore drill still passes
+**Files**: `apps/server/src/db/schema.ts`, `schema.pg.ts`, `drizzle/`, `drizzle-pg/`, `packages/shared/src/`
+**Depends on**: C0.4, C0.7
+
+### [ ] Task C2.2: Character endpoints
+**Owner**: Backend Architect · **QA**: API Tester, Application Security Engineer
+**Description**: Under `/api/campaigns/:cid`: create a character (page plus sheet in one transaction), read and update a sheet (validated by C1.3), `POST .../level-up/preview` and `.../level-up` (apply, with the current revision to refuse stale writes), `GET .../options` (what the builder may offer, from the content readers). The GM check, the player-own-character rule, the player projection (DM-only fields never returned), history revisions with the server-side `WriteContext`, an audit line without content, and writes to the `pc` facet fields in the same transaction. Body size and field limits; a rate limit on preview.
+**Acceptance Criteria**: permission matrix tested (owner, co-DM, player on own character, player on another's, player on a hidden character, outsider, anonymous); an illegal build is refused with a readable list of errors for players and accepted with an override note for a GM; the new routes join the sentinel crawl in `visibility.test.ts` with a sentinel in a GM-only field; the stale-revision case returns 409 with the current sheet; gate green
+**Files**: new `apps/server/src/routes/characters.ts`, `services/characters.ts`, `app.ts`, `test/visibility.test.ts`
+**Depends on**: C1.3, C2.1
+
+### [ ] Task C2.3: Keep the rest of the app in step
+**Owner**: Backend Architect · **QA**: API Tester
+**Description**: The tracker (adding a character reads current HP, AC, initiative bonus from the sheet; ending combat still writes HP back), the party view, encounter difficulty (levels come from `classes`), the inventory (sheet equipment and attacks read the inventory instead of keeping a copy), campaign export/import and ownership transfer (the sheet travels with its character). Define and test what happens when a character is edited by the tracker and the sheet at once.
+**Acceptance Criteria**: each consumer has a test with a sheet-backed character and a legacy one; export then import gives an identical sheet; nothing in the player projection of the party or tracker changes (existing sentinel tests unchanged and green)
+**Depends on**: C2.2
+
+### 6c.4 Epic C3: Sheet and builder UI
+
+### [ ] Task C3.1: Character sheet view
+**Owner**: Frontend Developer · **QA**: Evidence Collector, Accessibility Auditor
+**Description**: The structured sheet on the PC page, built to `docs/design/character-builder-ui.md`: abilities, saves, skills, proficiencies, attacks, features, spells with slots, equipment from the inventory, personality and notes; read-only for others, editable for the owner and GM as designed; derived values shown with the rule that produced them on hover or focus (so a player can see why the number is what it is). Phone layout per the M6 guidance. Existing page body and blocks stay below it.
+**Acceptance Criteria**: browser check at 1280, 390 and 320 px in both themes; axe 0 violations; a legacy character without a sheet still shows its old form and a "Build this character" prompt; unit specs next to the components; no `innerHTML`
+**Files**: `apps/web/src/app/campaign/` (new `character/` folder), `page-editor.html`
+**Depends on**: C2.2 · **Design**: C0.5
+
+### [ ] Task C3.2: Character builder
+**Owner**: Frontend Developer · **QA**: Evidence Collector, Accessibility Auditor
+**Description**: The stepper from the design, for both rulesets: only legal options are offered, the rule-check panel updates live from the shared validator, a draft can be saved and resumed, GM override is available to game masters only and visible afterwards, the server's answer is shown inline when it disagrees. Offers sources by D12.
+**Acceptance Criteria**: a level-1 character of each core class can be completed in each ruleset in the browser; an illegal choice is impossible for a player and flagged for a GM; keyboard-only completion; screen-reader names and live announcements for rule-check changes; 390 px layout; focus handling as in the Trash and History panels (no focus lost to BODY)
+**Depends on**: C2.2, C3.1 · **Design**: C0.5
+
+### [ ] Task C3.3: Build from an existing character
+**Owner**: Frontend Developer (flow), Backend Architect (adoption endpoint) · **QA**: Evidence Collector, API Tester
+**Description**: Characters made before 1.5 have classes, HP, AC and abilities but no sheet. "Build this character" starts the builder with those values filled in, reports which of them are not legal under the ruleset (shown as warnings, not silent changes) and lets the owner fix them or, for a GM, keep them with an override.
+**Acceptance Criteria**: a populated 1.4 campaign's characters can all be adopted; nothing is lost if the user leaves halfway; the old fields stay as they were until the user confirms
+**Depends on**: C3.2
+
+### [ ] Task C3.4 (stretch): Rests and resources
+**Owner**: Frontend Developer · **QA**: Evidence Collector, Game Designer
+**Description**: Spend and recover spell slots, hit dice and a few common class resources with Short rest and Long rest buttons, as the ruleset defines recovery. Only if all other C-tasks are done and the owner agrees; otherwise moved to the backlog.
+**Depends on**: C3.1
+
+### 6c.5 Epic C4: Level up
+
+### [ ] Task C4.1: Level-up wizard
+**Owner**: Frontend Developer · **QA**: Evidence Collector, Accessibility Auditor
+**Description**: "Level up" on the sheet for the owner and the GM, built to the design: choose the class (the current one, or a new one with its prerequisites checked), see what the new level grants, make only the choices it needs (subclass, ASI or feat, spells, expertise, fighting style, class-specific picks), choose the HP method, review, confirm. Works in both rulesets and for multiclass. A GM can override a prerequisite with the note from D11.
+**Acceptance Criteria**: levels 1 to 20 reachable for every golden character through the UI (a sampled subset in the browser, the rest through the endpoint tests); a level that grants nothing to choose confirms in one step; the summary equals the server's result; keyboard and screen-reader pass; 390 px
+**Depends on**: C3.1, C2.2 · **Design**: C0.5
+
+### [ ] Task C4.2: Undo a level-up and edit safety
+**Owner**: Backend Architect (server), Frontend Developer (UI) · **QA**: API Tester, Evidence Collector
+**Description**: "Undo level-up" for the latest level-up (a new history revision, as page history does, not a rewrite); stale-sheet handling when the tracker or another browser changed HP meanwhile (409, reload, keep what the user chose); a warning when a level-up starts while the character is in a running combat.
+**Acceptance Criteria**: undo restores the previous sheet and the `pc` facet fields exactly; undo of an older level-up is refused with a clear message; the stale and combat cases are tested in the browser
+**Depends on**: C4.1
+
+### 6c.6 Epic C5 (second part): PDF export
+
+### [ ] Task C5.2: PDF renderer
+**Owner**: Backend Architect · **QA**: Evidence Collector, Game Designer
+**Description**: A pure function `renderSheetPdf(sheet, options)` with the engine chosen in D10, to the layout in C0.6: A4 or US Letter, one to three pages, the ruleset-specific sections, embedded fonts, text fitting rules with a continuation page, a font fallback for unusual characters, the attribution footer, document title and language set. Reads only the structured sheet, never the page body or any block.
+**Acceptance Criteria**: the golden characters of both rulesets render; QA converts every page to an image and checks it against the layout spec (no clipped or overlapping text, fields in the right boxes), including a 40-feature character and a name of 80 characters; output is valid (checked with a PDF parser) and under 1 MB for a normal sheet; two renders of the same sheet are identical apart from the date
+**Files**: new `apps/server/src/pdf/` (or `packages/`, per C0.4), fonts, `THIRD_PARTY_NOTICES.md`
+**Depends on**: C0.6, C2.1, D10
+
+### [ ] Task C5.3: Export endpoint and button
+**Owner**: Backend Architect (endpoint), Frontend Developer (button and options) · **QA**: API Tester, Application Security Engineer, Evidence Collector
+**Description**: `GET /api/campaigns/:cid/pages/:pid/sheet.pdf?size=a4|letter` with the same read permission as the sheet (a player gets only their own and visible characters; a GM any), the player projection applied before rendering, a sanitised file name, `Content-Disposition: attachment`, `Cache-Control: no-store`, an audit line, a rate limit and a time limit on rendering, not on the MCP allowlist. Button "Download PDF" on the sheet with a page-size choice remembered per browser.
+**Acceptance Criteria**: permission matrix as in C2.2; a sentinel in a GM-only field, in the page body and in a DM-only block never appears in the response bytes (the test renders without stream compression so the check is real); the route is in the sentinel crawl; names with quotes, newlines, emoji and right-to-left text give a valid PDF and a safe header; renders of 20 sheets in parallel do not block other requests for more than 200 ms (event-loop check as in the I2.3 benchmark)
+**Files**: `apps/server/src/routes/characters.ts`, `apps/web/src/app/campaign/character/`, `test/visibility.test.ts`
+**Depends on**: C5.2, C2.2
+
+### [ ] Task C5.4: Print and accessibility check of the PDF
+**Owner**: Accessibility Auditor · **QA**: Evidence Collector
+**Description**: Open and print-preview a golden sheet from each ruleset in Chrome, Firefox (pdf.js) and one system viewer on A4 and US Letter; check margins, black-and-white legibility, minimum text size, selectable text, reading order, document title and language; state plainly what is not accessible (a full PDF/UA tagged document is not promised in 1.5).
+**Acceptance Criteria**: `docs/qa/character-pdf-check.md` with screenshots kept out of the repository if they show rules text (§4); defects filed as tasks to the renderer's owner; the README states the accessibility limit
+**Depends on**: C5.3
+
+### 6c.7 Epic C6: AI assistants (stretch)
+
+### [ ] Task C6.1 (stretch): MCP tools for characters
+**Owner**: MCP Builder · **QA**: API Tester, Application Security Engineer
+**Description**: `get_character_sheet` (read, same projection as the web) and `level_up_character` (write; goes through the same validator, so an assistant cannot create an illegal character); allowlist exactly the routes needed; the PDF route stays off the allowlist.
+**Acceptance Criteria**: tools appear for the right token scopes; a player token reaches only that player's character; the crawl is extended; a write that breaks a rule returns the validator's error list
+**Depends on**: C2.2
+
+### 6c.8 Tests and documentation
+
+### [ ] Task C7.1: Character e2e tests
+**Owner**: Test Automation Engineer · **QA**: Reality Checker
+**Description**: `e2e/characters.spec.ts`: a GM builds a level-1 character in a 2014 campaign and another in a 2024 campaign; level-ups 1 to 3 including the subclass choice and a feat or ASI; a multiclass level; a player builds and levels their own character and cannot see GM-only fields; the PDF downloads (valid header, expected page count, the character name present); phone project run; adoption of a legacy character. Keep to the 8 sign-ups per minute limit (share one player account).
+**Acceptance Criteria**: passes in `pnpm e2e` and against the Docker image (`E2E_BASE`); three consecutive full runs without a flake; no screenshots or traces with rules text kept
+**Depends on**: C4.1, C5.3, C3.3
+
+### [ ] Task C7.2: Documentation
+**Owner**: Technical Writer · **QA**: Product Manager, Code Reviewer
+**Description**: README "Characters" (what the builder enforces, the three tiers, GM override, the PDF and its accessibility limit, paper sizes), `docs/STATUS.md` (behaviour and limits, as for every release), CHANGELOG and upgrade notes (the migration; what happens to existing characters), in-app help text for the rule-check panel, the `THIRD_PARTY_NOTICES.md` font entries.
+**Acceptance Criteria**: every statement in the README checked against the running app; the list of what is "not checked" matches C0.3's "choose by hand" list
+**Depends on**: C7.1
+
+### 6c.9 Release gate and waves
+
+### [ ] Task G4.1: Security review of the release
+**Owner**: Application Security Engineer · **QA**: Penetration Tester
+**Description**: Review every new route for projection, IDOR and permissions; the PDF path for injection, resource exhaustion (huge fields, many pages, parallel renders) and header safety; the level-up for race conditions (two level-ups at once); an authorized test of a running candidate (local instance only).
+**Acceptance Criteria**: written report in `docs/security/`; no open High or Medium finding; the sentinel crawl complete for every new route
+**Depends on**: C5.3, C4.2, C3.3
+
+### [ ] Task G4.2: Accessibility pass on the new screens
+**Owner**: Accessibility Auditor · **QA**: Evidence Collector
+**Description**: WCAG 2.1 AA on the sheet, the builder, the level-up wizard and the rule-check panel: keyboard path, focus, live regions, contrast in both themes, text at 200%, 320 px; the stepper and the rule-check panel with a screen reader if one can be run.
+**Acceptance Criteria**: axe 0 violations in every state; defects fixed or filed with an owner; what was not tested is listed
+**Depends on**: C4.2, C3.3
+
+### [ ] Task G4.3: First-evening test
+**Owner**: UX Researcher · **QA**: Product Manager
+**Description**: Three people who play but did not follow this project build a level-1 character in the ruleset they know, then level it to 3, then print the PDF. Record time, errors, places they got stuck, and whether the PDF is what they would bring to a table.
+**Acceptance Criteria**: `docs/qa/character-first-evening.md`; the success measure from C0.1 (under 15 minutes, no outside help) met or the gap filed as tasks before certification
+**Depends on**: C5.4, C4.2
+
+### [ ] Task G4.4: Release 1.5 certification
+**Owner**: Reality Checker · **QA**: **Owner (human)**
+**Description**: Evidence for every 1.5 item that was built: full gate, `pnpm e2e` three times and against Docker, phone project, restore drill with a populated sheet table, upgrade from a populated 1.4 (or 1.3.x) volume, all golden characters, PDF checks, the live visibility checks. Stretch tasks that were not built are moved to §7 with a note.
+**Acceptance Criteria**: every success measure in C0.1 MET or the gap accepted by the owner in writing
+**Depends on**: all 1.5 tasks except C3.4 and C6.1, which only run if scheduled
+
+| Wave | Tasks |
+|---|---|
+| 1 | C0.1, C0.2, C0.3, C5.1 (independent of each other) |
+| 2 | C0.4, C0.5, C0.6 (after wave 1), then C0.7 (owner decisions D8 to D12) |
+| 3 | C1.1, C2.1 (schema merged alone by the Git Workflow Master) |
+| 4 | C1.2, C5.2 |
+| 5 | C1.3, then C1.4 |
+| 6 | C2.2, then C2.3 |
+| 7 | C3.1, C5.3 (then C3.2 once C3.1 is merged: same folder) |
+| 8 | C3.3, C4.1, C5.4, C6.1 (stretch) |
+| 9 | C4.2, C3.4 (stretch), C7.1 |
+| 10 | C7.2, G4.1, G4.2, G4.3, then G4.4 |
+
+**Starting the pipeline.** "Activate Agents Orchestrator. Spec: `docs/PRD.md` (after C0.1). Task list: `docs/PROJECT.md` §6c. Run Release 1.5, wave by wave, and stop after wave 2 for the owner's decisions D8 to D12." Rules for every agent are §4; the §3 flow applies (owner, Code Reviewer, QA, three tries, escalate). Waves 1 and 2 are documents: no code, so their QA agents read and challenge them rather than run a gate.
+
+**Effort and risk.** 31 tasks (29 plus two stretch), the largest release so far. The riskiest tasks, scheduled so a failure shows early: C0.3 (rules correctness, the Game Designer's spec is the ground truth for everything after), C1.2 (the real data may not describe every choice), C5.1 (the engine choice). If wave 2 shows the rules spec cannot be finished for tier A in both rulesets, the Senior Project Manager re-plans to one ruleset first, with the other as the next release, and the owner decides.
+
 ## 7. Backlog: assigned, broken down when scheduled
 
-The Senior Project Manager breaks these into tasks at the start of their release.
+The Senior Project Manager breaks these into tasks at the start of their release. N13 (character sheet depth) moved to release 1.5 (§6c) on 2026-10-26.
 
 | PRD | Item | Lead | With | QA |
 |---|---|---|---|---|
@@ -827,7 +1079,7 @@ The Senior Project Manager breaks these into tasks at the start of their release
 | N10 | Real-time co-editing and presence | Realtime Collaboration Engineer | Software Architect, Frontend Developer | Test Automation Engineer, Reality Checker |
 | N11 | SRD-only mode | Legal Compliance Checker (first) → Backend Architect | Product Manager | Reality Checker |
 | N12 | Session recap helper | MCP Builder | Narrative Designer | API Tester |
-| N13 | Deeper character sheets | UX Researcher (validate demand first) → Game Designer | Frontend Developer | Evidence Collector |
+| N13 | Deeper character sheets: planned in release 1.5 as N13, N18, N19 and N20 (§6c) | Game Designer (rules) → Backend Architect | Frontend Developer | Evidence Collector |
 | N14 | Postgres at run time, several processes | Database Reliability Engineer | Backend Architect, Software Architect | Performance Benchmarker, API Tester |
 | N15 | Offline reading | Frontend Developer | Realtime Collaboration Engineer | Evidence Collector |
 | N16 | Translations | Internationalization Engineer | Frontend Developer | Evidence Collector |
@@ -860,6 +1112,11 @@ The Senior Project Manager breaks these into tasks at the start of their release
 
 | D6 | Templates in the trash (PRD §8 M4: "templates get the same" as homebrew). M4.2 built the API only (`GET /api/templates/trash`, `POST /api/templates/:id/restore`). Options: (a) accept the API for 1.0 and note it in the README/STATUS; (b) add a small restore list to the template manager UI (one Frontend Developer task, QA Evidence Collector); and separately, purge trashed templates after 30 days like pages or keep them for good. Recommended: (b) for the UI, keep templates unpurged | M4.6, G1.4 | Product Manager | Decided 2026-10-18: add a small restore UI (task M4.6) and purge templates like pages: 30 days, plus Delete permanently (task M4.7) |
 | D7 | M6 (phone-width player and table flows) is PRD P0 "before 1.0". Does it land before the 1.0 tag, or move to 1.0.x or 1.1? If it moves, the PRD release scope changes and the changelog keeps its "not part of this release" paragraph; if it lands, the paragraph is removed before the tag | M6.1-M6.5, M5.6, G1.4 | Product Manager | Decided 2026-10-19: M6 lands before the 1.0 tag (must have). The changelog's "not part of this release" paragraph is removed when M6 is done |
+| D8 | Release placement of Characters. Options: (a) release 1.5 after 1.3.1, with 1.4 unchanged; (b) swap, Characters as 1.4; (c) split by ruleset (2024 first, 2014 next). Recommended (a): 1.4 is already assigned and the Game Designer's spec (C0.3) shows whether (c) is needed | C0.7, wave 3 | Product Manager | Open |
+| D9 | Who creates characters. Options: (a) only the GM, who assigns it; (b) the GM, and a player for themselves (at most 3 per player per campaign, a campaign setting the GM can switch off). Recommended (b): the builder is most useful to the player; the server enforces the cap and the GM keeps the off switch (schema in C2.1) | C2.1, C3.2 | Product Manager, Software Architect | Open |
+| D10 | PDF engine, after the C5.1 measurements. Options: (a) pure JavaScript library on the server; (b) the browser's print dialog; (c) headless browser on the server. Recommended (a), unless C5.1 shows a licence or size problem: small image, testable, the server controls the bytes and the projection | C5.2, C0.6 | Backend Architect, DevOps Automator | Open (needs C5.1) |
+| D11 | How strict the rules are. Options: (a) block illegal builds for everyone; (b) block for players, GM can override with a visible note and a history entry; (c) warn only. Recommended (b), the same "DM is the referee" principle as the tracker | C1.3, C2.2 | Game Designer | Open |
+| D12 | Content sources and the PDF's legal position. (1) Builder offers the campaign ruleset's core sources plus the campaign's enabled sources; the other edition only behind the existing cross-edition switch, labelled; (2) the PDF is an original layout, no WotC art, logo or fonts, carries an attribution footer, and prints rules text only from the user's own data. Recommended: as stated, after the C0.2 brief | C0.6, C5.2 | Legal Compliance Checker | Open (needs C0.2) |
 
 ### Risks
 | Risk | Impact | Mitigation | Owner |
@@ -870,6 +1127,11 @@ The Senior Project Manager breaks these into tasks at the start of their release
 | Agents add features beyond the task | Slower releases, untested code | Scope rule in §4; Code Reviewer rejects extras; ideas go to the Product Manager | Senior Project Manager |
 | Agent output looks done but isn't | False progress | Evidence-based QA; Reality Checker defaults to NEEDS WORK | Reality Checker |
 | Backups expose password and token hashes | Account takeover if a backup leaks | Admin-only download; documented storage advice (M3.1, M3.6) | Database Reliability Engineer |
+| The character sheet PDF copies the WotC form (layout, art, wording) or prints rules text the user may not export | Legal exposure | Original layout, C0.2 brief, C0.6 sign-off by the Legal Compliance Checker, attribution footer | Legal Compliance Checker |
+| "Follows the rules" is unbounded (about 12 classes, 100+ subclasses, two rulesets) | Release never ends, or silent rule bugs | Three tiers (§6c), Game Designer's spec as ground truth, golden characters with a mutation check (C1.4), unknown data becomes "choose by hand" | Senior Project Manager |
+| A wrong rule in the builder looks authoritative | Players trust a wrong sheet | Derived numbers show the rule behind them, "not checked" badge for tier B/C, GM override is visible, README lists what is not enforced | Game Designer |
+| The sheet or the PDF leaks DM-only content, or the renderer is used to exhaust the server | Secret leak, denial of service | PDF built only from the projected sheet (never the page body), sentinel crawl and byte-level check, rate and time limits, G4.1 review | Application Security Engineer |
+| The PDF engine adds weight to the Docker image or needs native libraries | Slower pulls, harder self-hosting | C5.1 measures first; a headless browser is the option of last resort | DevOps Automator |
 
 ## 9. Setting up the agents
 
