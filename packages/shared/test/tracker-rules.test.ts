@@ -433,3 +433,45 @@ describe('player projection of the new data', () => {
     expect(JSON.stringify(projectTrackerForPlayers(poisoned))).not.toContain(SECRET);
   });
 });
+
+describe('death-save edge cases (H1.5, rules section 1b)', () => {
+  const add = (c: object): TrackerAction => ({ type: 'add', combatants: [{ name: 'X', hpMax: 20, initiative: 10, ...c }] });
+
+  it('a failure added to a stable combatant makes it dying again; an explicit status or reset wins', () => {
+    const { run } = harness();
+    const stable = run([add({ kind: 'pc' }), { type: 'hp', id: 'c1', change: -20 }, { type: 'deathSaveAdjust', id: 'c1', status: 'stable', successes: 1 }]);
+    expect(get(stable, 'c1').dying?.status).toBe('stable');
+    expect(get(run([{ type: 'deathSaveAdjust', id: 'c1', successes: 1 }], stable), 'c1').dying?.status).toBe('stable');
+    expect(get(run([{ type: 'deathSaveAdjust', id: 'c1', failures: 1 }], stable), 'c1').dying).toEqual({ successes: 0, failures: 1, status: 'dying' });
+    expect(get(run([{ type: 'deathSaveAdjust', id: 'c1', failures: 1, status: 'stable' }], stable), 'c1').dying).toMatchObject({ failures: 1, status: 'stable' });
+    expect(get(run([{ type: 'deathSaveAdjust', id: 'c1', failures: 1, reset: true }], stable), 'c1').dying).toEqual({ successes: 0, failures: 1, status: 'dying' });
+  });
+
+  it('a monster that does not make death saves never gets a dying object', () => {
+    const { run } = harness();
+    let s = run([add({ kind: 'monster' }), { type: 'update', id: 'c1', patch: { hp: 0 } }]);
+    expect(get(s, 'c1').dying).toBeUndefined();
+    s = run([{ type: 'deathSave', id: 'c1', roll: 3 }, { type: 'deathSaveAdjust', id: 'c1', failures: 1 }, { type: 'hp', id: 'c1', change: -3 }], s);
+    expect(get(s, 'c1')).toMatchObject({ hp: 0 });
+    expect(get(s, 'c1').dying).toBeUndefined();
+    // Flagged for death saves, the same actions work
+    const flagged = run([add({ kind: 'monster', deathSaves: true }), { type: 'update', id: 'c1', patch: { hp: 0 } }, { type: 'deathSave', id: 'c1', roll: 3 }]);
+    expect(get(flagged, 'c1').dying).toEqual({ successes: 0, failures: 1, status: 'dying' });
+  });
+
+  it('hp, hpMax, tempHp, ac and deathSaves edits on the lair row are ignored, other edits apply', () => {
+    const { run } = harness();
+    const s = run([{ type: 'lairAdd', name: 'Lair actions' }, { type: 'update', id: 'c1', patch: { hp: 0, hpMax: 30, tempHp: 5, ac: 15, deathSaves: true, notes: 'no repeat', name: 'Lair' } }]);
+    expect(get(s, 'c1')).toMatchObject({ kind: 'lair', hp: null, hpMax: null, tempHp: 0, ac: null, notes: 'no repeat', name: 'Lair' });
+    expect(get(s, 'c1').deathSaves).toBeUndefined();
+    expect(get(s, 'c1').dying).toBeUndefined();
+  });
+
+  it('an update below 0 hit points is clamped to 0 and a character starts dying', () => {
+    const { run } = harness();
+    const s = run([add({ kind: 'pc' }), add({ kind: 'monster', name: 'Orc' }), { type: 'update', id: 'c1', patch: { hp: -5 } }, { type: 'update', id: 'c2', patch: { hp: -9 } }]);
+    expect(get(s, 'c1')).toMatchObject({ hp: 0, dying: { successes: 0, failures: 0, status: 'dying' } });
+    expect(get(s, 'c2')).toMatchObject({ hp: 0 });
+    expect(get(s, 'c2').dying).toBeUndefined();
+  });
+});

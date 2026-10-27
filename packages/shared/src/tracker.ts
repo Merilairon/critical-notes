@@ -403,8 +403,13 @@ export function applyTrackerAction(state: TrackerState, action: TrackerAction, c
       return { ...state, activeId, combatants: order.filter((c) => c.id !== a.id) };
     }
     case 'update': {
-      const { legendary, resistance, ...patch } = a.patch;
+      const { legendary, resistance, ...rawPatch } = a.patch;
       const next = mapOne(state, a.id, (c) => {
+        const patch = { ...rawPatch };
+        // The lair row has no hit points, armor class or death saves: those edits are ignored (rules: section 1b)
+        if (c.kind === 'lair') for (const key of ['hp', 'hpMax', 'tempHp', 'ac', 'deathSaves'] as const) delete patch[key];
+        // Hit points never go below 0 (the edit is clamped, not refused)
+        if (patch.hp !== undefined && patch.hp !== null && patch.hp < 0) patch.hp = 0;
         let out: Combatant = { ...c, ...patch };
         if (legendary !== undefined) {
           delete out.legendary;
@@ -433,7 +438,7 @@ export function applyTrackerAction(state: TrackerState, action: TrackerAction, c
       });
     case 'deathSave':
       return mapOne(state, a.id, (c) => {
-        if (c.hp === null || c.hp > 0 || c.dying?.status === 'dead') return c;
+        if (!makesDeathSaves(c) || c.hp === null || c.hp > 0 || c.dying?.status === 'dead') return c;
         const roll = a.roll ?? ctx.d20();
         if (roll === 20) return withoutDying({ ...c, hp: 1 });
         const d: DyingState = !c.dying || c.dying.status === 'stable' ? { successes: 0, failures: 0, status: 'dying' } : c.dying;
@@ -442,8 +447,10 @@ export function applyTrackerAction(state: TrackerState, action: TrackerAction, c
       });
     case 'deathSaveAdjust':
       return mapOne(state, a.id, (c) => {
-        if (c.hp === null || c.hp > 0) return c;
-        const d: DyingState = a.reset || !c.dying ? { successes: 0, failures: 0, status: 'dying' } : c.dying;
+        if (!makesDeathSaves(c) || c.hp === null || c.hp > 0) return c;
+        // A failure added to a stable combatant makes it unstable again (like damage); an explicit status wins
+        const unstable = c.dying?.status === 'stable' && a.failures > 0 && a.status === undefined && !a.reset;
+        const d: DyingState = a.reset || !c.dying || unstable ? { successes: 0, failures: 0, status: 'dying' } : c.dying;
         return {
           ...c,
           dying: settle({ successes: d.successes + a.successes, failures: d.failures + a.failures, status: a.status ?? (a.reset ? 'dying' : d.status) }),
