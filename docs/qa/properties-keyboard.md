@@ -2,7 +2,7 @@
 
 Checked 2026-10-27 on main at 25a4e91, in a real browser (system Chrome through Playwright, a throwaway `DATA_DIR`
 under `/tmp`, the bundled server on `localhost:3210`, fresh DM account). Spec: `e2e/properties-keyboard.spec.ts`
-(8 tests, all pass). Not tested: a real screen reader, a real phone, forced colours, other browsers.
+(7 tests plus the sign-in setup). Not tested: a real screen reader, a real phone, forced colours, other browsers.
 
 ## Question
 
@@ -23,17 +23,22 @@ Verified in the browser:
 - **Mouse click** on the ✕ button opens the dialog; Cancel keeps the property.
 - **Enter or Space on the ✕ button** opens the dialog. Focus goes to **Cancel** (not the destructive button), so a
   second Enter or Space cancels. Esc cancels. Focus returns to the ✕ button. The page behind is inert.
-- **Stray keys inside the panel** (Tab, Shift+Tab, ArrowUp/Down/Left/Right, Enter, Space, Esc, 4 rounds, a delete
-  button was reached and its dialog shown): nothing was deleted.
-- **What does delete it:** Enter (opens dialog), **Tab** (moves to "Delete property"), then Enter or Space. That is
-  the only keyboard route and it takes a Tab inside the dialog. It was reproduced: the exploratory run of a script
+- **Stray keys inside the panel** (Tab, Shift+Tab, ArrowUp/Down/Left/Right, Enter, Space, Esc, 4 rounds): while the
+  dialog is closed, no key deletes anything; Enter or Space on a ✕ button only opens the dialog. The spec cancels
+  every dialog it opens (Escape) before the next key, so it never tests keys sent *into* an open dialog.
+- **What does delete it:** the dialog must be open AND focus must be on "Delete property": Enter (opens dialog),
+  **Tab** (moves to "Delete property"), then Enter or Space. That is the only keyboard route. No single key press
+  or click deletes, but a scripted fast sequence that has a Tab right after the Enter can (the first spec version
+  did it by accident in 4 of 15 fresh campaigns: its stray Tab landed just after the dialog mounted). It was reproduced: the exploratory run of a script
   sending `Enter, Tab, ArrowUp, Space` with focus on a ✕ button deleted "Notes". That is how "Mood" most likely
   disappeared in I2.2. It is a confirmed deletion, shown in a dialog, but a script (or a very fast stray sequence)
   can answer the dialog without reading it.
 - Unbounded Tab/Enter sequences also leave the panel and reach the header; Enter on **Sign out** ended the session
   in one run (later requests 401, a console error). Not a panel defect; the spec puts focus back into the panel.
 
-So no fix to the unconfirmed path was needed or made.
+No path deletes without the dialog, so no product fix was needed or made. Precisely: a deletion needs the dialog
+open and focus moved to its confirm button; a human reading the dialog is not required by the code, only by the
+default focus (Cancel).
 
 ## Keyboard operation table
 
@@ -58,8 +63,8 @@ previous value control).
 ## Other findings and recommendations
 
 1. **Recommendation, Moderate: no Undo or trash for a property definition.** `PropertyService.remove` hard-deletes the
-   definition, and its values go with it, on every page. Page delete has Undo plus a 30-day trash; this has only the
-   dialog, and the dialog can be answered with Tab+Enter. Suggest soft delete with an Undo toast (as `undo-toast.ts`)
+   definition, and its values go with it, on every page. **There is no undo.** Page delete has Undo plus a 30-day
+   trash; this has only the dialog, and the dialog can be answered with Tab+Enter. Suggest soft delete with an Undo toast (as `undo-toast.ts`)
    or at least restore from the page history for values. Needs a design and server work: follow-up, not built.
 2. **Recommendation, Minor: default button.** Cancel is focused first, which is the right default (unlike native
    `confirm()`, where Enter on OK deletes). Keep it. Naming the number of pages that hold a value would help
@@ -67,8 +72,8 @@ previous value control).
 3. **Target size (WCAG 2.5.8, AA).** The ✕ button is **10 x 16 px** on a fine pointer at 1440 px, below 24 x 24. It
    passes through the spacing exception: no other target lies within a 24 px circle centred on it (measured, 0 hits).
    With a coarse pointer or at 500 px it is **44 x 44** (`touch:` variant). Passes; fragile if neighbours move.
-4. **Contrast at rest (WCAG 1.4.11 Non-text Contrast, AA), Moderate.** The ✕ is `opacity-40`: about 1.8:1 against
-   white until hover or focus (touch is full opacity). It is the only visible cue for the delete control. Suggest
+4. **Contrast at rest (WCAG 1.4.11 Non-text Contrast, AA), Moderate.** The ✕ is `opacity-40`: about 1.77:1 against
+   white until hover or focus, which **fails 1.4.11 (needs 3:1)** (touch is full opacity). It is the only visible cue for the delete control. Suggest
    `opacity-70` or more (3:1 or better). Not changed here (outside the unconfirmed-delete question).
 5. Focus ring: with keyboard focus the ✕ has a solid 2 px accent outline (offset 2 px) and goes to full opacity. Passes
    (an earlier reading of `outline: none` came from script focus, which is not `:focus-visible`).
@@ -76,5 +81,5 @@ previous value control).
 ## Follow-ups (not built)
 
 - Undo or trash for property definitions (finding 1).
-- Raise the rest opacity of the ✕ (finding 4).
+- Raise the rest opacity of the ✕ (finding 4): the ~1.77:1 rest contrast fails 1.4.11.
 - Count affected pages in the dialog text.
