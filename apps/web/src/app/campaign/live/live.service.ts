@@ -43,6 +43,8 @@ export interface OpenPage {
   id: string;
   /** Unsaved or saving edits: the page must not be overwritten. */
   isDirty(): boolean;
+  /** Ids of the blocks the page currently shows (for the offline-gap comparison). */
+  blockIds?(): ReadonlySet<string> | undefined;
   apply(page: PageDto): void;
   reload(): void;
 }
@@ -82,6 +84,20 @@ function collectIds(node: unknown, out: Set<string>) {
   const n = node as { attrs?: { id?: unknown }; content?: unknown };
   if (typeof n.attrs?.id === 'string') out.add(n.attrs.id);
   if (Array.isArray(n.content)) for (const c of n.content) collectIds(c, out);
+}
+
+interface GapChange {
+  open: OpenPage;
+  page: PageDto;
+  ids: string[];
+  dirty: boolean;
+}
+
+/** Ids of all blocks in a document body. */
+export function blockIdsOf(body: unknown): Set<string> {
+  const out = new Set<string>();
+  collectIds(body, out);
+  return out;
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -256,6 +272,8 @@ export class LiveService {
     this.syncing = true;
     try {
       const before = this.known;
+      // What the open page showed before the gap, read before anything is refetched
+      const prevIds = before ? this.open?.blockIds?.() : undefined;
       try {
         await this.store.reloadPages();
       } catch {
@@ -266,10 +284,11 @@ export class LiveService {
       this.known = ids;
       this.prune(ids);
       if (this.store.isGm()) return;
-      await this.refetchOpen(gen);
+      const gap = await this.refetchOpen(gen, prevIds);
       if (!before) return; // first connect: nothing to compare with, no toast
       await sleep(GRACE_MS);
       if (!this.current(gen)) return;
+      this.announceGap(gap, gen);
       const fresh = this.store.pages().filter((p) => !before.has(p.id) && !this.toasted.has(p.id));
       for (const p of fresh) this.toasted.add(p.id);
       this.markNew(fresh.map((p) => p.id));
@@ -285,16 +304,39 @@ export class LiveService {
     }
   }
 
-  /** The open page after a reconnect: apply silently unless the player is mid-edit (then the next event or Reload handles it). */
-  private async refetchOpen(gen: number) {
+  /**
+   * The open page after a reconnect: apply silently unless the player is mid-edit (then the next event or Reload handles it).
+   * Returns the blocks that are new compared with `prev` (the offline-gap case, task N3.6), to be announced after the grace
+   * period when no replayed event announced them already.
+   */
+  private async refetchOpen(gen: number, prev?: ReadonlySet<string>): Promise<GapChange | null> {
     const open = this.open;
-    if (!open) return;
+    if (!open) return null;
     try {
       const page = await this.fetchPage(open.id);
-      if (this.current(gen) && this.open === open && !open.isDirty()) open.apply(page);
+      if (!this.current(gen) || this.open !== open) return null;
+      const dirty = open.isDirty();
+      if (!dirty) open.apply(page);
+      if (!prev?.size) return null; // no usable baseline (still loading, stale or empty): nothing to compare with
+      const present = new Set<string>();
+      collectIds(page.body, present);
+      const ids = [...present].filter((b) => !prev.has(b));
+      return ids.length ? { open, page, ids, dirty } : null;
     } catch {
       /* gone or unreachable: the next navigation finds out */
+      return null;
     }
+  }
+
+  /** One toast for blocks that appeared while the stream was away, unless replayed events already announced them. No content, no counts. */
+  private announceGap(gap: GapChange | null, gen: number) {
+    if (!gap || !this.current(gen) || this.open !== gap.open) return;
+    const already = new Set(this.newBlocks()[gap.page.id] ?? []);
+    const ids = gap.ids.filter((b) => !already.has(b));
+    if (!ids.length) return;
+    this.newBlocks.update((m) => ({ ...m, [gap.page.id]: [...new Set([...(m[gap.page.id] ?? []), ...ids])] }));
+    this.persist();
+    this.add({ kind: 'details-here', pageId: gap.page.id, title: gap.page.title }, gap.dirty);
   }
 
   private async onShared(e: PageSharedEvent, gen: number) {

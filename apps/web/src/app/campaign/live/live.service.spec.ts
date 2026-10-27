@@ -243,6 +243,107 @@ describe('LiveService (player)', () => {
     expect(toastAction(live.toast()!)).toBe('view');
   });
 
+  /** Reconnect without a usable id: the open page showed b1,b2 before the gap; `after` is what the refetch returns. */
+  async function gapRun(after: PageDto, opts: { replay?: boolean } = {}) {
+    const ctx = setup();
+    const { live, http, conns, tick, treeReq, connect } = ctx;
+    await connect();
+    live.registerOpen({ id: 'a', blockIds: () => new Set(['b1', 'b2']), isDirty: () => false, apply: () => undefined, reload: () => undefined });
+    conns[0]!.end();
+    await tick(31_000);
+    conns[1]!.push(opts.replay ? 'event: hello\ndata: {"replayed":true}\n\nid: r1\nevent: block-revealed\ndata: {"pageId":"a","blockIds":["b3"]}\n\n' : 'event: hello\ndata: {"replayed":false}\n\nevent: resync\ndata: {}\n\n');
+    await tick();
+    treeReq([summary('a', 'Harbour')]);
+    await tick();
+    for (let i = 0; i < 3; i++) {
+      http.match('/api/campaigns/c1/pages/a').forEach((r) => r.flush(after));
+      http.match('/api/campaigns/c1/pages').forEach((r) => r.flush({ pages: [summary('a', 'Harbour')] }));
+      await tick(JITTER_MS + GRACE_MS + 10);
+    }
+    return ctx;
+  }
+
+  it('offline gap: a block that appeared on the open page gives "New details on this page | Show", with no content', async () => {
+    const { live } = await gapRun(full('a', 'Harbour', { body: doc('b1', 'b2', 'b3') } as never));
+    const t = live.toast()!;
+    expect(toastText(t)).toBe('New details on this page');
+    expect(toastAction(t)).toBe('show');
+    expect(live.newBlocks()['a']).toEqual(['b3']);
+  });
+
+  it('offline gap: no toast when the open page has not changed', async () => {
+    const { live } = await gapRun(full('a', 'Harbour'));
+    expect(live.toast()).toBeNull();
+    expect(live.newBlocks()).toEqual({});
+  });
+
+  it('offline gap: a replayed event and the comparison give one toast, not two', async () => {
+    const { live } = await gapRun(full('a', 'Harbour', { body: doc('b1', 'b2', 'b3') } as never), { replay: true });
+    expect(toastText(live.toast()!)).toBe('New details on this page');
+    expect(live.toast()!.items).toHaveLength(1);
+    expect(live.newBlocks()['a']).toEqual(['b3']);
+  });
+
+  it('offline gap: other pages still get the "new pages" summary', async () => {
+    const { live, http, conns, tick, treeReq, connect } = setup();
+    await connect();
+    live.registerOpen({ id: 'a', blockIds: () => new Set(['b1', 'b2']), isDirty: () => false, apply: () => undefined, reload: () => undefined });
+    conns[0]!.end();
+    await tick(31_000);
+    conns[1]!.push('event: hello\ndata: {"replayed":false}\n\n');
+    await tick();
+    treeReq([summary('a', 'Harbour'), summary('n1', 'One')]);
+    await tick();
+    http.match('/api/campaigns/c1/pages/a').forEach((r) => r.flush(full('a', 'Harbour')));
+    await tick(GRACE_MS + 10);
+    expect(toastText(live.toast()!)).toBe('You have 1 new page');
+  });
+
+  /** Reconnect with no replay; the open page handle is configurable; `during` runs while the grace wait is pending. */
+  async function gapWith(handle: Partial<OpenPage>, after: PageDto, during?: (live: LiveService) => void) {
+    const ctx = setup();
+    const { live, http, conns, tick, treeReq, connect } = ctx;
+    await connect();
+    live.registerOpen({ id: 'a', isDirty: () => false, apply: () => undefined, reload: () => undefined, ...handle });
+    conns[0]!.end();
+    await tick(31_000);
+    conns[1]!.push('event: hello\ndata: {"replayed":false}\n\n');
+    await tick();
+    treeReq([summary('a', 'Harbour')]);
+    await tick();
+    http.match('/api/campaigns/c1/pages/a').forEach((r) => r.flush(after));
+    await tick(100);
+    during?.(live);
+    await tick(GRACE_MS + 10);
+    return ctx;
+  }
+  const plus3 = () => full('a', 'Harbour', { body: doc('b1', 'b2', 'b3') } as never);
+
+  for (const [label, base] of [['undefined', undefined], ['empty', new Set<string>()]] as const) {
+    it(`offline gap: a ${label} baseline gives no toast`, async () => {
+      const { live } = await gapWith({ blockIds: () => base }, plus3());
+      expect(live.toast()).toBeNull();
+      expect(live.newBlocks()).toEqual({});
+    });
+  }
+
+  it('offline gap: a page with unsaved edits is not overwritten, gets the Reload offer and the highlight', async () => {
+    const applied: PageDto[] = [];
+    const { live } = await gapWith({ blockIds: () => new Set(['b1', 'b2']), isDirty: () => true, apply: (p) => void applied.push(p) }, plus3());
+    expect(applied).toHaveLength(0);
+    expect(live.toast()!.reload).toBe(true);
+    expect(live.newBlocks()['a']).toEqual(['b3']);
+  });
+
+  it('offline gap: leaving the page during the grace wait gives no toast and no highlight', async () => {
+    const { live } = await gapWith({ blockIds: () => new Set(['b1', 'b2']) }, plus3(), (l) => {
+      l.unregisterOpen('a');
+      l.registerOpen({ id: 'z', blockIds: () => new Set(['q']), isDirty: () => false, apply: () => undefined, reload: () => undefined });
+    });
+    expect(live.toast()).toBeNull();
+    expect(live.newBlocks()).toEqual({});
+  });
+
   it('keeps the toast for 8 s and the New markers survive a new service instance (sessionStorage)', async () => {
     const { live, http, tick, frame, connect } = setup();
     await connect();

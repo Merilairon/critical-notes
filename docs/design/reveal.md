@@ -383,3 +383,35 @@ players saw it (the stream deliberately does not expose that), and has an Undo t
 - Tracker stream re-validation (section 6, backlog).
 - Page-save notes for N3.2: add `canSee`, `onCommitted`, `lib/sse.ts`, `closeStreams` in shutdown, the batch/flush rule,
   and the per-player detector with the multiset matching and the recursive fingerprint.
+
+## 11. Offline gap on the open page (N3.6)
+
+When the stream reconnects with no usable `Last-Event-ID` (nothing received before the gap, or the ring has moved on), the
+client has no replayed events to toast from. After the normal refetch it now compares the block ids the open page showed
+before the gap with the refetched page. Blocks that are new give one `New details on this page | Show` toast, the same card
+and highlight as a live reveal. The comparison runs after the grace period and skips any block a replayed event already
+highlighted, so replay plus comparison never gives two toasts. No change gives no toast. The toast carries no title of a
+block, no excerpt and no count of secrets; it is built from the player's own authorized refetch (T1, T5). A page being
+edited keeps its text: the toast offers Reload as for a live event. Other pages keep the `You have {n} new pages` summary.
+
+**Recommendation (Narrative Designer): do not build a "something changed on {n} pages you can see" summary for block reveals on
+pages that are not open.** Reasons: (1) a reveal is a table moment; "something changed on 3 pages" tells the player that
+the DM has been busy without telling them where to look, which reads as a prompt to go hunting and spoils the DM's own
+timing, the same reason section 9.1 forbids "You found a secret!"; (2) the count is a small information leak about how many
+pages hold hidden material that changed, and it would need a per-page revision comparison against what the player last saw,
+state we deliberately do not keep (Q3, no cross-visit "New" badge); (3) a player coming back after a long gap is better
+served by what they already have: the tree's "New" pills for new pages, and opening a page shows its current text. If
+playtests show players missing reveals after long gaps, revisit it together with N2 (what is new since last visit), where a
+per-page "last seen" revision exists and the answer can be a quiet pill on the page in the tree, not a toast.
+
+Known limitation of the comparison: the baseline is the body the editor currently shows. With no loaded page, or an empty
+baseline, the comparison is skipped (no toast). A block the player deleted locally and has not saved yet looks new, because
+the server still has it; that rare case gets the same toast with the Reload offer as a live event on a page with unsaved edits.
+
+Known existing limitation (found in N3.6 browser QA, not caused by N3.6): on a page with unsaved typing, the Reload on the
+"New details on this page" toast is "save, then reload". The DM's reveal is itself a save and has already raised the page
+revision, so the player's save is sent with the old revision, gets a 409, and the page stays as it is under the banner
+"Someone else changed this page" with a Reload page button. The typed text is kept on screen (so it can be copied), but is
+not saved and the revealed block does not appear until the player reloads and loses the text. The same happens for a live
+`block-revealed` event (N3.4) and for the offline-gap toast. A real fix needs a rebase of the pending change onto the newer
+revision (safe for facet and field changes, needs a block-level merge for body edits); tracked as a follow-up.

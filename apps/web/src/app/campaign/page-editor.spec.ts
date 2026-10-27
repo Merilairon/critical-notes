@@ -8,6 +8,7 @@ import { BlockEditor } from '../editor/block-editor';
 import { LayoutService } from '../core/layout.service';
 import { CampaignStore } from './campaign.store';
 import { PageEditor } from './page-editor';
+import { LiveService, type OpenPage } from './live/live.service';
 
 // jsdom has no layout: ProseMirror's coordsAtPos and scrollIntoView need rects
 const NO_RECT = { x: 0, y: 0, top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, toJSON: () => ({}) };
@@ -252,5 +253,55 @@ describe('PageEditor handout sharing', () => {
   it('offers nothing on a handout that is already shared with everyone', async () => {
     const t = await mountHandout('all');
     expect(t.btn('Share now')).toBeUndefined();
+  });
+});
+
+describe('PageEditor live baseline (offline-gap comparison)', () => {
+  const pageDto = (id: string, ids: string[]) => ({
+    id, type: 'generic', title: id, icon: null, visibility: 'all', tags: [], viewers: [], props: {}, revision: 1,
+    body: { schemaVersion: 1, type: 'doc', content: ids.map((b) => ({ type: 'paragraph', attrs: { id: b }, content: [{ type: 'text', text: 'x' }] })) },
+  });
+
+  function mountLive() {
+    const handles: OpenPage[] = [];
+    const live = { registerOpen: (h: OpenPage) => void handles.push(h), unregisterOpen: () => undefined, newBlocks: signal({}), isNew: () => false, clearPage: () => undefined, clearBlocks: () => undefined };
+    const store = {
+      id: signal('c1'), isGm: () => false, canEdit: () => false, members: signal([]), loadMembers: async () => undefined, ancestors: () => [], childrenOf: () => new Map(),
+      campaign: signal({ name: 'C' }), pages: signal([]), pagesOfType: () => [], propertyDefs: signal([]), byId: () => new Map(), patchSummary: () => undefined,
+    };
+    TestBed.configureTestingModule({
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(), { provide: CampaignStore, useValue: store }, { provide: LayoutService, useValue: { phone: signal(false) } }, { provide: LiveService, useValue: live }],
+    });
+    const fixture = TestBed.createComponent(PageEditor);
+    fixture.componentRef.setInput('pageId', 'p1');
+    fixture.detectChanges();
+    return { fixture, handles, http: TestBed.inject(HttpTestingController) };
+  }
+
+  it('has the block ids once the page matches, and none while a different (stale) page is shown', async () => {
+    const { fixture, handles, http } = mountLive();
+    await settle();
+    const last = () => handles[handles.length - 1]!;
+    expect(last().id).toBe('p1');
+    http.expectOne('/api/campaigns/c1/pages/p1').flush(pageDto('p1', ['b1', 'b2']));
+    await settle();
+    fixture.detectChanges();
+    expect([...last().blockIds!()!]).toEqual(['b1', 'b2']);
+    // navigate: the registered id is p2 while the editor still holds p1
+    fixture.componentRef.setInput('pageId', 'p2');
+    fixture.detectChanges();
+    await settle();
+    expect(last().id).toBe('p2');
+    expect(last().blockIds!()).toBeUndefined();
+    http.expectOne('/api/campaigns/c1/pages/p2').flush(pageDto('p2', ['c1']));
+    await settle();
+    fixture.detectChanges();
+    expect([...last().blockIds!()!]).toEqual(['c1']);
+  });
+
+  it('has no baseline while the page is still loading', async () => {
+    const { handles } = mountLive();
+    await settle();
+    expect(handles[handles.length - 1]!.blockIds!()).toBeUndefined();
   });
 });
