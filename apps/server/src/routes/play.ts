@@ -151,6 +151,8 @@ export function playRoutes(deps: {
     const first = view === 'dm' ? trackers.get(campaignId, id) : trackers.playerView(campaignId, id);
     const userId = uid(c);
     const sessionId = c.get('sessionId');
+    // Counted in the same per-user, per-campaign and global caps as the campaign stream (503 over a cap, oldest evicted)
+    const conn = eventStreams.admitTracker({ campaignId, userId, sessionId });
     // Session, user state, membership and (for the DM view) the game-master role, checked again on every heartbeat and every
     // delivery; whoever fails is told `bye` and cut. The projection itself is unchanged.
     const stillAllowed = (ch: SseChannel) => {
@@ -163,8 +165,9 @@ export function playRoutes(deps: {
       heartbeatMs: eventStreams.heartbeatMs,
       onHeartbeat: (ch) => void stillAllowed(ch),
       open: (ch) => {
+        const release = eventStreams.attachTracker(conn, ch);
         ch.send({ event: 'state', data: JSON.stringify(first) });
-        return trackers.subscribe(id, (e) => {
+        const unsubscribe = trackers.subscribe(id, (e) => {
           // Fail closed: a throwing check cuts this viewer only
           try {
             if (ch.closed || !stillAllowed(ch)) return;
@@ -174,6 +177,10 @@ export function playRoutes(deps: {
             ch.close();
           }
         });
+        return () => {
+          unsubscribe();
+          release();
+        };
       },
     });
   });

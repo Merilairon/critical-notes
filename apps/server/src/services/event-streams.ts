@@ -24,6 +24,8 @@ export interface EventStreamLimits {
 }
 export const DEFAULT_STREAM_LIMITS: EventStreamLimits = { perUser: 6, perCampaign: 100, global: 500, coalesceMs: 1000, maxReplay: 50 };
 
+const ACCESS_BYE = { event: 'bye', data: JSON.stringify({ reason: 'access' }) };
+
 interface Pending {
   event: CampaignEvent;
   timer: ReturnType<typeof setTimeout>;
@@ -38,6 +40,8 @@ export interface StreamConnection {
   readonly userId: string;
   readonly sessionId: string;
   readonly lastEventId: string | null;
+  /** A tracker stream only takes a slot (and the restart / eviction `bye`); it gets no campaign events. */
+  readonly kind: 'campaign' | 'tracker';
   channel: SseChannel | null;
   slots: Map<string, Slot>;
   closed: boolean;
@@ -64,7 +68,7 @@ export class EventStreamHub {
    * Reserves a slot or throws 503. A 7th stream of one user evicts that user's oldest (told `bye: evicted`), which frees its slot
    * first; the caps are checked as if it were already gone, and nothing is evicted when the caps would refuse anyway.
    */
-  admit(info: { campaignId: string; userId: string; sessionId: string; lastEventId: string | null }): StreamConnection {
+  admit(info: { campaignId: string; userId: string; sessionId: string; lastEventId: string | null; kind?: 'campaign' | 'tracker' }): StreamConnection {
     const mine = [...this.conns].filter((c) => c.userId === info.userId);
     const victim = mine.length >= this.limits.perUser ? mine[0]! : null;
     const global = this.conns.size - (victim ? 1 : 0);
@@ -74,9 +78,23 @@ export class EventStreamHub {
       this.conns.delete(victim);
       victim.channel?.end({ event: 'bye', data: JSON.stringify({ reason: 'evicted' }) });
     }
-    const conn: StreamConnection = { ...info, channel: null, slots: new Map(), closed: false };
+    const conn: StreamConnection = { ...info, kind: info.kind ?? 'campaign', channel: null, slots: new Map(), closed: false };
     this.conns.add(conn);
     return conn;
+  }
+
+  /** Tracker streams: reserves a slot like a campaign stream (same per-user, per-campaign and global caps). */
+  admitTracker(info: { campaignId: string; userId: string; sessionId: string | undefined }): StreamConnection {
+    return this.admit({ ...info, sessionId: info.sessionId ?? '', lastEventId: null, kind: 'tracker' });
+  }
+
+  /** Attaches a tracker stream's channel (so a restart or an eviction reaches it). Returns the release for its slot. */
+  attachTracker(conn: StreamConnection, channel: SseChannel): () => void {
+    conn.channel = channel;
+    return () => {
+      conn.closed = true;
+      this.conns.delete(conn);
+    };
   }
 
   /** Attaches the channel: `hello`, the replay, then live delivery. Returns the cleanup. */
@@ -97,7 +115,7 @@ export class EventStreamHub {
       let replay: CampaignEvent[] | null = null;
       const role = this.currentRole(conn);
       if (!role) {
-        channel.close();
+        channel.end(ACCESS_BYE);
       } else {
         if (conn.lastEventId) {
           replay = bus.since(conn.campaignId, conn.lastEventId, (e) => e.audience.has(conn.userId) || (e.gm && isGameMaster(role)));
@@ -128,7 +146,7 @@ export class EventStreamHub {
 
   /** Heartbeat tick: closes the stream when the session, the user or the membership is gone. Never extends the session. */
   heartbeat(conn: StreamConnection): void {
-    if (!this.currentRole(conn)) conn.channel?.close();
+    if (!this.currentRole(conn)) conn.channel?.end(ACCESS_BYE);
   }
 
   /** Shutdown: tells every client to reconnect (with jitter) to the next process. */
@@ -177,7 +195,7 @@ export class EventStreamHub {
     if (conn.closed || !conn.channel || conn.channel.closed) return;
     const role = this.currentRole(conn);
     if (!role) {
-      conn.channel.close();
+      conn.channel.end(ACCESS_BYE);
       return;
     }
     // Not allowed: write nothing at all (no placeholder, no id line)
@@ -208,7 +226,7 @@ export class EventStreamHub {
         try {
           // Re-checked at flush time: the page may have been hidden again meanwhile
           const r = this.currentRole(conn);
-          if (!r) return void conn.channel.close();
+          if (!r) return void conn.channel.end(ACCESS_BYE);
           if (!this.allowed(conn, pending.event, r)) return;
           slot.lastSent = Date.now();
           this.write(conn, pending.event);
