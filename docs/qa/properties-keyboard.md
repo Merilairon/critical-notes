@@ -10,35 +10,48 @@ During I2.2 a custom property ("Mood") vanished while a script sent Tab, arrow a
 Properties panel. Can a stray Enter or a mouse click delete a property definition (which drops its values on every
 page) without a confirmation?
 
-## Finding: no, but the earlier note was wrong about how
+## Finding: in the app, no; through MCP, yes
 
 The earlier static check said the button goes through native `confirm()`. It does not. On current main
 `PropertiesPanel.removeDef` calls the app's own `ConfirmService.ask()` (`role="alertdialog"`, title "Delete
 property?", message "Delete the property "X" from every page in this campaign?", confirm button "Delete property").
-`store.deleteProperty` (the only caller of `DELETE /api/campaigns/:id/properties/:id`) runs only after that answer is
-true. No native dialog appears (the e2e `watch()` helper fails any test on one).
+In the web app, `store.deleteProperty` runs only after that answer is true. No native dialog appears (the e2e
+`watch()` helper fails any test on one).
+
+**What is and is not confirmed**
+
+- **Web UI: always the app dialog.** Every UI route to `DELETE /api/campaigns/:id/properties/:id` goes through it.
+- **MCP: no in-app confirmation.** The tool `delete_property` (`apps/server/src/mcp/tools/pages.ts`, about lines
+  310 to 320) looks the key up and calls the same route (allowlisted in `apps/server/src/mcp/api.ts`, about line
+  32). It deletes the definition and its values on every page at once. Its only guard is the client-side
+  `destructive: true` hint, which depends on the MCP client asking its user. This spec does not cover MCP.
+- **API:** the route itself has no confirmation; there is no undo.
 
 Verified in the browser:
 
 - **Mouse click** on the ✕ button opens the dialog; Cancel keeps the property.
 - **Enter or Space on the ✕ button** opens the dialog. Focus goes to **Cancel** (not the destructive button), so a
   second Enter or Space cancels. Esc cancels. Focus returns to the ✕ button. The page behind is inert.
-- **Stray keys inside the panel** (Tab, Shift+Tab, ArrowUp/Down/Left/Right, Enter, Space, Esc, 4 rounds): while the
-  dialog is closed, no key deletes anything; Enter or Space on a ✕ button only opens the dialog. The spec cancels
-  every dialog it opens (Escape) before the next key, so it never tests keys sent *into* an open dialog.
-- **What does delete it:** the dialog must be open AND focus must be on "Delete property": Enter (opens dialog),
-  **Tab** (moves to "Delete property"), then Enter or Space. That is the only keyboard route. No single key press
-  or click deletes, but a scripted fast sequence that has a Tab right after the Enter can (the first spec version
-  did it by accident in 4 of 15 fresh campaigns: its stray Tab landed just after the dialog mounted). It was reproduced: the exploratory run of a script
-  sending `Enter, Tab, ArrowUp, Space` with focus on a ✕ button deleted "Notes". That is how "Mood" most likely
-  disappeared in I2.2. It is a confirmed deletion, shown in a dialog, but a script (or a very fast stray sequence)
-  can answer the dialog without reading it.
-- Unbounded Tab/Enter sequences also leave the panel and reach the header; Enter on **Sign out** ended the session
-  in one run (later requests 401, a console error). Not a panel defect; the spec puts focus back into the panel.
+- **Stray keys inside the panel** (Tab, Shift+Tab, ArrowUp/Down/Left/Right, Enter, Space, Esc, one pass): while the
+  dialog is closed, no key deletes anything; Enter or Space on a delete button only opens the dialog. In this
+  stray-key test the spec cancels every dialog it opens (Escape) before the next key, so that test sends no keys into
+  an open dialog. Keys inside the dialog are covered by the other tests.
+- **What deletes it in the UI:** the dialog open AND focus on "Delete property": Enter (opens dialog), **Tab**
+  (moves to "Delete property"), then Enter or Space. That is the only keyboard route. No single key press or click
+  deletes, but a scripted fast sequence with a Tab right after the Enter can. A human reading the dialog is not
+  required by the code, only by the default focus (Cancel).
+- *Observed in exploration, not reproduced by the spec:* an earlier spec version appeared to delete a property in
+  some fresh campaigns when a stray Tab landed just after the dialog mounted; an exploratory script sending Enter,
+  Tab, ArrowUp, Space on a delete button deleted "Notes"; the I2.2 disappearance of "Mood" may have been this or the
+  MCP tool (not determined); unbounded Tab/Enter sequences leave the panel and reach the header (Enter on Sign out
+  ended a session once). None of this is asserted by the spec.
 
-No path deletes without the dialog, so no product fix was needed or made. Precisely: a deletion needs the dialog
-open and focus moved to its confirm button; a human reading the dialog is not required by the code, only by the
-default focus (Cancel).
+**Product change:** none made. The web UI needed none. The MCP path is a product decision (follow-up below), not
+changed here.
+
+**Known limit of the spec:** the stray-key test does about 17 key presses with browser round trips each and is marked
+`test.slow()` (3x budget). Under very heavy host load (16 busy loops, load about 40) the earlier, longer version timed
+out; it passed unloaded and with 8 busy loops.
 
 ## Keyboard operation table
 
@@ -83,3 +96,6 @@ previous value control).
 - Undo or trash for property definitions (finding 1).
 - Raise the rest opacity of the ✕ (finding 4): the ~1.77:1 rest contrast fails 1.4.11.
 - Count affected pages in the dialog text.
+- **MCP `delete_property` deletes without an in-app confirmation** (only the client-side `destructive` hint).
+  Recommendation for the Product Manager and owner to decide: require an explicit `confirm: true` argument (or the
+  property label) in the tool, or keep the tool off by default. Not changed in H1.3.
