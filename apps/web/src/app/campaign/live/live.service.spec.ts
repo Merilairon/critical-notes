@@ -299,6 +299,51 @@ describe('LiveService (player)', () => {
     expect(toastText(live.toast()!)).toBe('You have 1 new page');
   });
 
+  /** Reconnect with no replay; the open page handle is configurable; `during` runs while the grace wait is pending. */
+  async function gapWith(handle: Partial<OpenPage>, after: PageDto, during?: (live: LiveService) => void) {
+    const ctx = setup();
+    const { live, http, conns, tick, treeReq, connect } = ctx;
+    await connect();
+    live.registerOpen({ id: 'a', isDirty: () => false, apply: () => undefined, reload: () => undefined, ...handle });
+    conns[0]!.end();
+    await tick(31_000);
+    conns[1]!.push('event: hello\ndata: {"replayed":false}\n\n');
+    await tick();
+    treeReq([summary('a', 'Harbour')]);
+    await tick();
+    http.match('/api/campaigns/c1/pages/a').forEach((r) => r.flush(after));
+    await tick(100);
+    during?.(live);
+    await tick(GRACE_MS + 10);
+    return ctx;
+  }
+  const plus3 = () => full('a', 'Harbour', { body: doc('b1', 'b2', 'b3') } as never);
+
+  for (const [label, base] of [['undefined', undefined], ['empty', new Set<string>()]] as const) {
+    it(`offline gap: a ${label} baseline gives no toast`, async () => {
+      const { live } = await gapWith({ blockIds: () => base }, plus3());
+      expect(live.toast()).toBeNull();
+      expect(live.newBlocks()).toEqual({});
+    });
+  }
+
+  it('offline gap: a page with unsaved edits is not overwritten, gets the Reload offer and the highlight', async () => {
+    const applied: PageDto[] = [];
+    const { live } = await gapWith({ blockIds: () => new Set(['b1', 'b2']), isDirty: () => true, apply: (p) => void applied.push(p) }, plus3());
+    expect(applied).toHaveLength(0);
+    expect(live.toast()!.reload).toBe(true);
+    expect(live.newBlocks()['a']).toEqual(['b3']);
+  });
+
+  it('offline gap: leaving the page during the grace wait gives no toast and no highlight', async () => {
+    const { live } = await gapWith({ blockIds: () => new Set(['b1', 'b2']) }, plus3(), (l) => {
+      l.unregisterOpen('a');
+      l.registerOpen({ id: 'z', blockIds: () => new Set(['q']), isDirty: () => false, apply: () => undefined, reload: () => undefined });
+    });
+    expect(live.toast()).toBeNull();
+    expect(live.newBlocks()).toEqual({});
+  });
+
   it('keeps the toast for 8 s and the New markers survive a new service instance (sessionStorage)', async () => {
     const { live, http, tick, frame, connect } = setup();
     await connect();

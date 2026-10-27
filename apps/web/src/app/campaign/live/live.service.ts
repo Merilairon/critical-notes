@@ -44,7 +44,7 @@ export interface OpenPage {
   /** Unsaved or saving edits: the page must not be overwritten. */
   isDirty(): boolean;
   /** Ids of the blocks the page currently shows (for the offline-gap comparison). */
-  blockIds?(): ReadonlySet<string>;
+  blockIds?(): ReadonlySet<string> | undefined;
   apply(page: PageDto): void;
   reload(): void;
 }
@@ -317,7 +317,7 @@ export class LiveService {
       if (!this.current(gen) || this.open !== open) return null;
       const dirty = open.isDirty();
       if (!dirty) open.apply(page);
-      if (!prev) return null;
+      if (!prev?.size) return null; // no usable baseline (still loading, stale or empty): nothing to compare with
       const present = new Set<string>();
       collectIds(page.body, present);
       const ids = [...present].filter((b) => !prev.has(b));

@@ -123,7 +123,8 @@ export class PageEditor implements OnDestroy {
         live.registerOpen({
           id,
           isDirty: () => Object.keys(this.pending).length > 0 || this.saving !== null || this.status() === 'saving',
-          blockIds: () => blockIdsOf(this.page()?.body),
+          // Only the page that is really loaded is a baseline: while loading, after a failed load or right after navigating, `page()` is null or the previous page
+          blockIds: () => (this.page()?.id === id ? blockIdsOf(this.page()?.body) : undefined),
           apply: (page) => this.applyLive(page),
           reload: () => void this.saveAndReload(id),
         }),

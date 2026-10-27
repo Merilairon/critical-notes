@@ -403,3 +403,7 @@ state we deliberately do not keep (Q3, no cross-visit "New" badge); (3) a player
 served by what they already have: the tree's "New" pills for new pages, and opening a page shows its current text. If
 playtests show players missing reveals after long gaps, revisit it together with N2 (what is new since last visit), where a
 per-page "last seen" revision exists and the answer can be a quiet pill on the page in the tree, not a toast.
+
+Known limitation of the comparison: the baseline is the body the editor currently shows. With no loaded page, or an empty
+baseline, the comparison is skipped (no toast). A block the player deleted locally and has not saved yet looks new, because
+the server still has it; that rare case gets the same toast with the Reload offer as a live event on a page with unsaved edits.
