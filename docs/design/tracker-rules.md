@@ -54,6 +54,15 @@ Effective values: `perRound` used = `inLair ? perRoundLair : perRound`; same for
 
 **Player projection.** For `pc` only: successes, failures and status, shown to the whole table (the dice are rolled in the open and these are the players' own characters). **Default on; the "hide counts" DM switch is optional/later (P2)**: v1 ships without it; the question is Q1. Non-PC combatants: never any `dying` data; players see the existing `health: 'down'` and nothing else. Rolls, overflow and the massive-damage note are DM-only.
 
+### 1b. Edge cases (H1.5, decided by the Game Designer, 2014 and 2024 alike)
+
+Each decision is the reducer's behaviour and has a test in `packages/shared/test/tracker-rules.test.ts`. None projects anything to players; `dying` still shows for `pc` only.
+
+1. **Failures added to a stable combatant: unstable again (changed).** A stable creature that takes damage is dying again (section 1). A manual failure added with `deathSaveAdjust` follows the same rule: the counts restart at 0/0, then the failures are added, status `dying`. Stable with failures counted is not a state the rules have. An explicit `status` in the same action wins (the DM can still force it), `reset` wins over both, and successes on a stable combatant change nothing.
+2. **Death saves on a creature that does not make them: ignored (changed).** `deathSave` and `deathSaveAdjust` on a combatant that is not a `pc` and not flagged `deathSaves` do nothing, and an `update {hp: 0}` on one creates no `dying` object (it sits at 0 HP; the DM removes it). Monsters are dead at 0 HP and have no death saves to track. Flagging `deathSaves` makes the actions work again.
+3. **The lair row has no hit points or armor class: ignored (changed).** An `update` patch on the lair row drops `hp`, `hpMax`, `tempHp`, `ac` and `deathSaves`; its name, initiative, hidden, notes and the rest still apply. It is not refused, so a bulk edit or a stale tab does not fail. The `hp` action already did nothing on it (`hp: null`), and decision 2 keeps `dying` off it.
+4. **Hit points below 0 through `update`: clamped to 0 (changed).** Hit points cannot go below 0 in either edition (damage stops at 0; the rest only matters as overflow for massive damage). An `update {hp: -5}` is stored as 0 and then follows the normal 0 HP rules (a character starts dying). Clamped rather than refused so a typed "-5" does not lose the edit. The schema range is unchanged.
+
 ## 2. Legendary actions
 
 **Rule.** A legendary creature gets a number of legendary actions (3 unless the statblock says otherwise). Out of its own turn, only at the end of another creature's turn and one at a time, it spends them on options from its list; some options cost 2 or 3. Spent uses return at the start of its own turn. It cannot use them while incapacitated or unable to act.
@@ -197,6 +206,7 @@ Gate: the owner accepts the stated defaults in writing, or checks the books. I3.
 
 ## 13. Changelog
 
+- 1.4 (2026-10-27): H1.5 edge cases decided in section 1b (failures on a stable combatant, death saves on non-savers, hp and ac on the lair row, hp below 0).
 - 1.3 (2026-10-24): Delay section, action list and scope summary match the merged I3.2 reducer: `moveAfter` on the active combatant hands the turn on and starts the next turn (resets, recharge rolls); invalid moves are rejected.
 - 1.2 (2026-10-23): re-QA edits: paraphrased the two book phrases and reworded the no-rules-text claim, §11 gate, temp-HP default flagged as a table convention for I3.3 help text.
 - 1.1 (2026-10-23): QA round 1. Per-rule SRD-first source table with "owner to fill" page cells; PROJECT.md §4 citation corrected; verification checklist; both rule versions stated in section 1; `legendary` and `resistance` split with lair variants and a manual `inLair`; Delay reduced to `moveAfter` with edge cases; projection decisions for readied, delayed and the lair row; optional items marked; open questions rewritten with options, consequences, recommendation and decider.
