@@ -65,6 +65,19 @@ Findings:
 3. The player projection is cheap: the same work on fewer rows plus a few ms.
 4. Filtering is not a cost at this size.
 
+## After I2.5 (cheaper sorting)
+
+`runQuery` now uses one module-level `Intl.Collator` and computes each page's sort key once before sorting. `bench:query --profile-only`, 2,000 pages, same machine, stage profile `runQuery` only (warm p50 / p95 ms):
+
+| Sort | Before | After |
+|---|---|---|
+| title (default), limit 100 / 500 | 10.0 / 9.4 | 0.5 / 0.5 (p95 1.0 / 0.9) |
+| select prop (`prop.threat_level`), NPCs | 19.2 | 0.6 |
+| page-link facet, NPCs | 27.3 | 1.1 |
+| `tags`, all pages | 81.3 (p95 108.9) | 3.5 (p95 4.6) |
+
+Targets met: tags under 15 ms, title under 5 ms. Order unchanged (ordering-equivalence tests in `packages/blocks/test/query-sort.test.ts`); the only difference is the title tie-break, which now uses the same collator (case and accent insensitive, numeric) instead of the default `localeCompare`.
+
 ## Follow-up tasks (not done here: the verdict is PASS and the fixes touch query behaviour)
 
 - **Task I2.4: Page reads do not load bodies.** Owner: Backend Architect, QA: Performance Benchmarker. Fix at `livePages()` itself (select the summary columns, not `body`), since `tree()` and `pages.ts` around lines 454, 602 and 657 use it too; check each of those callers does not need the body (give any that does its own body read). Expected: about 75 ms less per query request (110 to 35 ms). Acceptance: `bench:query` shows every scenario under 80 ms p50; existing query, tree and visibility tests pass.

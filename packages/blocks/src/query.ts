@@ -96,10 +96,29 @@ function matches(cond: QueryCondition, page: QueryablePage, ctxPageId: string | 
 
 const isEmptyValue = (v: unknown) => v == null || v === '' || (Array.isArray(v) && v.length === 0);
 
-/** Compares two non-empty values. */
-function compare(a: unknown, b: unknown): number {
-  if (typeof a === 'number' && typeof b === 'number') return a - b;
-  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+/** One collator for every string comparison in a sort: building one per comparison is the expensive part. */
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+interface SortKey {
+  page: QueryablePage;
+  empty: boolean;
+  /** The raw value when it is a number, else null. */
+  num: number | null;
+  /** The string form (arrays joined with a comma), computed once; empty for numbers until needed. */
+  str: string;
+}
+
+function sortKey(page: QueryablePage, field: string): SortKey {
+  const v = fieldValue(page, field);
+  if (isEmptyValue(v)) return { page, empty: true, num: null, str: '' };
+  if (typeof v === 'number') return { page, empty: false, num: v, str: '' };
+  return { page, empty: false, num: null, str: String(v) };
+}
+
+/** Compares two non-empty keys. */
+function compare(a: SortKey, b: SortKey): number {
+  if (a.num !== null && b.num !== null) return a.num - b.num;
+  return collator.compare(a.num !== null ? String(a.num) : a.str, b.num !== null ? String(b.num) : b.str);
 }
 
 /** Applies a (parsed) query filter to pages. `ctxPageId` is the page containing the query block. */
@@ -115,13 +134,12 @@ export function runQuery(pages: QueryablePage[], filter: QueryFilter, ctxPageId:
   });
   const dir = filter.sort.dir === 'desc' ? -1 : 1;
   // Empty values go last in both directions (the browser's header sort does the same)
-  out.sort((a, b) => {
-    const x = fieldValue(a, filter.sort.field);
-    const y = fieldValue(b, filter.sort.field);
-    const xe = isEmptyValue(x);
-    const ye = isEmptyValue(y);
-    const order = xe || ye ? (xe === ye ? 0 : xe ? 1 : -1) : compare(x, y) * dir;
-    return order || a.title.localeCompare(b.title);
+  // Sort keys are computed once per page, not twice per comparison
+  const keys = out.map((p) => sortKey(p, filter.sort.field));
+  keys.sort((a, b) => {
+    const order = a.empty || b.empty ? (a.empty === b.empty ? 0 : a.empty ? 1 : -1) : compare(a, b) * dir;
+    return order || collator.compare(a.page.title, b.page.title);
   });
+  for (let i = 0; i < keys.length; i++) out[i] = keys[i]!.page;
   return out.slice(0, filter.limit);
 }
