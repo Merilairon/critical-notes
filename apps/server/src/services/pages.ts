@@ -337,7 +337,8 @@ export class PageService {
     if (!parsed.success) throw badRequest('Invalid page properties', parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })));
     const data = parsed.data as Record<string, unknown>;
     for (const field of FACET_FIELDS[facetType]) {
-      // A player is checked only on the links they submitted; links the DM stored are merged in and stay untouched
+      // A player is checked only on the links they submitted; links the DM stored are merged in and stay untouched on purpose.
+      // Unreachable by players today: they edit only PC pages and a PC facet has no pageLink field.
       if (field.type === 'pageLink') this.assertPageInCampaign(campaignId, data[field.key] as string | null, field.pageType, submitted?.has(field.key) ? visible : undefined);
     }
     return data;

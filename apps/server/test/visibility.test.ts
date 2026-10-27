@@ -4,6 +4,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createFixture, createSignedInApp, TestClient, type Fixture, type TestApp } from './helpers';
 import { openEvents } from './events-helpers';
 import { callTool, makeToken, mcpClient } from './mcp-client';
+import { contextFor } from '../src/services/revisions';
+import { viewerOf } from '../src/services/visibility';
 import { UNIDENTIFIED_ITEM_NAME, type InventoryDto } from '@cn/shared';
 
 /**
@@ -14,6 +16,7 @@ const SENTINEL = /sentinel/i;
 
 let fx: Fixture;
 let app: TestApp;
+let services: Awaited<ReturnType<typeof createSignedInApp>>['services'];
 let dm: TestClient;
 let player: TestClient;
 let playerId: string;
@@ -51,7 +54,7 @@ async function invite(role: 'player' | 'codm' = 'player', extra: object = {}) {
 
 beforeAll(async () => {
   fx = await createFixture();
-  ({ app, client: dm } = await createSignedInApp(fx));
+  ({ app, services, client: dm } = await createSignedInApp(fx));
   campaignId = (await dm.post('/api/campaigns', { name: 'Secrets', ruleset: '2014' })).body.id;
   ({ client: player, userId: playerId } = await join(await invite(), 'pat'));
 
@@ -539,6 +542,31 @@ describe('what players may change', () => {
     }
     const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
     expect((await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, props: { contact: null } })).status).toBe(200);
+  });
+
+  it('answers a hidden page of the wrong type for a facet link like a missing page (visibility is checked before type)', async () => {
+    // No player-editable page has a facet pageLink field today (a PC has none), so this pins the order at the service
+    // seam: a type check first would tell a player that a hidden faction exists
+    const faction = (await dm.post(`${base()}/pages`, { type: 'faction', title: 'SENTINEL hidden faction', visibility: 'dm' })).body.id as string;
+    const npc = (await dm.post(`${base()}/pages`, { type: 'npc', title: 'Facet probe', visibility: 'all' })).body;
+    const visible = services.visibility.visiblePageIds(campaignId, viewerOf(playerId, 'player'));
+    expect(visible.has(faction)).toBe(false);
+    const ctx = contextFor(playerId, { source: 'web' }, 'edit');
+    const answer = (id: string) => {
+      try {
+        services.pages.update(campaignId, npc.id, { revision: npc.revision, facet: { factionPageId: id } }, ctx, visible);
+      } catch (err) {
+        return `${(err as { status?: number }).status} ${(err as Error).message}`.split(id).join('<id>');
+      }
+      return 'stored';
+    };
+    const missing = answer('no-such-page-id');
+    expect(missing).toMatch(/not found in this campaign/);
+    expect(answer(faction)).toBe(missing);
+    // A hidden page of the WRONG type is the case that pins the order: a type check first would answer "must be a faction"
+    expect(answer(ids['hidden']!)).toBe(missing);
+    // The DM's own write still gets the type error: the order only matters for players
+    expect(() => services.pages.update(campaignId, npc.id, { revision: npc.revision, facet: { factionPageId: ids['town']! } }, contextFor(playerId, { source: 'web' }, 'edit'))).toThrow(/must be a faction/);
   });
 
   it('refuses an over-long paragraph the same way whether or not the page holds hidden links', async () => {
