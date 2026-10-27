@@ -407,3 +407,11 @@ per-page "last seen" revision exists and the answer can be a quiet pill on the p
 Known limitation of the comparison: the baseline is the body the editor currently shows. With no loaded page, or an empty
 baseline, the comparison is skipped (no toast). A block the player deleted locally and has not saved yet looks new, because
 the server still has it; that rare case gets the same toast with the Reload offer as a live event on a page with unsaved edits.
+
+Known existing limitation (found in N3.6 browser QA, not caused by N3.6): on a page with unsaved typing, the Reload on the
+"New details on this page" toast is "save, then reload". The DM's reveal is itself a save and has already raised the page
+revision, so the player's save is sent with the old revision, gets a 409, and the page stays as it is under the banner
+"Someone else changed this page" with a Reload page button. The typed text is kept on screen (so it can be copied), but is
+not saved and the revealed block does not appear until the player reloads and loses the text. The same happens for a live
+`block-revealed` event (N3.4) and for the offline-gap toast. A real fix needs a rebase of the pending change onto the newer
+revision (safe for facet and field changes, needs a block-level merge for body edits); tracked as a follow-up.
