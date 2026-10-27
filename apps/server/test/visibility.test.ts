@@ -516,6 +516,31 @@ describe('what players may change', () => {
     expect(fromPc?.kinds ?? []).not.toContain('embed');
   });
 
+  it('answers a page-link property to a hidden, selected-other, missing, other-campaign or trashed page identically', async () => {
+    const other = await dm.post('/api/campaigns', { name: 'Elsewhere', ruleset: '2014' });
+    const foreign = (await dm.post(`/api/campaigns/${other.body.id}/pages`, { title: 'Foreign', visibility: 'all' })).body.id as string;
+    const tries = [ids['hidden']!, ids['selectedOther']!, ids['trashed']!, foreign, 'no-such-page-id'];
+    const results: { status: number; body: string }[] = [];
+    for (const id of tries) {
+      const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+      const res = await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, props: { contact: id } });
+      results.push({ status: res.status, body: JSON.stringify(res.body).split(id).join('<id>') });
+    }
+    expect(results[0]!.status).toBe(400);
+    for (const r of results) expect(r).toEqual(results[0]);
+    // Nothing was stored: the DM sees no link on the character
+    expect((await dm.get(`${base()}/pages/${ids['pc']}`)).body.props.contact ?? null).toBeNull();
+    // A visible page still works, including one shared with this player alone
+    for (const id of [ids['town']!, ids['selectedMe']!]) {
+      const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+      const ok = await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, props: { contact: id } });
+      expect(ok.status).toBe(200);
+      expect(ok.body.props.contact).toBe(id);
+    }
+    const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+    expect((await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, props: { contact: null } })).status).toBe(200);
+  });
+
   it('refuses an over-long paragraph the same way whether or not the page holds hidden links', async () => {
     const long = { type: 'paragraph', content: [{ type: 'text', text: 'a'.repeat(100_001) }] };
     const submit = async () => {
