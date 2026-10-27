@@ -266,6 +266,7 @@ export class PageEditor implements OnDestroy {
     const p = this.page();
     if (!p) return;
     this.clearShare();
+    await this.restoreSettled;
     await this.flush();
     const prev = { pageId: p.id, visibility: p.visibility, viewers: [...p.viewers] };
     if (!(await this.saveVisibility(p.id, to, to === 'all' ? [] : p.viewers, prev))) return;
@@ -360,6 +361,7 @@ export class PageEditor implements OnDestroy {
     }
     const p = this.page();
     if (!p) return;
+    await this.restoreSettled;
     await this.flush();
     this.historyOpen.set(false);
     try {
@@ -451,6 +453,7 @@ export class PageEditor implements OnDestroy {
   protected async addSubpage() {
     const p = this.page();
     if (!p) return;
+    await this.restoreSettled;
     await this.flush();
     const child = await this.store.createPage({ title: 'Untitled', parentId: p.id });
     await this.router.navigate(['/c', this.store.id(), 'p', child.id]);

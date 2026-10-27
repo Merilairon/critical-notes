@@ -219,6 +219,36 @@ describe('PageEditor history wiring', () => {
     expect(done).toBe(true);
   });
 
+  it('overlapping restores keep the autosave held until the last one ends', async () => {
+    const { editor, http } = await mount(true);
+    editor.onHistoryBusy(true);
+    editor.onHistoryBusy(true);
+    editor.queue({ title: 'Typed' }, true);
+    editor.onHistoryBusy(false);
+    await settle();
+    http.expectNone({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' });
+    editor.onHistoryBusy(false);
+    await settle();
+    http.expectOne({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' }).flush(reply({ title: 'Typed', revision: 2 }));
+  });
+
+  it('turning on the player preview mid-restore holds the autosave and the flush until the restore ends', async () => {
+    const { editor, http, fixture, open, el } = await mount(true);
+    await open();
+    editor.onHistoryBusy(true);
+    editor.queue({ title: 'Typed in preview' }, true);
+    Array.from(el.querySelectorAll('button')).find((b) => b.textContent?.includes('Preview as player'))!.click();
+    await settle();
+    http.expectNone({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' });
+    editor.onHistoryBusy(false);
+    await settle();
+    http.expectOne({ method: 'PATCH', url: '/api/campaigns/c1/pages/p1' }).flush(reply({ title: 'Typed in preview', revision: 2 }));
+    await settle();
+    http.expectOne((r) => r.url === '/api/campaigns/c1/pages/p1' && r.params.get('as') === 'player').flush(reply());
+    await settle();
+    fixture.detectChanges();
+  });
+
   it('a page change mid-restore holds the autosave until the restore ends', async () => {
     const { editor, http, fixture, open } = await mount(true);
     await open();
