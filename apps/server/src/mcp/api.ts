@@ -47,9 +47,15 @@ export class ApiError extends Error {
   }
 }
 
-/** Builds an API path, encoding every value so ids from the model can't change the path. */
+/** Builds an API path, encoding every value so ids from the model can't change the path; `.` and `..` segments are rejected. */
 export function path(strings: TemplateStringsArray, ...values: (string | number)[]): string {
-  return strings.reduce((out, s, i) => out + s + (i < values.length ? encodeURIComponent(String(values[i])) : ''), '');
+  return strings.reduce((out, s, i) => {
+    if (i >= values.length) return out + s;
+    const v = String(values[i]);
+    // encodeURIComponent leaves '.' and '..' alone, and a URL parser then resolves them: refuse for every tool
+    if (v === '.' || v === '..') throw new Error('Invalid id');
+    return out + s + encodeURIComponent(v);
+  }, '');
 }
 
 type Issue = { path?: string; message?: string };

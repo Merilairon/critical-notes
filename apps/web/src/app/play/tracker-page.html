@@ -14,6 +14,9 @@
     <!-- The action error and the DM-only recharge note: always in the DOM, in view of the sticky block -->
     <ng-template #slot>
       <div class="cn-trk-status">
+        @if (paused()) {
+          <p class="border-t border-line px-2 py-1 text-sm text-muted" role="status">{{ paused() }}</p>
+        }
         <div role="alert">
           @if (error()) {
             <div class="flex flex-wrap items-center gap-2 border-t border-line px-2 py-1 text-sm text-accent">

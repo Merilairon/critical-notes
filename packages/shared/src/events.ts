@@ -13,7 +13,7 @@ export const blockRevealedEvent = z.strictObject({
   blockIds: z.array(z.string().min(1)).max(MAX_REVEALED_BLOCK_IDS),
 });
 export const helloEvent = z.strictObject({ replayed: z.boolean() });
-export const byeEvent = z.strictObject({ reason: z.enum(['restart', 'evicted']) });
+export const byeEvent = z.strictObject({ reason: z.enum(['restart', 'evicted', 'access']) });
 
 export type PageSharedEvent = z.infer<typeof pageSharedEvent>;
 export type BlockRevealedEvent = z.infer<typeof blockRevealedEvent>;

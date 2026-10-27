@@ -279,9 +279,11 @@ describe('revoking, replaying and closing', () => {
     const [s, l] = [await connect(sam.client), await connect(lou.client)];
     expect((await lou.client.post('/api/auth/logout')).status).toBeLessThan(300);
     expect(await l.reader.endedWithin(1500)).toBe(true);
+    expect(l.reader.events.at(-1)).toMatchObject({ event: 'bye', data: '{"reason":"access"}' });
     expect(s.reader.ended).toBe(false);
     expect((await dm.delete(`${base()}/members/${sam.userId}`)).status).toBe(204);
     expect(await s.reader.endedWithin(1500)).toBe(true);
+    expect(s.reader.events.at(-1)).toMatchObject({ event: 'bye', data: '{"reason":"access"}' });
   });
 
   it('stops delivering the moment the member loses the page, without waiting for a heartbeat', async () => {
