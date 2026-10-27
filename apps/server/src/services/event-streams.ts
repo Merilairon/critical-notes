@@ -88,13 +88,15 @@ export class EventStreamHub {
     return this.admit({ ...info, sessionId: info.sessionId ?? '', lastEventId: null, kind: 'tracker' });
   }
 
-  /** Attaches a tracker stream's channel (so a restart or an eviction reaches it). Returns the release for its slot. */
-  attachTracker(conn: StreamConnection, channel: SseChannel): () => void {
+  /** Attaches a tracker stream's channel (so a restart or an eviction reaches it). */
+  attachTracker(conn: StreamConnection, channel: SseChannel): void {
     conn.channel = channel;
-    return () => {
-      conn.closed = true;
-      this.conns.delete(conn);
-    };
+  }
+
+  /** Frees a tracker stream's slot. Idempotent; safe on any path, including a stream that never opened. */
+  releaseTracker(conn: StreamConnection): void {
+    conn.closed = true;
+    this.conns.delete(conn);
   }
 
   /** Attaches the channel: `hello`, the replay, then live delivery. Returns the cleanup. */

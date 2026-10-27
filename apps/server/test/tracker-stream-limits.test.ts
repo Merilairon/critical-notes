@@ -73,6 +73,22 @@ describe('tracker stream caps', () => {
     await vi.waitFor(() => expect(services.eventStreams.size).toBe(0));
   });
 
+  it('releases the slot when opening the stream throws', async () => {
+    const spy = vi.spyOn(services.trackers, 'subscribe').mockImplementation(() => {
+      throw new Error('forced failure');
+    });
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const res = await request(dm, 'dm');
+      expect(res.status).toBe(200);
+      expect(await new EventReader(res).endedWithin(1500)).toBe(true);
+    } finally {
+      spy.mockRestore();
+      errors.mockRestore();
+    }
+    await vi.waitFor(() => expect(services.eventStreams.size).toBe(0));
+  });
+
   it('tells tracker streams to come back on shutdown', async () => {
     const dee = await join('dee');
     const r = await open(dee.client, 'player');

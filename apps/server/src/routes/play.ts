@@ -161,28 +161,45 @@ export function playRoutes(deps: {
       ch.end({ event: 'bye', data: JSON.stringify({ reason: 'access' }) });
       return false;
     };
-    return sseResponse(c, {
-      heartbeatMs: eventStreams.heartbeatMs,
-      onHeartbeat: (ch) => void stillAllowed(ch),
-      open: (ch) => {
-        const release = eventStreams.attachTracker(conn, ch);
-        ch.send({ event: 'state', data: JSON.stringify(first) });
-        const unsubscribe = trackers.subscribe(id, (e) => {
-          // Fail closed: a throwing check cuts this viewer only
+    const release = () => eventStreams.releaseTracker(conn);
+    try {
+      return sseResponse(c, {
+        heartbeatMs: eventStreams.heartbeatMs,
+        onHeartbeat: (ch) => void stillAllowed(ch),
+        open: (ch) => {
+          // The slot taken above must come back on every path: a throw here would otherwise skip the cleanup sseResponse runs
+          let unsubscribe: (() => void) | null = null;
           try {
-            if (ch.closed || !stillAllowed(ch)) return;
-            ch.send({ event: 'state', data: JSON.stringify(view === 'dm' ? e.dm : e.player) });
+            eventStreams.attachTracker(conn, ch);
+            ch.send({ event: 'state', data: JSON.stringify(first) });
+            unsubscribe = trackers.subscribe(id, (e) => {
+              // Fail closed: a throwing check cuts this viewer only
+              try {
+                if (ch.closed || !stillAllowed(ch)) return;
+                ch.send({ event: 'state', data: JSON.stringify(view === 'dm' ? e.dm : e.player) });
+              } catch (err) {
+                console.error('Tracker stream delivery failed; closing the stream', err instanceof Error ? err.message : 'unknown error');
+                ch.close();
+              }
+            });
           } catch (err) {
-            console.error('Tracker stream delivery failed; closing the stream', err instanceof Error ? err.message : 'unknown error');
+            console.error('Opening a tracker stream failed', err instanceof Error ? err.message : 'unknown error');
+            unsubscribe?.();
+            release();
             ch.close();
+            return;
           }
-        });
-        return () => {
-          unsubscribe();
-          release();
-        };
-      },
-    });
+          const stop = unsubscribe;
+          return () => {
+            stop();
+            release();
+          };
+        },
+      });
+    } catch (err) {
+      release();
+      throw err;
+    }
   });
 
   // endregion

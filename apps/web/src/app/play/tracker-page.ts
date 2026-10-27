@@ -14,6 +14,7 @@ import { errorMessage } from '../core/http.interceptor';
 import { parseHpInput } from './combat-math';
 import { PlayApi } from './play-api';
 import * as L from './tracker-logic';
+import { openTrackerStream, pauseMessage, type TrackerStream } from './tracker-stream';
 
 /** The recharge rolls of one action, shown to the DM until the next ones or Dismiss. */
 interface RechargeNote {
@@ -87,7 +88,8 @@ export class TrackerPage implements OnDestroy {
   protected readonly noteVisible = computed(() => (this.noteAll() ? this.noteLines() : this.noteLines().slice(0, 2)));
   protected readonly noteHidden = computed(() => this.noteLines().length - this.noteVisible().length);
 
-  private events: EventSource | null = null;
+  protected readonly paused = signal('');
+  private events: TrackerStream | null = null;
 
   constructor() {
     effect(() => {
@@ -113,8 +115,12 @@ export class TrackerPage implements OnDestroy {
     }
     // Live updates (other DM tabs; actions answered by the server)
     this.events?.close();
-    this.events = new EventSource(this.api.eventsUrl(campaignId, id, 'dm'));
-    this.events.addEventListener('state', (e) => this.receive(JSON.parse((e as MessageEvent<string>).data) as TrackerDto));
+    this.paused.set('');
+    this.events = openTrackerStream(
+      this.api.eventsUrl(campaignId, id, 'dm'),
+      (data) => this.receive(JSON.parse(data) as TrackerDto),
+      (why) => this.paused.set(pauseMessage(why)),
+    );
   }
 
   /** A state from the server: the recharge rolls it carries show once per revision (the own SSE echo does not double them). */

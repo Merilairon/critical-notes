@@ -5,6 +5,7 @@ import type { PlayerTrackerView } from '@cn/shared';
 import { errorMessage } from '../core/http.interceptor';
 import { healthWordLabel } from './health';
 import { PlayApi } from './play-api';
+import { openTrackerStream, pauseMessage, type TrackerStream } from './tracker-stream';
 
 const successes = (n: number) => `${n} ${n === 1 ? 'success' : 'successes'}`;
 
@@ -42,6 +43,9 @@ export function describeChanges(prev: PlayerTrackerView, next: PlayerTrackerView
       <a [routerLink]="['/c', campaignId()]" class="inline-flex min-h-[44px] items-center gap-1 rounded px-2 text-sm text-muted hover:text-ink">← Campaign</a>
     </div>
     <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">{{ announcement() }}</div>
+    @if (paused()) {
+      <p class="mb-3 rounded-lg border border-line bg-panel-2 px-3 py-2 text-center text-sm text-muted" role="status">{{ paused() }}</p>
+    }
     @if (view(); as v) {
       <p class="text-center font-display text-2xl text-muted" aria-live="polite">{{ v.round ? 'Round ' + v.round : 'Waiting for combat to start' }}</p>
       <ol class="mt-4 flex flex-col gap-3">
@@ -114,7 +118,8 @@ export class TrackerPlayerView implements OnDestroy {
   protected pips(n: number) {
     return Array.from({ length: 3 }, (_, i) => i < n);
   }
-  private events: EventSource | null = null;
+  protected readonly paused = signal('');
+  private events: TrackerStream | null = null;
 
   constructor() {
     this.title.setTitle('Initiative — Critical Notes');
@@ -132,8 +137,12 @@ export class TrackerPlayerView implements OnDestroy {
       return;
     }
     this.events?.close();
-    this.events = new EventSource(this.api.eventsUrl(campaignId, trackerId, 'player'));
-    this.events.addEventListener('state', (e) => this.update(JSON.parse((e as MessageEvent<string>).data) as PlayerTrackerView));
+    this.paused.set('');
+    this.events = openTrackerStream(
+      this.api.eventsUrl(campaignId, trackerId, 'player'),
+      (data) => this.update(JSON.parse(data) as PlayerTrackerView),
+      (why) => this.paused.set(pauseMessage(why)),
+    );
   }
 
   /** A new state: announces what changed for the player characters (nothing on the first load). */
