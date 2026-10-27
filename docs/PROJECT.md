@@ -653,7 +653,7 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 ### [x] Task G2.1: Release 1.3 certification
 **Owner**: Reality Checker · **QA**: **Owner (human)**
 **Done:** 2026-10-26, QA Reality Checker: CERTIFIED WITH CAVEATS on the second run (the first run found four blockers: the 1.3 docs, I1.5 data loss on bold labels, H1.4 tracker stream access after removal, and the real-data upgrade; all closed, with I1.4 and I1.5 and H1.4 pulled into 1.3 by the owner), owner approval: given on 2026-10-26 with S1.2 (a moved paragraph loses a hidden link) shipped as a documented known issue. Evidence: gate 985 + 528, full e2e 137 passed and 8 skipped on three runs and against Docker, restore drill on the built bundle, upgrade from a populated 1.2.0 volume, 52 of 52 live visibility checks. **Shipped as v1.3.0:** release commit b8d350c, CI green on the pull request and on `main`, release workflow green, image `ghcr.io/merilairon/critical-notes:1.3.0` pulled without credentials, `linux/amd64` and `linux/arm64`, runs as `node`, `/api/health` shows 1.3.0, GitHub Release published. Process notes: 33 agent commits lacked the DCO sign-off and were signed off by the owner's decision before the first push (tree hash unchanged); the E2E workflow stayed queued because no self-hosted runner is registered, so the browser suite was run locally. Not tested: arm64 hardware (the arm64 image builds under emulation only).
-**Description**: Evidence for every 1.3 item; full gate, `pnpm e2e`, phone project, Docker image.
+**Description**: Evidence for every 1.3 item; full gate, build `apps/server` first and run the restore drill test against the built bundle (`pnpm gate:drill`, must pass, not skipped; H1.2), `pnpm e2e`, phone project, Docker image.
 **Depends on**: all 1.3 tasks
 
 | Wave | Tasks |
@@ -799,7 +799,7 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 
 ### [ ] Task G3.1: Release 1.3.1 certification
 **Owner**: Reality Checker · **QA**: **Owner (human)**
-**Description**: Evidence for every 1.3.1 item that was built; full gate, `pnpm e2e`, phone project, the restore drill against the built bundle (H1.2), Docker image.
+**Description**: Evidence for every 1.3.1 item that was built; full gate, `pnpm e2e`, phone project, build `apps/server` first and run the restore drill test against the built bundle (`pnpm gate:drill`, must pass, not skipped; H1.2), Docker image.
 **Depends on**: all 1.3.1 tasks except I2.6 and I2.7, which only run if their condition is met (a Product Manager decision; more than about 5,000 pages)
 
 | Wave | Tasks |

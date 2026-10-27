@@ -20,6 +20,7 @@
     "e2e:phone": "pnpm build && playwright test --project=phone",
     "index": "pnpm --filter @cn/server run index",
     "drill": "pnpm --filter @cn/server build && pnpm --filter @cn/server drill",
+    "gate:drill": "pnpm --filter @cn/server build && vitest run apps/server/test/restore-drill.test.ts --reporter=verbose",
     "data:clone": "bash scripts/data-clone.sh",
     "data:update": "bash scripts/data-update.sh"
   },
