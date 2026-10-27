@@ -323,19 +323,22 @@ export class PageService {
       .all();
   }
 
-  private assertPageInCampaign(campaignId: string, pageId: string | null | undefined, expectedType?: PageType) {
+  /** With `visible` (a player's write) a page outside that set is answered exactly like a missing one, so the error is no oracle. */
+  private assertPageInCampaign(campaignId: string, pageId: string | null | undefined, expectedType?: PageType, visible?: ReadonlySet<string>) {
     if (!pageId) return;
+    if (visible && !visible.has(pageId)) throw badRequest(`Linked page ${pageId} not found in this campaign`);
     const row = this.db.select({ id: pages.id, type: pages.type }).from(pages).where(and(eq(pages.id, pageId), eq(pages.campaignId, campaignId), isNull(pages.deletedAt))).get();
     if (!row) throw badRequest(`Linked page ${pageId} not found in this campaign`);
     if (expectedType && row.type !== expectedType) throw badRequest(`Linked page must be a ${expectedType}`);
   }
 
-  private validateFacet(campaignId: string, facetType: FacetType, input: unknown): Record<string, unknown> {
+  private validateFacet(campaignId: string, facetType: FacetType, input: unknown, visible?: ReadonlySet<string>, submitted?: ReadonlySet<string>): Record<string, unknown> {
     const parsed = FACET_SCHEMAS[facetType].safeParse(input ?? {});
     if (!parsed.success) throw badRequest('Invalid page properties', parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })));
     const data = parsed.data as Record<string, unknown>;
     for (const field of FACET_FIELDS[facetType]) {
-      if (field.type === 'pageLink') this.assertPageInCampaign(campaignId, data[field.key] as string | null, field.pageType);
+      // A player is checked only on the links they submitted; links the DM stored are merged in and stay untouched
+      if (field.type === 'pageLink') this.assertPageInCampaign(campaignId, data[field.key] as string | null, field.pageType, submitted?.has(field.key) ? visible : undefined);
     }
     return data;
   }
@@ -384,7 +387,7 @@ export class PageService {
     return this.get(campaignId, id);
   }
 
-  update(campaignId: string, pageId: string, input: UpdatePageInput, ctx: WriteContext): PageDto {
+  update(campaignId: string, pageId: string, input: UpdatePageInput, ctx: WriteContext, playerVisible?: ReadonlySet<string>): PageDto {
     const current = this.row(campaignId, pageId);
     if (current.revision !== input.revision) {
       throw conflict('This page was changed by someone else', { current: this.get(campaignId, pageId) });
@@ -395,7 +398,7 @@ export class PageService {
     let facet: Record<string, unknown> | null = null;
     if (newFacetType && (input.facet !== undefined || newFacetType !== oldFacetType)) {
       const base = newFacetType === oldFacetType ? (this.facetOf(nextType, pageId) ?? {}) : {};
-      facet = this.validateFacet(campaignId, newFacetType, { ...base, ...(input.facet ?? {}) });
+      facet = this.validateFacet(campaignId, newFacetType, { ...base, ...(input.facet ?? {}) }, playerVisible, new Set(Object.keys(input.facet ?? {})));
     }
     const storedBody = input.body !== undefined ? this.sanitizeBody(input.body) : undefined;
     const viewersBefore = this.onCommitted ? this.viewerIds(pageId) : [];
@@ -403,7 +406,7 @@ export class PageService {
     this.db.transaction((tx) => {
       // The state this write overwrites, before anything changes; the properties join the page and its revision in one commit
       const pre = this.preState(tx, campaignId, pageId);
-      if (input.props) this.properties.setValues(campaignId, pageId, input.props, (id) => this.assertPageInCampaign(campaignId, id));
+      if (input.props) this.properties.setValues(campaignId, pageId, input.props, (id) => this.assertPageInCampaign(campaignId, id, undefined, playerVisible));
       const patch: Partial<typeof pages.$inferInsert> = { updatedAt: Date.now(), revision: current.revision + 1 };
       if (input.title !== undefined) patch.title = input.title;
       if (input.icon !== undefined) patch.icon = input.icon;
@@ -763,7 +766,7 @@ export class PageService {
     const projectCtx = this.playerContext(this.properties.list(campaignId), visible);
     if (input.body) this.checkPlayerTextSize(current.body as BlockDocument | null, input.body as BlockDocument, projectCtx);
     const body = input.body ? (mergePlayerEdit(current.body as BlockDocument | null, input.body as BlockDocument, projectCtx) as BlockDoc) : undefined;
-    const saved = this.update(campaignId, pageId, { ...input, ...(body ? { body } : {}) }, ctx);
+    const saved = this.update(campaignId, pageId, { ...input, ...(body ? { body } : {}) }, ctx, visible);
     return this.projectPage(campaignId, saved, visible);
   }
 
