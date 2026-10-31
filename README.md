@@ -931,6 +931,9 @@ them to the model when it connects):
 Edits through Markdown change only what changed: everything else, including blocks Markdown can't show and
 blocks a player can't see, stays exactly as it was. Revoke a token on the Account page at any time.
 
+**Deleting a custom property.** `delete_property` removes the property and its value on every page, and there is no undo, so it
+refuses unless the call has `confirm: true`. The refusal names the property and tells the assistant to ask you first.
+
 **Page history for assistants.** The server offers 34 tools (13 that only read, 21 that also change things; a read
 only token gets the 13). Two of them work with [page history](#using-it), for a game master's token only:
 `get_page_history` lists the saved versions of a page without their text, or reads one version in full, and marks the
