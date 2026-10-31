@@ -50,6 +50,9 @@ below).
 
 ### Changed
 
+- **Docker Compose passes `TRUST_PROXY` and `SECURE_COOKIES` through** to the container, so a value in `.env`
+  takes effect for installs behind a reverse proxy (empty means off, or derived from `PUBLIC_URL`). The example that
+  pins a version now shows `CN_VERSION=1.3.0`.
 - **Queries are faster.** Queries no longer read page bodies. At 2,000 pages every scenario takes at most 37 ms (it
   was 105 to 205 ms), a sort by tags takes 4 ms (it was 85 ms) and a sort by title 0.5 ms. The numbers are in
   `docs/qa/query-benchmark.md`.

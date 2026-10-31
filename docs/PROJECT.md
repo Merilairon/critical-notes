@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Release 1.0 shipped (v1.0.0, 2026-10-22); 1.1.0 to 1.2.0 shipped as post-1.0 follow-ups (not in this file); release 1.3 shipped (v1.3.0, 2026-10-26); release 1.3.1 (hardening and follow-ups, §6b) is planned next; release 1.5 (Characters: sheet, builder, level-up, PDF; §6c) is planned, nothing built; 1.4 and later are assigned but not yet broken down |
+| Status | Release 1.0 shipped (v1.0.0, 2026-10-22); 1.1.0 to 1.2.0 shipped as post-1.0 follow-ups (not in this file); release 1.3 shipped (v1.3.0, 2026-10-26); release 1.3.1 (hardening and follow-ups, §6b) is built, merged to `main` and certified by the Reality Checker as NEEDS WORK (minor: docs and the release steps only) on 2026-10-31; its version bump, tag and the owner's approval (G3.1) are still to do; release 1.5 (Characters: sheet, builder, level-up, PDF; §6c) is planned, nothing built; 1.4 and later are assigned but not yet broken down |
 | Date | 2026-10-13, updated 2026-10-26 |
 | Specification | [PRD.md](PRD.md) (what and why). This file is the task list (who and how). |
 | Engineering state | [STATUS.md](STATUS.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [PLAN.md](PLAN.md) |
