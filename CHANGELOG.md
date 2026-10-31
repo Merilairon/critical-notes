@@ -62,9 +62,11 @@ below).
 - **The campaign event stream now says why it closes.** When someone loses access, it ends with a `bye` message with
   the reason "access", instead of closing silently.
 - **AI assistants: path ids that are `.` or `..` are rejected** by every tool.
-- **AI assistants: `delete_property` will ask for confirmation.** The tool will need `confirm: true` and will refuse
-  without it, so nothing is deleted by mistake. The web app already asks first. *(Being built for 1.3.1; this entry
-  stays until it ships.)*
+- **AI assistants: `delete_property` now asks for confirmation.** The tool needs `confirm: true`. Without it the
+  tool deletes nothing and answers with the property's name, what deleting it removes (its definition and its value
+  on every page, with no undo) and how to confirm, so the assistant asks you first. A value that is not true or
+  false is refused by the tool's input check before that message. Only the game master can delete a property;
+  players and others get the same answers as before. The web app already asked first.
 - **Tracker death-save rules** (see `docs/design/tracker-rules.md`, section 1b), four decisions:
   - Death-save failures added to a stable character make it dying again.
   - Death saves on a creature that does not make them (most monsters) are ignored.
@@ -90,7 +92,10 @@ below).
   depth limit is refused. This shows only that such blocks exist and how deep, never their content.
 - When an AI assistant edits a page with Markdown and moves a paragraph, the DM's hidden links on it are still lost. It
   does not leak anything.
-- There is no undo for a deleted property definition. Deleting one removes its values on every page.
+- There is no undo for a deleted property definition. Deleting one removes its values on every page. AI assistants
+  now have to confirm first, but a property deleted by mistake cannot be brought back.
+- Some other AI assistant actions cannot be undone either, and do not ask for a confirmation: removing an inventory
+  item is permanent, and a deleted template or encounter has no restore option in the app or for an assistant.
 - If you press **Reload** on a page with unsaved typing after the DM revealed something on it, your next save ends in
   a conflict. Your text is kept.
 - The tracker "dying" value of a monster saved before this version stays visible to the DM until the monster is

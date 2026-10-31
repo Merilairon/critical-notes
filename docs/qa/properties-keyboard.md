@@ -21,8 +21,8 @@ In the web app, `store.deleteProperty` runs only after that answer is true. No n
 **What is and is not confirmed**
 
 - **Web UI: always the app dialog.** Every UI route to `DELETE /api/campaigns/:id/properties/:id` goes through it.
-- **MCP: no in-app confirmation.** The tool `delete_property` (`apps/server/src/mcp/tools/pages.ts`, about lines
-  310 to 320) looks the key up and calls the same route (allowlisted in `apps/server/src/mcp/api.ts`, about line
+- **MCP: no in-app confirmation.** The tool `delete_property` (`apps/server/src/mcp/tools/pages.ts`, search for
+  `delete_property`) looks the key up and calls the same route (allowlisted in `apps/server/src/mcp/api.ts`, about line
   32). It deletes the definition and its values on every page at once. Its guards: the client-side
   `destructive: true` hint and, since S1.5, a required `confirm: true` argument (without it the tool refuses and
   deletes nothing). This spec does not cover MCP.
