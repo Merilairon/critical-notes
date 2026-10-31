@@ -595,6 +595,7 @@ describe('mergePlayerEdit across nesting levels (S1.2)', () => {
     const merged = mergePlayerEdit(stored, { ...seen, content: [p('Plain', { id: 'c1' })] }, ctx);
     expect(JSON.stringify(projectDoc(merged, ctx))).not.toContain('SENTINEL');
     expect(count(merged, 'SENTINEL kid')).toBe(1);
+    expect(JSON.stringify(merged.content!.find((b) => b.type === 'paragraph'))).not.toContain('SENTINEL');
   });
 
   it('keeps the hidden link when the player wraps the paragraph in a container that reuses its id', () => {
@@ -669,6 +670,8 @@ describe('mergePlayerEdit across nesting levels (S1.2)', () => {
         else if (kind === 3 && pick) pick[at] = callout(String((pick[at]!['attrs'] as N)['id']), pick[at]) as unknown as N;
       }
       const merged = mergePlayerEdit(stored, { ...seen, content: tree as never }, ctx);
+      const grafted = (ns: BlockNode[] | undefined): boolean => !!ns?.some((b) => (b.type === 'paragraph' && b.content?.some((c) => c.type === 'paragraph' || c.type === 'callout')) || grafted(b.content));
+      expect(grafted(merged.content), `a block was grafted into a paragraph in run ${run}`).toBe(false);
       expect(JSON.stringify(projectDoc(merged, ctx)), `hidden text visible in run ${run}`).not.toMatch(/"text":"Hn/);
       const wanted = JSON.stringify(stored).match(/H(n\d+_\d+)|"label":"(L\w+)"/g) ?? [];
       for (const w of wanted) {
