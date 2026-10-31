@@ -699,14 +699,16 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 
 ### 6b.2 Epic I2b: Cheaper queries (from the I2.3 benchmark)
 
-### [ ] Task I2.4: Query reads no page bodies
+### [x] Task I2.4: Query reads no page bodies
 **Owner**: Backend Architect · **QA**: Performance Benchmarker
+**Done:** 2026-10-31, Code Reviewer PASS, QA Performance Benchmarker: PASS (merged with I2.5; three runs at 2,000 pages, 1-minute load 4.9 to 5.9 from unrelated desktop use, so the numbers are an upper bound). `livePageSummaries()` selects summary columns only; all five callers audited (tree, queryable, move, remove, projectForPlayers). Every scenario is at most 37 ms p50 (limit 80), summary query 7 ms (was 80). Numbers in `docs/qa/query-benchmark.md`.
 **Description**: `PageService.livePages()` is `select *`, so every query (and the page tree and other callers around pages.ts 454, 602 and 657) reads and parses every body; a query result never contains one (I2.3: about 80 of 110 ms at 2,000 pages). Select only the summary columns (a body-less `livePageSummaries()` for `queryable()` and `tree()`; keep the full select where a body is needed; check each caller first). No behaviour change.
 **Acceptance Criteria**: `bench:query` shows every scenario under 80 ms p50 at 2,000 pages, recorded in `docs/qa/query-benchmark.md`; the existing query, visibility and tree tests pass
 **Depends on**: I2.3
 
-### [ ] Task I2.5: Cheaper query sorting
+### [x] Task I2.5: Cheaper query sorting
 **Owner**: Backend Architect · **QA**: Performance Benchmarker
+**Done:** 2026-10-31, Code Reviewer PASS (mutation checks: flipped empties-last and `numeric:false` both fail the new tests), QA Performance Benchmarker: PASS. Tags sort 4.0 ms in the stage profile (limit 15, was 85), title sort 0.5 ms (limit 5). Note: titles equal ignoring case and accents now keep input order instead of the old `localeCompare` tie order (the task text asks for the shared collator).
 **Description**: In `packages/blocks/src/query.ts`, build one module-level `Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })` and reuse it; compute each page's sort key once before sorting so `fieldValue` is not called twice per comparison and tags are joined once (do not lowercase tags: `sensitivity: 'base'` also ignores accents); use the same collator for the title tie-break. Same order as today (tests with accents, numbers in strings, empty values last both ways, tags).
 **Acceptance Criteria**: a sort on `tags` at 2,000 pages under 15 ms in the stage profile (was 85 ms), title sort under 5 ms, ordering-equivalence tests pass
 **Depends on**: I2.3
@@ -725,28 +727,32 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 
 ### 6b.3 Epic N3b: Say what changed after a gap
 
-### [ ] Task N3.6: Say what changed after a long offline gap (follow-up of N3.4)
+### [x] Task N3.6: Say what changed after a long offline gap (follow-up of N3.4)
 **Owner**: Frontend Developer · **QA**: Evidence Collector
+**Done:** 2026-10-31, Code Reviewer PASS after two rounds (a stale or null baseline made every block look new; fixed in `page-editor.ts`, with a spec), QA Evidence Collector: PASS on a quiet machine (five runs, toast 1501 ms after the refetch every time, no toast when unchanged, one toast on replay, no toast during navigation, no content or counts in the text, live region, Show reachable by keyboard, focus or hover pauses the timer). Narrative Designer recommendation (not built): no summary for reveals on closed pages; recorded in `docs/design/reveal.md` section 11. Known existing limitation (N3.4, not changed): Reload on a page with unsaved typing ends in a save conflict because the DM's reveal already raised the revision; follow-up: refetch and retry non-body changes on a 409, merge body edits by block id.
 **Description**: When the stream reconnects without a usable `Last-Event-ID` (no event received before the gap, or the server ring has moved on) the client refetches silently. Compare the refetched open page with the previous one (block ids newly present, which the client already can compute) and toast 'New details on this page | Show' for it; for other pages keep the existing 'You have {n} new pages' summary, and decide with the Narrative Designer whether a 'something changed on {n} pages you can see' summary is wanted for block reveals on pages that are not open (needs a per-page revision comparison). Never put content or secret counts in the toast.
 **Acceptance Criteria**: offline reveal on the open page shows a toast after reconnect; no toast when nothing changed; no duplicate toast when events are replayed; a unit test per case
 **Depends on**: N3.4
 
 ### 6b.4 Epic H1: Test health and follow-ups
 
-### [ ] Task H1.1: Make the load-sensitive tests reliable
+### [x] Task H1.1: Make the load-sensitive tests reliable
 **Owner**: Test Automation Engineer · **QA**: Reality Checker
+**Done:** 2026-10-31, Code Reviewer PASS, QA Reality Checker: PASS with caveats. **Partly resolved.** Fixed at the cause: `homebrew.test.ts`, the homebrew test in `mcp.test.ts` and `transfer.test.ts` 'imports as a new campaign' all paid the lazy ajv compile of the 5etools homebrew schema (2.7 s alone, 14 to 19 s loaded) inside their first save; it is now warmed in `beforeAll` (90 s hook budget with a written reason; the 20 s test timeout is unchanged). Under load the old tests took 10.5 to 11 s, the fixed ones 0.26 to 0.37 s. `pnpm -s test` ran 5 of 5 green at load 20 to 28. Not resolved: the original red failure was never reproduced (five green runs show margin, not proof); `backup-routes` stalled reader was already fixed in 74cd422; `restore-crash` was not reproduced and is unchanged (26 s loaded against a 240 s limit); the I3.3 e2e timeouts have no found cause (artifacts were overwritten; `docs/qa/test-health.md` lists what to keep next time). Watch: backup-routes 'refuses to start on an invalid BACKUP_DIR' takes 7 to 9 s loaded.
 **Description**: These server tests fail now and then when the whole suite runs in parallel and pass alone: `backup-routes.test.ts` ("a stalled reader is cut off after the idle time"), `restore-crash.test.ts` (about 36 s under load), `transfer.test.ts` ("imports as a new campaign"), `homebrew.test.ts` and the homebrew test in `mcp.test.ts` (20 s timeouts). They have each failed in more than one full run in waves 2 and 3. Find the cause of each (shared timers, CPU load, real sleeps, a seed that is too big) and remove it without raising timeouts as the only fix; use injected clocks or smaller fixtures. Also look at the one `pnpm e2e` run that failed with many specs timing out after about a minute and passed on the rerun (I3.3, cause not found).
 **Acceptance Criteria**: `pnpm -s test` run 5 times in a row on a loaded machine with no failure; the cause of each flake is written in the task note; no test timeout raised without a reason
 **Depends on**: none
 
-### [ ] Task H1.2: Run the restore drill against the built bundle in the release gate
+### [x] Task H1.2: Run the restore drill against the built bundle in the release gate
 **Owner**: DevOps Automator · **QA**: Reality Checker
+**Done:** 2026-10-31, Code Reviewer PASS, QA Reality Checker: PASS. New `pnpm gate:drill` builds `apps/server` and runs `restore-drill.test.ts` verbose; `docs/RELEASE.md` and the G2.1/G3.1 text name the step. Run: both tests passed, none skipped (sources 14 to 15 s, built bundle 11 to 12 s); negative control with `dist/` removed shows the bundle test skipped. Note: the G1.5 certification should name `pnpm gate:drill` too.
 **Description**: `restore-drill.test.ts` has one test, "the same drill passes against the built bundle (dist/)", which is skipped unless `apps/server/dist/` exists, so it is skipped in normal runs. Make the release gate (G2.1, `RELEASE.md`) build first and run it, and say so in the gate checklist.
 **Acceptance Criteria**: `docs/RELEASE.md` and G2.1 list the step; one documented run with the bundle built shows the test passing, not skipped
 **Depends on**: none
 
-### [ ] Task H1.3: Keyboard check of the Properties panel
+### [x] Task H1.3: Keyboard check of the Properties panel
 **Owner**: Accessibility Auditor · **QA**: Evidence Collector
+**Done:** 2026-10-31, Evidence Collector QA: PASS after two fix rounds. Finding in `docs/qa/properties-keyboard.md`: in the web app a property definition cannot be deleted without the app's own dialog (Cancel focused first, Esc cancels); no single key or click deletes; Enter, Tab, Enter or Space with the dialog open does. No product code changed. **Open product decisions:** the MCP tool `delete_property` deletes the definition and every value with no in-app confirmation (client-side `destructive` hint only); there is no undo or trash for property definitions; the delete button's rest contrast is about 1.77:1 (fails 1.4.11). New `e2e/properties-keyboard.spec.ts` (6 of 6 green, 2 under 12 busy loops, mutation check fails on the direct assertion). Known limit: the spec timed out under 16 busy loops before it was slimmed (not re-run at that load).
 **Description**: During the I2.2 browser QA a custom property ("Mood") disappeared while a script kept sending Tab, arrow and Enter keys with focus on the Properties panel. Find out whether a stray Enter can delete a custom property without a confirmation, and whether a mouse click can. Deleting a property definition drops its values on every page, so it needs the app's own confirmation dialog (as the other destructive actions have since 1.1.1) and an Undo or trash path if one exists.
 **Acceptance Criteria**: the finding in `docs/qa/` or the task note; if a property can be removed without confirmation, a fix with a test; keyboard-only operation of the panel documented
 **Depends on**: none
@@ -758,8 +764,9 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 **Acceptance Criteria**: tests for a removed member, a disabled user, a logged-out session and a demoted co-DM on the tracker stream; the sentinel crawl stays green
 **Depends on**: none
 
-### [ ] Task H1.5: Tidy the tracker's death-save edge cases
+### [x] Task H1.5: Tidy the tracker's death-save edge cases
 **Owner**: Backend Architect · **QA**: API Tester
+**Done:** 2026-10-31, Code Reviewer PASS, QA API Tester: PASS (live instance, 21 of 21 checks, player projection leaks nothing). Decisions in `docs/design/tracker-rules.md` section 1b: failures on a stable combatant make it dying again; death saves on a creature that does not make them are ignored; `update` on the lair row drops hp, hpMax, tempHp, ac and deathSaves; hp below 0 is clamped to 0. A stored `dying` object on a monster written before this change stays visible to the DM until edited (no migration; never shown to players).
 **Description**: Small gaps found in the I3.2 QA and the I3.3 design review, none leaks anything: `deathSaveAdjust` with failures on a stable combatant keeps `status: 'stable'` with the failures counted (the UI offers Clear counts); `deathSave` and `update {hp: 0}` on a monster that does not make death saves still create a `dying` object (never shown to players); `update` can set `hp` and `ac` on the lair row (the UI hides those controls, the reducer does not refuse); `hp` below 0 is allowed by `update`. Decide each with the Game Designer (refuse, ignore or keep) and add a test per decision.
 **Acceptance Criteria**: each of the four cases has a decision in `docs/design/tracker-rules.md` and a test
 **Depends on**: none
@@ -771,8 +778,9 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 **Acceptance Criteria**: the file passes 20 times in a row, also while another e2e run loads the machine; a planted `dying` leak on a flagged monster fails the spec
 **Depends on**: none
 
-### [ ] Task S1.1: Players cannot probe pages through page-link properties
+### [x] Task S1.1: Players cannot probe pages through page-link properties
 **Owner**: Backend Architect · **QA**: Application Security Engineer
+**Done:** 2026-10-31, Code Reviewer PASS (second round: the first commit held only the test because a shared `git stash` moved the fix; redone), QA Application Security Engineer: APPROVED (150 interleaved rounds per case over HTTP and MCP: hidden, selected-other, trashed, other-campaign, nonexistent and wrong-type-hidden ids give one identical status and body, timing differences at most 0.09 ms; visible ids and clearing still work; nothing stored). Same error for all, the visibility check runs before the lookup and the type check. Follow-up: `apply-template` is not DM-gated (no player route to a page id found, but no player test).
 **Description**: Found in the I1.4/I1.5 security QA (F3): `PATCH` with a page-link property (`props.<key> = <page id>`) returns 200 for a hidden or selected-other page and 400 "Linked page ... not found in this campaign" for a nonexistent, other-campaign or trashed id (`assertPageInCampaign` ignores the viewer). A player with a real id can confirm that a hidden page exists, and the id is stored in the DM's view. For players, validate against the pages they can see and answer the same error for everything else (or clear the value, as the merge does for links); check facet and template pageLink fields too.
 **Acceptance Criteria**: identical response for hidden, nonexistent, other-campaign, trashed and selected-other ids; a visible id still works; sentinel crawl green
 **Depends on**: none
@@ -783,14 +791,16 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 **Acceptance Criteria**: tests for move into and out of a container and for the malformed shapes; no leak; I1.6 (attribute re-id) can be done in the same pass
 **Depends on**: none
 
-### [ ] Task S1.3: Tracker and campaign stream follow-ups
+### [x] Task S1.3: Tracker and campaign stream follow-ups
 **Owner**: Realtime Collaboration Engineer · **QA**: Application Security Engineer
+**Done:** 2026-10-31, Code Reviewer PASS after one round (tracker route slot leak on a throw; tracker web clients looped on eviction), QA Application Security Engineer: APPROVED (live: 1400 raw requests and 300 open/close cycles, capacity stayed exact). Tracker streams now go through `admit()`; the campaign stream ends with a `bye` event with reason `access`; the MCP `path` helper rejects `.` and `..` for every tool; new `tracker-stream.ts` client helper (evicted and access stop and show a paused notice, restart reconnects with jitter, a refused connection shows a notice). Residual: the forced-throw slot release is covered by a unit test only; the tracker client notice was not browser-tested; access loss on an idle stream shows within one heartbeat (25 s).
 **Description**: From the H1.4 QA: tracker streams are not counted in the per-user, per-campaign and global stream caps (one player opened 40); the campaign stream closes without `bye` on access loss (clients reconnect and get 404/401); the tracker delivery guard in `routes/play.ts` has no test of its own (set a long heartbeat so the delivery path closes the stream first); the MCP client `path` helper leaves `.` and `..` unencoded (N1.5; reject them for all tools).
 **Acceptance Criteria**: tracker streams go through `admit()`; tests for each; sentinel crawl green
 **Depends on**: none
 
-### [ ] Task S1.4: History panel follow-ups
+### [x] Task S1.4: History panel follow-ups
 **Owner**: Frontend Developer · **QA**: Evidence Collector
+**Done:** 2026-10-31, Code Reviewer PASS (mutation checks), QA Evidence Collector: PASS (browser: restore-warnings box, DM-only properties, dark mode at 200% zoom and text zoom emulated, forced colours emulated, one history reload per restore, late save for an old page). Hardening added after review: preview, share and add-subpage wait for a running restore. Not tested: real Windows forced colours, Chrome text-only zoom. Typing made during a restore is kept but not saved (the app says so; existing design). Observation: during a pending save the URL can show the new page while the editor still shows the old one until the save ends.
 **Description**: From the N1.4 QA: a save for the old page that resolves after a page change can overwrite the new page in the editor (guard `page.set` by page id; this also existed for timer saves); closing and reopening the panel during a restore can race a PATCH against the POST; the list reloads up to three times per restore; the restore-warnings box, DM-only properties in 'Other changes', dark mode at 200% text and forced colours on a real OS were not browser-tested.
 **Acceptance Criteria**: a test per race; the Evidence Collector re-runs the untested items
 **Depends on**: none
@@ -804,7 +814,7 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 
 | Wave | Tasks |
 |---|---|
-| 1 | I2.4, I2.5, N3.6, H1.1, H1.2, H1.3, H1.5, S1.1, S1.3, S1.4 (independent of each other) |
+| 1 | I2.4, I2.5, N3.6, H1.1, H1.2, H1.3, H1.5, S1.1, S1.3, S1.4 (independent of each other). **Done 2026-10-31**, merged locally, not pushed; full gate green (1004 server and shared tests, 550 web tests, `pnpm e2e` 144 passed and 8 skipped, `pnpm gate:drill` both tests passed). H1.1 is partly resolved (see its note) |
 | 2 | S1.2 (with I1.6), I2.6 (after I2.5; needs the Product Manager decision first) |
 | 3 | I2.7 (after I2.4 and I2.5; only if campaigns pass about 5,000 pages) |
 | 4 | G3.1 |
