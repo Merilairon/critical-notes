@@ -22,3 +22,38 @@ and check `dmesg`/`journalctl` for memory pressure at that time. Not guessed fur
 ## Rule
 
 A test that needs a one-time expensive setup does it in `beforeAll` with a written budget; a test body never carries it.
+
+## Verification (QA, 2026-10-31)
+
+Run in `.wt/h1-1` at 6425e07, 16 cores, with a second `pnpm exec vitest run --project server` looping in the background for the whole time
+(unrelated desktop load of about 9 at the start). `uptime` before: load 9.22, 20.76, 18.09; after: 25.23, 26.51, 21.98 (21:37 to 21:44).
+
+| Run | `pnpm -s test` exit | Server project | Web project | Wall |
+|---|---|---|---|---|
+| 1 | 0 | 58 files, 1003 passed, 1 skipped, 54.3 s | 50 files, 550 passed, 12.1 s | 87 s |
+| 2 | 0 | 58 files, 1003 passed, 1 skipped, 52.4 s | 50 files, 550 passed, 12.4 s | 72 s |
+| 3 | 0 | 58 files, 1003 passed, 1 skipped, 54.4 s | 50 files, 550 passed, 12.3 s | 83 s |
+| 4 | 0 | 58 files, 1003 passed, 1 skipped, 56.5 s | 50 files, 550 passed, 17.4 s | 81 s |
+| 5 | 0 | 58 files, 1003 passed, 1 skipped, 50.9 s | 50 files, 550 passed, 11.3 s | 76 s |
+
+Load average at the end of each run: 24.7, 22.8, 28.4, 27.3, 25.2. 5 of 5 green.
+
+Negative control (the five files only, same machine, load about 20, run once each, sequentially): the tests of the old test tree (981b000) against the fixed tree (6425e07).
+
+| Test | Old tests | Fixed tests |
+|---|---|---|
+| homebrew "keeps private sources private..." | 10.7 s | 0.33 s |
+| transfer "imports as a new campaign..." | 10.5 s | 0.37 s |
+| mcp "writes homebrew, with validation" | 11.0 s | 0.26 s |
+| backup-routes "a stalled reader is cut off..." | 0.50 s | 0.30 s |
+| restore-crash "resumes to a complete restore from every point" | 26.9 s | 25.9 s |
+
+So the fix, not luck, removed the 10+ s homebrew/transfer/mcp cost from the test bodies (it moved to the 90 s `beforeAll`).
+
+Caveat: H1.1 is only partly resolved.
+- The three homebrew-schema flakes have a measured cause and a measured effect.
+- The old tests also passed in the control (10 to 11 s is under the 20 s limit at this load), so the original failure itself was not reproduced here; the evidence is the margin, not a red run.
+- `restore-crash` was never reproduced as a failure; no change was made, and it still takes 26 s under load (limit 240 s). The cause of any earlier failure is unknown.
+- The I3.3 e2e timeout cause is not found, and `pnpm e2e` was not part of these five runs.
+- The `backup-routes` "refuses to start on an invalid BACKUP_DIR" test takes 7 to 9 s under load in both trees; it is not a listed flake, but it uses a fraction of its margin worth watching.
+- Five green runs on one machine and one afternoon show the margin, not that flakes are gone.
