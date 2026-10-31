@@ -5,6 +5,7 @@
  */
 import type { BlockDocument, BlockNode } from './doc';
 import { blockType, type ProjectContext } from './registry';
+import { sanitizeDoc } from './sanitize';
 
 export function isHiddenFromPlayers(node: BlockNode): boolean {
   const def = blockType(node.type);
@@ -225,7 +226,11 @@ export function mergePlayerEdit(stored: BlockDocument | null, submittedDoc: Bloc
     if (node.type === 'pageEmbed' && node.attrs?.pageId && !ctx.canSeePage(String(node.attrs.pageId))) return [];
     return [node.content ? { ...node, content: node.content.flatMap(flattenHiddenLinks) } : node];
   };
-  const submitted = { ...submittedDoc, content: submittedDoc.content?.flatMap(flattenHiddenLinks) };
+  // Sanitize first, as the server does when it stores the result: a block inside inline content is flattened and a child the parent does not allow
+  // is removed before any id is matched, so the merge only ever sees positions where blocks can really sit (a forged copy of a stored container
+  // inside a paragraph cannot take the container's hidden children, and a stored block whose copy is removed is kept by the deleted-block rule).
+  const clean = sanitizeDoc(submittedDoc).doc;
+  const submitted = { ...clean, content: clean.content?.flatMap(flattenHiddenLinks) };
   if (!stored?.content?.length) return { ...submitted, content: submitted.content?.map(clearRevealed) };
   // The player never held an id of a block they cannot see, so any submitted block carrying one (at any depth) gets a new id on save
   const hiddenIds = new Set<string>();

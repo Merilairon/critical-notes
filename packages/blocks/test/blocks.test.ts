@@ -624,6 +624,27 @@ describe('mergePlayerEdit across nesting levels (S1.2)', () => {
     expect(count(merged, '"pageId":"hid"')).toBe(1);
   });
 
+  const forgedWrappers: [string, (inner: unknown) => unknown][] = [
+    ['a paragraph', (inner) => ({ type: 'paragraph', content: [inner] })],
+    ['a heading', (inner) => ({ type: 'heading', attrs: { level: 2 }, content: [inner] })],
+    ['a bulletList', (inner) => ({ type: 'bulletList', content: [inner] })],
+    ['a bulletList and listItem', (inner) => ({ type: 'bulletList', content: [{ type: 'listItem', content: [inner] }] })],
+    ['a table cell', (inner) => ({ type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [inner] }] }] })],
+    ['a callout in inline content of a paragraph in a callout', (inner) => callout('outer', { type: 'paragraph', content: [inner] })],
+  ];
+  for (const [name, wrap] of forgedWrappers) {
+    it(`keeps a stored container’s hidden child once, and shows nothing, when an empty copy of its id sits in ${name}`, () => {
+      const stored = store(callout('c1', p('Shown'), p('SENTINEL kid', { visibility: 'dm' })), p('After'));
+      const seen = player(stored);
+      const forged = { type: 'callout', attrs: { id: 'c1' }, content: [] };
+      const merged = mergePlayerEdit(stored, { ...seen, content: [wrap(forged), seen.content![1]] as never }, ctx);
+      // What the server stores is the sanitized result
+      const final = sanitizeDoc(merged).doc;
+      expect(count(final, 'SENTINEL kid')).toBe(1);
+      expect(JSON.stringify(projectDoc(final, ctx))).not.toContain('SENTINEL');
+    });
+  }
+
   it('never loses a hidden block or link under random moves between levels (brute-force oracle)', () => {
     let seed = 11;
     const rnd = (k: number) => Math.floor(((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32) * k);
@@ -663,24 +684,41 @@ describe('mergePlayerEdit across nesting levels (S1.2)', () => {
         const list = lists[rnd(lists.length)]!;
         const pick = nonEmpty.length ? nonEmpty[rnd(nonEmpty.length)]! : undefined;
         const at = pick ? rnd(pick.length) : 0;
-        const kind = rnd(4);
+        const kind = rnd(6);
+        const idOf = (b: N) => (b['attrs'] as N | undefined)?.['id'];
+        const wrap = (inner: N): N => {
+          const w = rnd(6);
+          if (w === 0) return { type: 'paragraph', content: [inner] };
+          if (w === 1) return { type: 'heading', attrs: { level: 2 }, content: [inner] };
+          if (w === 2) return { type: 'bulletList', content: [inner] };
+          if (w === 3) return { type: 'table', content: [inner] };
+          if (w === 4) return { type: 'bulletList', content: [{ type: 'listItem', content: [inner] }] };
+          return { type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [inner] }] }] };
+        };
         if (kind === 0 && pick) list.push(JSON.parse(JSON.stringify(pick[at])));
         else if (kind === 1 && hiddenIdsOf.length) list.push(p('forged', { id: hiddenIdsOf[rnd(hiddenIdsOf.length)]! }) as N);
         else if (kind === 2 && pick && pick[at]!['type'] === 'callout') pick[at] = p('now a paragraph', { id: (pick[at]!['attrs'] as N)['id'] }) as N;
-        else if (kind === 3 && pick) pick[at] = callout(String((pick[at]!['attrs'] as N)['id']), pick[at]) as unknown as N;
+        else if (kind === 3 && pick) pick[at] = callout(String(idOf(pick[at]!)), pick[at]) as unknown as N;
+        // A wrapper of any kind around an empty forged container that carries a stored id (the original is dropped)
+        else if (kind === 4 && pick) pick[at] = wrap({ type: 'callout', attrs: { id: idOf(pick[at]!) }, content: [] });
+        // A wrapper of any kind around the real block
+        else if (kind === 5 && pick) pick[at] = wrap(pick[at]!);
       }
       const merged = mergePlayerEdit(stored, { ...seen, content: tree as never }, ctx);
+      // The server stores the merge result after sanitizing it, so that is what must be intact and safe
+      const final = sanitizeDoc(merged).doc;
       const grafted = (ns: BlockNode[] | undefined): boolean => !!ns?.some((b) => (b.type === 'paragraph' && b.content?.some((c) => c.type === 'paragraph' || c.type === 'callout')) || grafted(b.content));
       expect(grafted(merged.content), `a block was grafted into a paragraph in run ${run}`).toBe(false);
-      expect(JSON.stringify(projectDoc(merged, ctx)), `hidden text visible in run ${run}`).not.toMatch(/"text":"Hn/);
+      expect(JSON.stringify(projectDoc(final, ctx)), `hidden text visible in run ${run}`).not.toMatch(/"text":"Hn/);
+      const kept = sanitizeDoc({ ...seen, content: tree } as never).doc;
+      const hasLinkText = (id: string, ns: BlockNode[] | undefined): boolean => !!ns?.some((b) => (b.attrs?.id === id && b.type === 'paragraph' && JSON.stringify(b.content).includes(`"text":"L${id}"`)) || hasLinkText(id, b.content));
       const wanted = JSON.stringify(stored).match(/H(n\d+_\d+)|"label":"(L\w+)"/g) ?? [];
       for (const w of wanted) {
-        // A link whose label text the player deleted (or swapped out together with what held it) is gone, as in any delete
-        if (w.startsWith('"label"') && !JSON.stringify(tree).includes(`"text":"${w.slice(9, -1)}"`)) continue;
-        // A repeated id is ambiguous: the first block in document order is the one that is matched (the player chose what came first)
-        if (w.startsWith('"label"') && count({ type: 'doc', content: tree } as never, `"id":"${w.slice(10, -1)}"`) > 1) continue;
+        // A link survives if its paragraph (with its label text) is still a paragraph with that id after the player's body is sanitized, and the id is not repeated
+        // (a repeated id is ambiguous: the first block in document order is the one that is matched). Anything else is the player deleting the paragraph.
+        if (w.startsWith('"label"') && !(hasLinkText(w.slice(10, -1), kept.content) && count(kept, `"id":"${w.slice(10, -1)}"`) === 1)) continue;
         const needle = w.startsWith('H') ? `"text":"${w}"` : w;
-        expect(count(merged, needle), `${needle} in run ${run}`).toBe(1);
+        expect(count(final, needle), `${needle} in run ${run}`).toBe(1);
       }
     }
   });

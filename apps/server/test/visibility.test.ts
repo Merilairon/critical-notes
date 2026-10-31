@@ -567,6 +567,31 @@ describe('what players may change', () => {
     expect(JSON.stringify((await dm.get(`${base()}/pages/${ids['pc']}`)).body.body)).toContain('SENTINEL swap child');
   });
 
+  it('keeps the DM’s hidden child once and shows players nothing when a container’s id is forged inside another block', async () => {
+    const wrappers: [string, (inner: unknown) => unknown][] = [
+      ['paragraph', (inner) => ({ type: 'paragraph', content: [inner] })],
+      ['heading', (inner) => ({ type: 'heading', attrs: { level: 2 }, content: [inner] })],
+      ['bulletList', (inner) => ({ type: 'bulletList', content: [inner] })],
+      ['listItem', (inner) => ({ type: 'bulletList', content: [{ type: 'listItem', content: [inner] }] })],
+      ['tableCell', (inner) => ({ type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [inner] }] }] })],
+    ];
+    for (const [name, wrap] of wrappers) {
+      const boxId = `fg-${name}`;
+      const box = { type: 'callout', attrs: { id: boxId }, content: [para('Shown line'), para(`SENTINEL forged ${name}`, { visibility: 'dm' })] };
+      const before = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
+      expect((await dm.patch(`${base()}/pages/${ids['pc']}`, { revision: before.revision, body: { ...before.body, content: [...before.body.content, box] } })).status).toBe(200);
+      const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+      const forged = { type: 'callout', attrs: { id: boxId }, content: [] };
+      const content = mine.body.content.map((b: { attrs?: { id?: string } }) => (b.attrs?.id === boxId ? wrap(forged) : b));
+      const res = await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, body: { ...mine.body, content } });
+      expect(res.status, name).toBe(200);
+      expect(JSON.stringify(res.body), name).not.toMatch(SENTINEL);
+      expect(JSON.stringify((await player.get(`${base()}/pages/${ids['pc']}`)).body), name).not.toMatch(SENTINEL);
+      const stored = JSON.stringify((await dm.get(`${base()}/pages/${ids['pc']}`)).body.body);
+      expect(stored.split(`SENTINEL forged ${name}`).length - 1, name).toBe(1);
+    }
+  });
+
   it('refuses a body whose hidden content would be cut off by the depth limit, with the same 400 at every depth over it', async () => {
     const hiddenChain = { type: 'callout', attrs: { id: 'dh' }, content: [{ type: 'callout', content: [{ type: 'callout', content: [{ type: 'callout', content: [para('SENTINEL deep child')] }] }] }] };
     const box = { type: 'callout', attrs: { id: 'dc', visibility: 'inherit' }, content: [para('Visible in dc'), { ...hiddenChain, attrs: { id: 'dh', visibility: 'dm' } }] };
