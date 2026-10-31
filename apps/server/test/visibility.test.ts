@@ -507,6 +507,119 @@ describe('what players may change', () => {
     expect(JSON.stringify(asDm.body)).toContain(`"pageId":"${ids['hidden']}","label":"a rival"`);
   });
 
+  it('keeps the DM’s link to a hidden page when the player moves its paragraph into a container and back out', async () => {
+    const link = { type: 'paragraph', attrs: { id: 'mv-link' }, content: [{ type: 'text', text: 'Hates ' }, { type: 'pageLink', attrs: { pageId: ids['hidden'], label: 'the baron' } }] };
+    const box = { type: 'callout', attrs: { id: 'mv-box' }, content: [para('Box tip')] };
+    const dmBefore = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
+    expect((await dm.patch(`${base()}/pages/${ids['pc']}`, { revision: dmBefore.revision, body: { ...dmBefore.body, content: [...dmBefore.body.content, link, box] } })).status).toBe(200);
+    const move = async (edit: (content: { attrs?: { id?: string }; content?: unknown[] }[]) => unknown[]) => {
+      const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+      expect(JSON.stringify(mine.body)).not.toContain(ids['hidden']);
+      const res = await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, body: { ...mine.body, content: edit(mine.body.content) } });
+      expect(res.status).toBe(200);
+      expect(JSON.stringify(res.body)).not.toContain(ids['hidden']);
+      return JSON.stringify((await dm.get(`${base()}/pages/${ids['pc']}`)).body.body);
+    };
+    const hiddenLink = `"pageId":"${ids['hidden']}","label":"the baron"`;
+    const into = await move((content) => {
+      const mover = content.find((b) => b.attrs?.id === 'mv-link')!;
+      return content.filter((b) => b !== mover).map((b) => (b.attrs?.id === 'mv-box' ? { ...b, content: [...b.content!, mover] } : b));
+    });
+    expect(into.split(hiddenLink).length - 1).toBe(1);
+    const out = await move((content) => {
+      const boxNow = content.find((b) => b.attrs?.id === 'mv-box')!;
+      const mover = boxNow.content!.find((b) => (b as { attrs?: { id?: string } }).attrs?.id === 'mv-link')!;
+      return [...content.map((b) => (b === boxNow ? { ...b, content: boxNow.content!.filter((c) => c !== mover) } : b)), mover];
+    });
+    expect(out.split(hiddenLink).length - 1).toBe(1);
+  });
+
+  it('refuses malformed or absurdly deep bodies with the same 400 whether or not the page holds hidden data', async () => {
+    const deep = `${'{"type":"callout","content":['.repeat(3000)}{"type":"paragraph"}${']}'.repeat(3000)}`;
+    const shapes: unknown[] = [{ type: 'paragraph', content: [null] }, { type: 'paragraph', content: {} }, { type: 'callout', content: 'x' }, null, [], 'DEEP'];
+    const submit = async (shape: unknown) => {
+      const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+      const json = JSON.stringify({ revision: mine.revision, body: { ...mine.body, content: [...mine.body.content, shape] } }).replace('"DEEP"', deep);
+      const res = await player.app.request(`http://localhost${base()}/pages/${ids['pc']}`, { method: 'PATCH', headers: { origin: 'http://localhost', host: 'localhost', cookie: player.cookie, 'content-type': 'application/json' }, body: json });
+      return { status: res.status, body: await res.json() };
+    };
+    const first = await Promise.all(shapes.map(submit));
+    expect(first.map((r) => r.status)).toEqual(shapes.map(() => 400));
+    const hasHidden = JSON.stringify((await dm.get(`${base()}/pages/${ids['pc']}`)).body.body);
+    expect(hasHidden).toMatch(SENTINEL);
+    const second = await Promise.all(shapes.map(submit));
+    expect(second.map((r) => r.status)).toEqual(shapes.map(() => 400));
+    expect(second.map((r) => r.body)).toEqual(first.map((r) => r.body));
+    expect(new Set(first.map((r) => JSON.stringify(r.body))).size).toBe(1);
+    expect(JSON.stringify(first.map((r) => r.body))).not.toMatch(SENTINEL);
+  });
+
+  it('does not graft the DM’s hidden children into a paragraph that reuses a container’s id', async () => {
+    const box = { type: 'callout', attrs: { id: 'swap-box' }, content: [para('Shown line'), para('SENTINEL swap child', { visibility: 'dm' })] };
+    const before = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
+    expect((await dm.patch(`${base()}/pages/${ids['pc']}`, { revision: before.revision, body: { ...before.body, content: [...before.body.content, box] } })).status).toBe(200);
+    const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+    const content = mine.body.content.map((b: { attrs?: { id?: string } }) => (b.attrs?.id === 'swap-box' ? { type: 'paragraph', attrs: { id: 'swap-box' }, content: [{ type: 'text', text: 'Now a paragraph' }] } : b));
+    const res = await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, body: { ...mine.body, content } });
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(res.body)).not.toMatch(SENTINEL);
+    expect(JSON.stringify((await player.get(`${base()}/pages/${ids['pc']}`)).body)).not.toMatch(SENTINEL);
+    expect(JSON.stringify((await dm.get(`${base()}/pages/${ids['pc']}`)).body.body)).toContain('SENTINEL swap child');
+  });
+
+  it('keeps the DM’s hidden child once and shows players nothing when a container’s id is forged inside another block', async () => {
+    const wrappers: [string, (inner: unknown) => unknown][] = [
+      ['paragraph', (inner) => ({ type: 'paragraph', content: [inner] })],
+      ['heading', (inner) => ({ type: 'heading', attrs: { level: 2 }, content: [inner] })],
+      ['bulletList', (inner) => ({ type: 'bulletList', content: [inner] })],
+      ['listItem', (inner) => ({ type: 'bulletList', content: [{ type: 'listItem', content: [inner] }] })],
+      ['tableCell', (inner) => ({ type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [inner] }] }] })],
+    ];
+    for (const [name, wrap] of wrappers) {
+      const boxId = `fg-${name}`;
+      const box = { type: 'callout', attrs: { id: boxId }, content: [para('Shown line'), para(`SENTINEL forged ${name}`, { visibility: 'dm' })] };
+      const before = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
+      expect((await dm.patch(`${base()}/pages/${ids['pc']}`, { revision: before.revision, body: { ...before.body, content: [...before.body.content, box] } })).status).toBe(200);
+      const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+      const forged = { type: 'callout', attrs: { id: boxId }, content: [] };
+      const content = mine.body.content.map((b: { attrs?: { id?: string } }) => (b.attrs?.id === boxId ? wrap(forged) : b));
+      const res = await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, body: { ...mine.body, content } });
+      expect(res.status, name).toBe(200);
+      expect(JSON.stringify(res.body), name).not.toMatch(SENTINEL);
+      expect(JSON.stringify((await player.get(`${base()}/pages/${ids['pc']}`)).body), name).not.toMatch(SENTINEL);
+      const stored = JSON.stringify((await dm.get(`${base()}/pages/${ids['pc']}`)).body.body);
+      expect(stored.split(`SENTINEL forged ${name}`).length - 1, name).toBe(1);
+    }
+  });
+
+  it('refuses a body whose hidden content would be cut off by the depth limit, with the same 400 at every depth over it', async () => {
+    const hiddenChain = { type: 'callout', attrs: { id: 'dh' }, content: [{ type: 'callout', content: [{ type: 'callout', content: [{ type: 'callout', content: [para('SENTINEL deep child')] }] }] }] };
+    const box = { type: 'callout', attrs: { id: 'dc', visibility: 'inherit' }, content: [para('Visible in dc'), { ...hiddenChain, attrs: { id: 'dh', visibility: 'dm' } }] };
+    const before = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
+    expect((await dm.patch(`${base()}/pages/${ids['pc']}`, { revision: before.revision, body: { ...before.body, content: [...before.body.content, box] } })).status).toBe(200);
+    // The player moves dc under `levels` new callouts
+    const nest = async (levels: number) => {
+      const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+      const rest = mine.body.content.filter((b: { attrs?: { id?: string } }) => b.attrs?.id !== 'dc');
+      const dc = mine.body.content.find((b: { attrs?: { id?: string } }) => b.attrs?.id === 'dc');
+      const json = JSON.stringify({ revision: mine.revision, body: { ...mine.body, content: [...rest, 'DEEP'] } }).replace(
+        '"DEEP"',
+        `${'{"type":"callout","content":['.repeat(levels)}${JSON.stringify(dc)}${']}'.repeat(levels)}`,
+      );
+      const res = await player.app.request(`http://localhost${base()}/pages/${ids['pc']}`, { method: 'PATCH', headers: { origin: 'http://localhost', host: 'localhost', cookie: player.cookie, 'content-type': 'application/json' }, body: json });
+      return { status: res.status, body: await res.json() };
+    };
+    const results = new Map<number, { status: number; body: unknown }>();
+    // The one that is accepted goes last: it changes the page
+    for (const levels of [35, 36, 38, 40, 41, 45, 90, 34]) results.set(levels, await nest(levels));
+    // dc ends up `levels` deep and its hidden chain reaches 5 below it; a paragraph deeper than 39 would lose its text: 35 to 38 are refused only because of what the merge adds, 40 and over because of what the player sent
+    expect([...results].map(([levels, r]) => [levels, r.status === 200])).toEqual([[35, false], [36, false], [38, false], [40, false], [41, false], [45, false], [90, false], [34, true]]);
+    const refused = [...results.values()].filter((r) => r.status === 400);
+    expect(new Set(refused.map((r) => JSON.stringify(r.body))).size).toBe(1);
+    expect(JSON.stringify([...results.values()].map((r) => r.body))).not.toMatch(SENTINEL);
+    expect(JSON.stringify((await dm.get(`${base()}/pages/${ids['pc']}`)).body.body)).toContain('SENTINEL deep child');
+  });
+
   it('does not store a player’s forged pageEmbed to a hidden page', async () => {
     const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
     const forged = { type: 'pageEmbed', attrs: { pageId: ids['hidden'], mode: 'card' } };

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { and, asc, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
-import { docLinks, mergePlayerEdit, projectDoc, queryFilterSchema, runQuery, sanitizeDoc, type BlockDocument, type BlockNode, type ProjectContext, type QueryablePage, type QueryFilterInput } from '@cn/blocks';
+import { docLinks, MAX_BLOCK_DEPTH, mergePlayerEdit, projectDoc, queryFilterSchema, runQuery, sanitizeDoc, type BlockDocument, type BlockNode, type ProjectContext, type QueryablePage, type QueryFilterInput } from '@cn/blocks';
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { generateKeyBetween } from 'fractional-indexing';
 import {
@@ -734,6 +734,24 @@ export class PageService {
   }
 
   /**
+   * A body must be a tree of block objects that the sanitizer keeps whole: a block at the sanitizer's depth limit loses its
+   * children, so nothing may sit below it. Run on what the player submits (independent of what is stored) and again on the
+   * merge result, because a moved container brings hidden descendants the player cannot see, and those must never be truncated away.
+   */
+  private checkPlayerShape(body: unknown) {
+    const malformed = () => badRequest('The page body is malformed');
+    const stack: [unknown, number][] = [[body, 0]];
+    for (let item = stack.pop(); item; item = stack.pop()) {
+      const [node, depth] = item;
+      if (!node || typeof node !== 'object' || Array.isArray(node) || depth > MAX_BLOCK_DEPTH + 1) throw malformed();
+      const content = (node as { content?: unknown }).content;
+      if (content === undefined) continue;
+      if (!Array.isArray(content)) throw malformed();
+      for (const c of content) stack.push([c, depth + 1]);
+    }
+  }
+
+  /**
    * A fixed limit on the text of one inline block of what the player submitted (labels of links count, as the merge turns
    * a forged link into its label; any other inline node counts 1). It never looks at hidden content: a longer block is
    * accepted only if it is the block with the same id that the player was shown (compared with their projection), so
@@ -776,8 +794,10 @@ export class PageService {
     const dmFields = new Set(facetType ? FACET_DM_ONLY_FIELDS[facetType] : []);
     if (input.facet && Object.keys(input.facet).some((k) => dmFields.has(k) || k === 'playerUserId')) throw badRequest('Those details are for the DM');
     const projectCtx = this.playerContext(this.properties.list(campaignId), visible);
+    if (input.body) this.checkPlayerShape(input.body);
     if (input.body) this.checkPlayerTextSize(current.body as BlockDocument | null, input.body as BlockDocument, projectCtx);
     const body = input.body ? (mergePlayerEdit(current.body as BlockDocument | null, input.body as BlockDocument, projectCtx) as BlockDoc) : undefined;
+    if (body) this.checkPlayerShape(body);
     const saved = this.update(campaignId, pageId, { ...input, ...(body ? { body } : {}) }, ctx, visible);
     return this.projectPage(campaignId, saved, visible);
   }

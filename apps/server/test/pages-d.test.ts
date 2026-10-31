@@ -40,6 +40,19 @@ describe('page bodies', () => {
     expect(body.content[1]).toMatchObject({ type: 'unknownBlock', attrs: { raw: { type: 'hologram' } } });
     expect(body.content[2]).toMatchObject({ type: 'secret', attrs: { visibility: 'inherit', revealed: false } });
   });
+
+  it('keeps a block id when its visibility is invalid, on create and on PATCH (I1.6)', async () => {
+    const attrs = { id: 'bX', visibility: 'all' };
+    const created = await dm.post(`${base()}/pages`, { title: 'Ids', body: { type: 'doc', content: [{ type: 'paragraph', attrs, content: [text('one')] }] } });
+    expect(created.status).toBe(201);
+    expect(created.body.body.content[0].attrs).toMatchObject({ id: 'bX', visibility: 'inherit', revealed: false });
+    const page = (await dm.post(`${base()}/pages`, { title: 'Ids 2' })).body;
+    const res = await dm.patch(`${base()}/pages/${page.id}`, { revision: page.revision, body: { type: 'doc', content: [{ type: 'paragraph', attrs: { ...attrs, revealed: 'yes' }, content: [text('two')] }] } });
+    expect(res.status).toBe(200);
+    expect(res.body.body.content[0].attrs).toMatchObject({ id: 'bX', visibility: 'inherit', revealed: false });
+    const stored = (await dm.get(`${base()}/pages/${page.id}`)).body;
+    expect(stored.body.content[0].attrs).toMatchObject({ id: 'bX', visibility: 'inherit' });
+  });
 });
 
 describe('backlinks and entity references', () => {
