@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { docLinks, docText, mergePlayerEdit, projectDoc, runQuery, queryFilterSchema, sanitizeDoc, tagEntity, type BlockDocument, type QueryablePage } from '../src/index';
+import { docLinks, docText, mergePlayerEdit, projectDoc, runQuery, queryFilterSchema, sanitizeDoc, tagEntity, type BlockDocument, type BlockNode, type QueryablePage } from '../src/index';
 
 let n = 0;
 const newId = () => `blk_${++n}`;
@@ -173,6 +173,27 @@ describe('runQuery', () => {
     // An empty list or text counts as empty too
     expect(q({ sort: { field: 'tags', dir: 'desc' } }, null).slice(-1)).toEqual(['Sildar']);
     expect(q({ sort: { field: 'tags', dir: 'asc' } }, null).slice(-1)).toEqual(['Sildar']);
+  });
+});
+
+describe('sanitizeDoc common attributes', () => {
+  const attrsOf = (raw: Record<string, unknown>) => sanitizeDoc(doc({ type: 'paragraph', attrs: raw }), { newId }).doc.content![0]!.attrs!;
+
+  it('keeps the id when visibility is invalid, and falls back to inherit', () => {
+    expect(attrsOf({ id: 'bX', visibility: 'all' })).toMatchObject({ id: 'bX', visibility: 'inherit', revealed: false });
+  });
+
+  it('keeps the id and visibility when revealed is invalid, and falls back to false', () => {
+    expect(attrsOf({ id: 'bX', visibility: 'dm', revealed: 'yes' })).toMatchObject({ id: 'bX', visibility: 'dm', revealed: false });
+  });
+
+  it('keeps visibility and revealed when the id is invalid, and gives the block a new id', () => {
+    expect(attrsOf({ id: 'x'.repeat(65), visibility: 'dm', revealed: true })).toMatchObject({ id: expect.stringMatching(/^blk_/), visibility: 'dm', revealed: true });
+    expect(attrsOf({ id: 42, visibility: 'dm' })).toMatchObject({ id: expect.stringMatching(/^blk_/), visibility: 'dm' });
+  });
+
+  it('keeps the valid fields of a block with all three invalid, with defaults', () => {
+    expect(attrsOf({ id: 1, visibility: 'all', revealed: 'no' })).toMatchObject({ id: expect.stringMatching(/^blk_/), visibility: 'inherit', revealed: false });
   });
 });
 
@@ -493,5 +514,116 @@ describe('query block columns and player projection', () => {
     const seen = projectDoc(stored, ctx)!;
     const edited = { ...seen, content: [{ ...seen.content![0]!, attrs: { ...attrsOf(seen), columns: ['type', 'prop.mood'] } }] };
     expect(attrsOf(mergePlayerEdit(stored, edited, ctx))['columns']).toEqual(['type', 'prop.mood', 'prop.secret']);
+  });
+});
+
+describe('mergePlayerEdit across nesting levels (S1.2)', () => {
+  const ctx = { role: 'player' as const, canSeePage: (id: string) => id !== 'hid' };
+  const linkPara = (id: string, label: string) => ({ type: 'paragraph', attrs: { id }, content: [{ type: 'text', text: 'See ' }, { type: 'pageLink', attrs: { pageId: 'hid', label } }] });
+  const callout = (id: string, ...content: unknown[]): BlockNode => ({ type: 'callout', attrs: { id }, content: content as BlockNode[] });
+  const hasLink = (d: BlockDocument, label: string) => JSON.stringify(d).includes(`"pageId":"hid","label":"${label}"`);
+  const count = (d: BlockDocument, needle: string) => JSON.stringify(d).split(needle).length - 1;
+  const store = (...content: unknown[]) => sanitizeDoc(doc(...content), { newId }).doc;
+  const player = (stored: BlockDocument) => projectDoc(stored, ctx)!;
+
+  it('keeps the hidden link of a paragraph the player moves into a container', () => {
+    const stored = store(linkPara('pa', 'a rival'), callout('c1', p('Tip', { id: 'pt' })));
+    const seen = player(stored);
+    const [para, box] = seen.content!;
+    const merged = mergePlayerEdit(stored, { ...seen, content: [{ ...box!, content: [...box!.content!, para!] }] }, ctx);
+    expect(hasLink(merged, 'a rival')).toBe(true);
+    expect(count(merged, '"pageId":"hid"')).toBe(1);
+    expect(merged.content![0]!.content!.map((b) => b.attrs?.id)).toEqual(['pt', 'pa']);
+  });
+
+  it('keeps the hidden link of a paragraph the player moves out of a container', () => {
+    const stored = store(callout('c1', p('Tip', { id: 'pt' }), linkPara('pa', 'a rival')));
+    const seen = player(stored);
+    const box = seen.content![0]!;
+    const [tip, para] = box.content!;
+    const merged = mergePlayerEdit(stored, { ...seen, content: [{ ...box, content: [tip!] }, para!] }, ctx);
+    expect(hasLink(merged, 'a rival')).toBe(true);
+    expect(count(merged, '"pageId":"hid"')).toBe(1);
+    expect(merged.content![1]!.attrs?.id).toBe('pa');
+  });
+
+  it('keeps the hidden link when the paragraph moves into a container the player just made', () => {
+    const stored = store(linkPara('pa', 'a rival'));
+    const seen = player(stored);
+    const merged = mergePlayerEdit(stored, { ...seen, content: [callout('fresh', ...seen.content!)] }, ctx);
+    expect(hasLink(merged, 'a rival')).toBe(true);
+    expect(count(merged, '"pageId":"hid"')).toBe(1);
+  });
+
+  it('keeps a hidden child, once, when a visible container with one moves into another container', () => {
+    const stored = store(callout('inner', p('Shown', { id: 'ps' }), p('SENTINEL kid', { visibility: 'dm', id: 'hk' })), callout('outer', p('Tip')));
+    const seen = player(stored);
+    const [inner, outer] = seen.content!;
+    const merged = mergePlayerEdit(stored, { ...seen, content: [{ ...outer!, content: [...outer!.content!, inner!] }] }, ctx);
+    expect(count(merged, 'SENTINEL kid')).toBe(1);
+    expect(merged.content!.length).toBe(1);
+    expect(merged.content![0]!.content!.at(-1)!.content!.map((b) => b.attrs?.id)).toContain('hk');
+  });
+
+  it('keeps a hidden child once when its visible container is moved out and the old parent is deleted', () => {
+    const stored = store(callout('outer', callout('inner', p('Shown'), p('SENTINEL kid', { visibility: 'dm' }))));
+    const seen = player(stored);
+    const inner = seen.content![0]!.content![0]!;
+    const merged = mergePlayerEdit(stored, { ...seen, content: [inner] }, ctx);
+    expect(count(merged, 'SENTINEL kid')).toBe(1);
+  });
+
+  it('does not duplicate a hidden link when the player duplicates the paragraph at another level', () => {
+    const stored = store(linkPara('pa', 'a rival'), callout('c1', p('Tip')));
+    const seen = player(stored);
+    const [para, box] = seen.content!;
+    const merged = mergePlayerEdit(stored, { ...seen, content: [para!, { ...box!, content: [...box!.content!, para!] }] }, ctx);
+    expect(count(merged, '"pageId":"hid"')).toBe(1);
+  });
+
+  it('keeps a revealed secret revealed when the player moves it into a new container', () => {
+    const stored = store({ type: 'secret', attrs: { id: 's1', revealed: true }, content: [p('Out now')] });
+    const seen = player(stored);
+    expect(seen.content!.length).toBe(1);
+    const merged = mergePlayerEdit(stored, { ...seen, content: [callout('fresh', seen.content![0])] }, ctx);
+    expect(merged.content![0]!.content![0]!.attrs?.revealed).toBe(true);
+  });
+
+  it('never loses a hidden block or link under random moves between levels (brute-force oracle)', () => {
+    let seed = 11;
+    const rnd = (k: number) => Math.floor(((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32) * k);
+    for (let run = 0; run < 600; run++) {
+      let k = 0;
+      const mk = (depth: number): unknown[] =>
+        Array.from({ length: 1 + rnd(4) }, () => {
+          const r = rnd(depth < 2 ? 4 : 3);
+          const id = `n${run}_${++k}`;
+          if (r === 0) return linkPara(id, `L${id}`);
+          if (r === 1) return p(`H${id}`, { id, visibility: 'dm' });
+          if (r === 2) return p(`V${id}`, { id });
+          return callout(id, ...mk(depth + 1));
+        });
+      const stored = store(...mk(0));
+      const seen = player(stored);
+      // Move a few random visible blocks to the end of a random container or the top level (never into themselves)
+      type N = Record<string, unknown>;
+      const tree = JSON.parse(JSON.stringify(seen.content)) as N[];
+      const listsOf = (ns: N[]): N[][] => [ns, ...ns.filter((b) => b['type'] === 'callout').flatMap((b) => listsOf((b['content'] ??= []) as N[]))];
+      for (let m = 0, moves = 1 + rnd(3); m < moves; m++) {
+        const sources = listsOf(tree).filter((l) => l.length);
+        if (!sources.length) break;
+        const from = sources[rnd(sources.length)]!;
+        const moved = from.splice(rnd(from.length), 1)[0]!;
+        const inside = moved['type'] === 'callout' ? new Set(listsOf((moved['content'] ?? []) as N[])) : new Set<N[]>();
+        const targets = listsOf(tree).filter((l) => !inside.has(l));
+        targets[rnd(targets.length)]!.push(moved);
+      }
+      const merged = mergePlayerEdit(stored, { ...seen, content: tree as never }, ctx);
+      const wanted = JSON.stringify(stored).match(/H(n\d+_\d+)|"label":"(L\w+)"/g) ?? [];
+      for (const w of wanted) {
+        const needle = w.startsWith('H') ? `"text":"${w}"` : w;
+        expect(count(merged, needle), `${needle} in run ${run}`).toBe(1);
+      }
+    }
   });
 });

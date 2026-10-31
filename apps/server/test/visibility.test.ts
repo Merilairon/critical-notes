@@ -507,6 +507,53 @@ describe('what players may change', () => {
     expect(JSON.stringify(asDm.body)).toContain(`"pageId":"${ids['hidden']}","label":"a rival"`);
   });
 
+  it('keeps the DM’s link to a hidden page when the player moves its paragraph into a container and back out', async () => {
+    const link = { type: 'paragraph', attrs: { id: 'mv-link' }, content: [{ type: 'text', text: 'Hates ' }, { type: 'pageLink', attrs: { pageId: ids['hidden'], label: 'the baron' } }] };
+    const box = { type: 'callout', attrs: { id: 'mv-box' }, content: [para('Box tip')] };
+    const dmBefore = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
+    expect((await dm.patch(`${base()}/pages/${ids['pc']}`, { revision: dmBefore.revision, body: { ...dmBefore.body, content: [...dmBefore.body.content, link, box] } })).status).toBe(200);
+    const move = async (edit: (content: { attrs?: { id?: string }; content?: unknown[] }[]) => unknown[]) => {
+      const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+      expect(JSON.stringify(mine.body)).not.toContain(ids['hidden']);
+      const res = await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, body: { ...mine.body, content: edit(mine.body.content) } });
+      expect(res.status).toBe(200);
+      expect(JSON.stringify(res.body)).not.toContain(ids['hidden']);
+      return JSON.stringify((await dm.get(`${base()}/pages/${ids['pc']}`)).body.body);
+    };
+    const hiddenLink = `"pageId":"${ids['hidden']}","label":"the baron"`;
+    const into = await move((content) => {
+      const mover = content.find((b) => b.attrs?.id === 'mv-link')!;
+      return content.filter((b) => b !== mover).map((b) => (b.attrs?.id === 'mv-box' ? { ...b, content: [...b.content!, mover] } : b));
+    });
+    expect(into.split(hiddenLink).length - 1).toBe(1);
+    const out = await move((content) => {
+      const boxNow = content.find((b) => b.attrs?.id === 'mv-box')!;
+      const mover = boxNow.content!.find((b) => (b as { attrs?: { id?: string } }).attrs?.id === 'mv-link')!;
+      return [...content.map((b) => (b === boxNow ? { ...b, content: boxNow.content!.filter((c) => c !== mover) } : b)), mover];
+    });
+    expect(out.split(hiddenLink).length - 1).toBe(1);
+  });
+
+  it('refuses malformed or absurdly deep bodies with the same 400 whether or not the page holds hidden data', async () => {
+    const deep = `${'{"type":"callout","content":['.repeat(3000)}{"type":"paragraph"}${']}'.repeat(3000)}`;
+    const shapes: unknown[] = [{ type: 'paragraph', content: [null] }, { type: 'paragraph', content: {} }, { type: 'callout', content: 'x' }, null, [], 'DEEP'];
+    const submit = async (shape: unknown) => {
+      const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+      const json = JSON.stringify({ revision: mine.revision, body: { ...mine.body, content: [...mine.body.content, shape] } }).replace('"DEEP"', deep);
+      const res = await player.app.request(`http://localhost${base()}/pages/${ids['pc']}`, { method: 'PATCH', headers: { origin: 'http://localhost', host: 'localhost', cookie: player.cookie, 'content-type': 'application/json' }, body: json });
+      return { status: res.status, body: await res.json() };
+    };
+    const first = await Promise.all(shapes.map(submit));
+    expect(first.map((r) => r.status)).toEqual(shapes.map(() => 400));
+    const hasHidden = JSON.stringify((await dm.get(`${base()}/pages/${ids['pc']}`)).body.body);
+    expect(hasHidden).toMatch(SENTINEL);
+    const second = await Promise.all(shapes.map(submit));
+    expect(second.map((r) => r.status)).toEqual(shapes.map(() => 400));
+    expect(second.map((r) => r.body)).toEqual(first.map((r) => r.body));
+    expect(new Set(first.map((r) => JSON.stringify(r.body))).size).toBe(1);
+    expect(JSON.stringify(first.map((r) => r.body))).not.toMatch(SENTINEL);
+  });
+
   it('does not store a player’s forged pageEmbed to a hidden page', async () => {
     const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
     const forged = { type: 'pageEmbed', attrs: { pageId: ids['hidden'], mode: 'card' } };

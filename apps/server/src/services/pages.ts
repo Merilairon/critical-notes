@@ -100,6 +100,7 @@ const REVISION_DELETE_BATCH = 1000;
 /** In-memory bound for the import / instantiation fold map. */
 const MAX_OPERATIONS = 20_000;
 const MAX_PLAYER_BLOCK_TEXT = 100_000;
+const MAX_PLAYER_BLOCK_DEPTH = 100;
 
 export class PageService {
   /** page id -> operation id of the call that created it (design 4.6); never stored, bounded. */
@@ -739,6 +740,20 @@ export class PageService {
    * accepted only if it is the block with the same id that the player was shown (compared with their projection), so
    * existing long blocks can still be saved unchanged. Text and labels that are not strings are refused, not coerced.
    */
+  /** A player's body must be a tree of block objects that is not absurdly deep; the answer never depends on what is stored. */
+  private checkPlayerShape(body: unknown) {
+    const malformed = () => badRequest('The page body is malformed');
+    const stack: [unknown, number][] = [[body, 0]];
+    for (let item = stack.pop(); item; item = stack.pop()) {
+      const [node, depth] = item;
+      if (!node || typeof node !== 'object' || Array.isArray(node) || depth > MAX_PLAYER_BLOCK_DEPTH) throw malformed();
+      const content = (node as { content?: unknown }).content;
+      if (content === undefined) continue;
+      if (!Array.isArray(content)) throw malformed();
+      for (const c of content) stack.push([c, depth + 1]);
+    }
+  }
+
   private checkPlayerTextSize(stored: BlockDocument | null, submitted: BlockDocument, ctx: ProjectContext) {
     const refuse = () => badRequest(`A paragraph is too long (max ${MAX_PLAYER_BLOCK_TEXT} characters)`);
     const part = (c: BlockNode) => {
@@ -776,6 +791,7 @@ export class PageService {
     const dmFields = new Set(facetType ? FACET_DM_ONLY_FIELDS[facetType] : []);
     if (input.facet && Object.keys(input.facet).some((k) => dmFields.has(k) || k === 'playerUserId')) throw badRequest('Those details are for the DM');
     const projectCtx = this.playerContext(this.properties.list(campaignId), visible);
+    if (input.body) this.checkPlayerShape(input.body);
     if (input.body) this.checkPlayerTextSize(current.body as BlockDocument | null, input.body as BlockDocument, projectCtx);
     const body = input.body ? (mergePlayerEdit(current.body as BlockDocument | null, input.body as BlockDocument, projectCtx) as BlockDoc) : undefined;
     const saved = this.update(campaignId, pageId, { ...input, ...(body ? { body } : {}) }, ctx, visible);

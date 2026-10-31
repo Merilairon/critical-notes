@@ -36,10 +36,15 @@ export function sanitizeDoc(input: unknown, opts: SanitizeOptions = {}): Sanitiz
   function blockAttrs(type: string, raw: unknown): Record<string, unknown> {
     const def = blockType(type)!;
     const source = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-    const common = commonBlockAttrs.safeParse(source);
+    // Each common attribute falls back on its own, so one invalid value does not cost the block its id
+    const { id: idSchema, visibility, revealed } = commonBlockAttrs.shape;
+    const commonData = {
+      id: (idSchema.safeParse(source.id).data ?? null) as string | null,
+      visibility: visibility.safeParse(source.visibility).data ?? 'inherit',
+      revealed: revealed.safeParse(source.revealed).data ?? false,
+    };
     const specific = def.attrs.safeParse(source);
     if (!specific.success) issues.push(`Invalid attributes on ${type}: ${specific.error.issues.map((i) => `${i.path.join('.')} ${i.message}`).join('; ')}`);
-    const commonData = common.success ? common.data : commonBlockAttrs.parse({});
     let id = commonData.id;
     if (!id || seenIds.has(id)) id = opts.newId ? opts.newId() : id;
     if (id) seenIds.add(id);
