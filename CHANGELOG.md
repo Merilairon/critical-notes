@@ -9,6 +9,104 @@ Before you update, read the entries between your version and the new one, and
 
 ## [Unreleased]
 
+A security and follow-up release. It closes a leak that is present in 1.3.0 and makes queries faster. **Read
+[Security](#security) first.** There are no database migrations in this release (see [Upgrade notes](#upgrade-notes)
+below).
+
+### Security
+
+- **A player who edits their own character page could read DM-only content. This is present in 1.3.0.** Before 1.3.1,
+  a player's edit could reuse the identifier of an existing block for a different kind of block. The server then merged
+  DM-only content from the stored page into text the player could read. The same code is in 1.3.0, so 1.3.0 is
+  affected. Players could read this content; they could not change DM content. **If players edit their own pages in
+  any of your campaigns, update to 1.3.1.**
+  - Campaigns where players cannot edit pages were not exposed to this, because the problem is in the route a player's
+    edit takes.
+  - 1.3.1 matches blocks across nesting levels only when their kinds agree, and it cleans the player's page body
+    before merging it with the stored page.
+- **Moving a paragraph between containers could silently drop the DM's hidden links.** When a player moved a paragraph
+  into or out of a container (a callout, for example), a hidden link on it was lost. The hidden link now stays with
+  the paragraph. This was a loss of the DM's content, not a leak.
+- **Malformed or very deeply nested page bodies from a player gave a server error (HTTP 500).** The server now refuses
+  them with one response, "The page body is malformed" (HTTP 400), before and after the merge.
+- **A player can no longer tell a hidden page from a missing one through a page-link property.** Saving a page-link
+  property with the id of a hidden page used to answer differently from an id that does not exist. Hidden, missing,
+  trashed, other-campaign and chosen-for-someone-else pages now all get the same answer, in the web app and through AI
+  assistants.
+
+### Added
+
+- **A message after a long offline gap.** If the live connection was lost and comes back without a usable position, the
+  browser reloads the open page. When that page has new blocks, the player sees "New details on this page" with a
+  **Show** button. The message never carries text or counts. Reveals on pages the player has not open are still not
+  announced; the player sees them when they open the page.
+- **A paused notice on the combat view.** A tracker view that is closed by the server because it was removed from the
+  list of open streams, or because access was lost, stops and says so. It no longer keeps reconnecting.
+- **`pnpm gate:drill`** for maintainers. It builds `apps/server` and runs the restore drill against the built bundle,
+  which a normal test run skips. `docs/RELEASE.md` lists it as a step of the release gate.
+
+### Changed
+
+- **Queries are faster.** Queries no longer read page bodies. At 2,000 pages every scenario takes at most 37 ms (it
+  was 105 to 205 ms), a sort by tags takes 4 ms (it was 85 ms) and a sort by title 0.5 ms. The numbers are in
+  `docs/qa/query-benchmark.md`.
+- **Page-link columns in a query now sort by the target page's title** and no longer by the target's internal id. This
+  changes the order of existing queries that sort on a page link. A target the viewer cannot see, a trashed target and
+  a missing target sort as empty, last in both directions, and a player's order never depends on hidden titles.
+- **Titles that differ only in case or accents now keep their input order** when sorted, instead of the old tie order.
+- **Tracker streams count toward the stream limits** (per user, per campaign and in total). One player could open many
+  of them before. See `EVENTS_MAX_CONNECTIONS` and `EVENTS_MAX_PER_CAMPAIGN`.
+- **The campaign event stream now says why it closes.** When someone loses access, it ends with a `bye` message with
+  the reason "access", instead of closing silently.
+- **AI assistants: path ids that are `.` or `..` are rejected** by every tool.
+- **AI assistants: `delete_property` will ask for confirmation.** The tool will need `confirm: true` and will refuse
+  without it, so nothing is deleted by mistake. The web app already asks first. *(Being built for 1.3.1; this entry
+  stays until it ships.)*
+- **Tracker death-save rules** (see `docs/design/tracker-rules.md`, section 1b), four decisions:
+  - Death-save failures added to a stable character make it dying again.
+  - Death saves on a creature that does not make them (most monsters) are ignored.
+  - Changing the lair row drops hit points, armor class and death saves; a lair row has none.
+  - Hit points cannot go below 0.
+
+### Fixed
+
+- **History panel.** A save for the page you just left can no longer overwrite the page you opened. Closing and
+  reopening the panel during a restore no longer races the restore. The list reloads once per restore, not up to three
+  times. Preview, share and add-subpage wait for a running restore.
+- **A block keeps its id when one common attribute is invalid.** If a client sent a valid `id` with an invalid
+  `visibility` (for example `all`), the whole block was given a new id and a live reveal of it sent nothing. Each
+  attribute is now checked on its own: the block keeps its id and falls back to `visibility: inherit`, and a reveal is
+  announced to the players.
+- **Test reliability, for maintainers.** The homebrew and campaign-import tests no longer fail on a loaded machine
+  (the slow schema compile now happens before the tests). The original failure was never reproduced, so this lowers
+  the risk without proving it gone. A phone-sizing test of the combat view was a test race and is fixed.
+
+### Known limits
+
+- A player can learn that a visible container holds DM-only blocks nested deeper than a certain level: a save near the
+  depth limit is refused. This shows only that such blocks exist and how deep, never their content.
+- When an AI assistant edits a page with Markdown and moves a paragraph, the DM's hidden links on it are still lost. It
+  does not leak anything.
+- There is no undo for a deleted property definition. Deleting one removes its values on every page.
+- If you press **Reload** on a page with unsaved typing after the DM revealed something on it, your next save ends in
+  a conflict. Your text is kept.
+- The tracker "dying" value of a monster saved before this version stays visible to the DM until the monster is
+  edited. Players never see it.
+- House rules and block templates are not cleaned like page bodies.
+
+### Upgrade notes
+
+1. **Back up first**, as for any update, with the version that is running now, and copy the backup off the machine:
+   - Docker: `docker compose exec app node admin.mjs backup`
+   - Without Docker: `node apps/server/dist/admin.mjs backup`
+2. **Update.**
+   - Docker: set `CN_VERSION` to the new version in `.env` (or follow `latest`), then
+     `docker compose pull && docker compose up -d`.
+   - Without Docker: check out the new tag, run `pnpm install && pnpm build`, and restart the server.
+3. **There are no database migrations in 1.3.1.** The database is not changed on start. Backups and restores work as
+   in 1.3.0. To go back, restore the backup you made before updating, as described in the 1.3.0 upgrade notes.
+4. Page-link sorting changes the order of existing queries that sort on a page link. The data is not touched.
+
 ## [1.3.0] - 2026-10-26
 
 The prep and play release. The DM gets a history of every page with compare and restore, can reveal secrets and
