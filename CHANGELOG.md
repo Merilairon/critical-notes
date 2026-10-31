@@ -18,10 +18,13 @@ below).
 - **A player who edits their own character page could read DM-only content. This is present in 1.3.0.** Before 1.3.1,
   a player's edit could reuse the identifier of an existing block for a different kind of block. The server then merged
   DM-only content from the stored page into text the player could read. The same code is in 1.3.0, so 1.3.0 is
-  affected. Players could read this content; they could not change DM content. **If players edit their own pages in
-  any of your campaigns, update to 1.3.1.**
-  - Campaigns where players cannot edit pages were not exposed to this, because the problem is in the route a player's
-    edit takes.
+  affected. The code that matches blocks by identifier is the same in every release since 1.0.0, so earlier releases are
+  probably affected too; it was confirmed on 1.3.0 only. Players could read this content; this flaw gave them no way to
+  change DM-only blocks (the next entry covers a loss of hidden links). **If any of your campaigns has a player with an
+  assigned character, update to 1.3.1.**
+  - A player can edit only the character page assigned to them, and there is no setting that turns this off, so no
+    other page was reachable. A campaign with no assigned characters, or whose character pages hold no DM-only blocks,
+    had nothing to expose.
   - 1.3.1 matches blocks across nesting levels only when their kinds agree, and it cleans the player's page body
     before merging it with the stored page.
 - **Moving a paragraph between containers could silently drop the DM's hidden links.** When a player moved a paragraph
@@ -79,7 +82,7 @@ below).
   announced to the players.
 - **Test reliability, for maintainers.** The homebrew and campaign-import tests no longer fail on a loaded machine
   (the slow schema compile now happens before the tests). The original failure was never reproduced, so this lowers
-  the risk without proving it gone. A phone-sizing test of the combat view was a test race and is fixed.
+  the risk without proving it gone.
 
 ### Known limits
 
