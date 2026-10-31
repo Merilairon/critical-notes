@@ -342,7 +342,7 @@ async function main() {
       time(`4 runQuery filter+sort (table scenario, ${PAGES} rows in memory)`,() => runQuery(rows as never, filter, null));
       for (const [si, sc] of SCENARIOS.entries()) {
         const f = queryFilterSchema.parse(sc.body(ids).filter);
-        time(`4.${si} runQuery only: ${sc.name}`, () => runQuery(rows as never, f, ids.ctx));
+        time(`4.${si} runQuery only: ${sc.name}`, () => runQuery(rows as never, f, ids.ctx, { pageLinkFields: new Set(["facet.factionPageId", "facet.locationPageId", "prop.ally"]) }));
       }
       time('5 pages.queryFor DM total (scenario 3)', () => services.pages.queryFor(campaignId, dmViewer, SCENARIOS[2]!.body(ids).filter, null, new Set()));
       const vis = services.visibility.visiblePageIds(campaignId, playerViewer);

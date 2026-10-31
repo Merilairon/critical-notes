@@ -702,6 +702,14 @@ export class PageService {
     });
   }
 
+  /** Query field names whose schema type is page-link (facet fields and custom properties), for sorting by target title. */
+  private pageLinkFields(defs: { key: string; type: string }[]): Set<string> {
+    const out = new Set<string>();
+    for (const fields of Object.values(FACET_FIELDS)) for (const f of fields) if (f.type === 'pageLink') out.add(`facet.${f.key}`);
+    for (const d of defs) if (d.type === 'pageLink') out.add(`prop.${d.key}`);
+    return out;
+  }
+
   /** Query rows over what the viewer sees (players cannot filter on hidden fields either). */
   queryFor(campaignId: string, viewer: Viewer, filterInput: QueryFilterInput, ctxPageId: string | null, visible: ReadonlySet<string>): QueryRowDto[] {
     if (viewer.gm) return this.query(campaignId, filterInput, ctxPageId);
@@ -727,7 +735,7 @@ export class PageService {
         };
       });
     const byId = new Map(rows.map((r) => [r.id, r]));
-    return runQuery(rows, parsed.data, ctxPageId && canSeePage(ctxPageId) ? ctxPageId : null).map((p) => {
+    return runQuery(rows, parsed.data, ctxPageId && canSeePage(ctxPageId) ? ctxPageId : null, { pageLinkFields: this.pageLinkFields(defs) }).map((p) => {
       const full = byId.get(p.id)!;
       return { ...full.summary, createdAt: full.createdAt, tags: full.tags, facet: full.facet, props: full.props };
     });
@@ -834,7 +842,7 @@ export class PageService {
     if (!parsed.success) throw badRequest('Invalid query', parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })));
     const all = this.queryable(campaignId).filter((p) => canSee(p.id));
     const byId = new Map(all.map((p) => [p.id, p]));
-    return runQuery(all, parsed.data, ctxPageId).map((p) => {
+    return runQuery(all, parsed.data, ctxPageId, { pageLinkFields: this.pageLinkFields(this.properties.list(campaignId)) }).map((p) => {
       const full = byId.get(p.id)!;
       return { ...full.summary, createdAt: full.createdAt, tags: full.tags, facet: full.facet, props: full.props };
     });
