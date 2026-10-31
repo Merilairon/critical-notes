@@ -1,6 +1,6 @@
 import { strToU8, unzipSync, zipSync } from 'fflate';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createFixture, createSignedInApp, testImage, type Fixture, type TestApp, type TestClient } from './helpers';
+import { HOMEBREW_WARMUP_TIMEOUT, warmHomebrewValidator, createFixture, createSignedInApp, testImage, type Fixture, type TestApp, type TestClient } from './helpers';
 
 let fx: Fixture;
 let app: TestApp;
@@ -22,7 +22,8 @@ async function importZip(bytes: Uint8Array) {
 beforeAll(async () => {
   fx = await createFixture();
   ({ app, client: dm } = await createSignedInApp(fx));
-}, 30_000);
+  warmHomebrewValidator();
+}, HOMEBREW_WARMUP_TIMEOUT);
 afterAll(() => fx.cleanup());
 
 describe('edition migration', () => {
