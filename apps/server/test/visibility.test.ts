@@ -439,6 +439,128 @@ describe('sentinel crawl: nothing DM-only reaches a player', () => {
   });
 });
 
+describe('sorting a query on a page link orders by the target title', () => {
+  /** A fresh campaign (so the shared fixture and the sentinel crawl are untouched): a player, link rows and their targets. */
+  async function world(targets: Record<string, { title: string; visibility?: 'all' | 'dm' }>, rows: Record<string, string | null>, who = 'sorter') {
+    const cid = (await dm.post('/api/campaigns', { name: `Sort ${who}`, ruleset: '2014' })).body.id as string;
+    const b = `/api/campaigns/${cid}`;
+    const tok = (await dm.post(`${b}/invites`, { role: 'player' })).body.token as string;
+    expect((await player.post(`/api/invites/${tok}/accept`)).status).toBe(200);
+    const pl = player;
+    const prop = await dm.post(`${b}/properties`, { label: 'Contact', type: 'pageLink' });
+    expect(prop.status).toBe(201);
+    const target: Record<string, string> = {};
+    for (const [k, t] of Object.entries(targets)) target[k] = (await dm.post(`${b}/pages`, { title: t.title, visibility: t.visibility ?? 'all' })).body.id;
+    for (const [title, t] of Object.entries(rows)) {
+      const made = await dm.post(`${b}/pages`, { title, visibility: 'all', tags: ['row'] });
+      expect(made.status).toBe(201);
+      if (t) expect((await dm.patch(`${b}/pages/${made.body.id}`, { revision: made.body.revision, props: { contact: target[t] } })).status).toBe(200);
+    }
+    const sort = (c: TestClient, field: string, dir: 'asc' | 'desc') =>
+      c.post(`${b}/query`, { filter: { tags: ['row'], sort: { field, dir } } }).then((r) => (r.body.rows as { title: string }[]).map((x) => x.title));
+    return { b, target, pl, sort };
+  }
+
+  it('DM: target title asc and desc, accents and numbers, dead targets last both ways, ties by row title', async () => {
+    const w = await world(
+      { a: { title: 'Room 10' }, b: { title: 'Room 2' }, c: { title: 'Émile' }, d: { title: 'Zed' }, gone: { title: 'Aaa trashed' } },
+      { r10: 'a', r2: 'b', rE: 'c', rZ: 'd', rTie: 'd', rGone: 'gone', rNone: null },
+      'dmsort',
+    );
+    expect((await dm.delete(`${w.b}/pages/${w.target['gone']}`)).status).toBe(200);
+    expect(await w.sort(dm, 'prop.contact', 'asc')).toEqual(['rE', 'r2', 'r10', 'rTie', 'rZ', 'rGone', 'rNone']);
+    expect(await w.sort(dm, 'prop.contact', 'desc')).toEqual(['rTie', 'rZ', 'r10', 'r2', 'rE', 'rGone', 'rNone']);
+  });
+
+  it('DM: a facet page link (quest giver) sorts by the giver title too', async () => {
+    const cid = (await dm.post('/api/campaigns', { name: 'Sort facet', ruleset: '2014' })).body.id as string;
+    const b = `/api/campaigns/${cid}`;
+    const npc = async (title: string) => (await dm.post(`${b}/pages`, { type: 'npc', title, visibility: 'all' })).body.id as string;
+    const zed = await npc('Zed');
+    const amy = await npc('Amy');
+    for (const [title, giver] of [['Q first', zed], ['Q second', amy]] as const) {
+      expect((await dm.post(`${b}/pages`, { type: 'quest', title, visibility: 'all', tags: ['row'], facet: { giverPageId: giver } })).status).toBe(201);
+    }
+    const rows = (await dm.post(`${b}/query`, { filter: { tags: ['row'], sort: { field: 'facet.giverPageId', dir: 'asc' } } })).body.rows as { title: string }[];
+    expect(rows.map((r) => r.title)).toEqual(['Q second', 'Q first']);
+  });
+
+  const hiddenWorld = (hiddenA: string, hiddenB: string, who: string) =>
+    world(
+      { vis: { title: 'Middle' }, h1: { title: hiddenA, visibility: 'dm' }, h2: { title: hiddenB, visibility: 'dm' }, v2: { title: 'Alpha' } },
+      { 'Row visible mid': 'vis', 'Row hidden one': 'h1', 'Row hidden two': 'h2', 'Row visible alpha': 'v2', 'Row empty': null },
+      who,
+    );
+
+  it('player: rows with a hidden target sort last in both directions, in the order of their own titles', async () => {
+    const w = await hiddenWorld('Aboleth', 'Zombie', 'hiddensort');
+    expect(await w.sort(w.pl, 'prop.contact', 'asc')).toEqual(['Row visible alpha', 'Row visible mid', 'Row empty', 'Row hidden one', 'Row hidden two']);
+    expect(await w.sort(w.pl, 'prop.contact', 'desc')).toEqual(['Row visible mid', 'Row visible alpha', 'Row empty', 'Row hidden one', 'Row hidden two']);
+    // the DM sees the real order
+    expect(await w.sort(dm, 'prop.contact', 'asc')).toEqual(['Row hidden one', 'Row visible alpha', 'Row visible mid', 'Row hidden two', 'Row empty']);
+  });
+
+  it('LEAK TEST: swapping the titles of hidden targets does not change the player order', async () => {
+    const one = await hiddenWorld('Aboleth', 'Zombie', 'leakone');
+    const two = await hiddenWorld('Zombie', 'Aboleth', 'leaktwo');
+    for (const dir of ['asc', 'desc'] as const) {
+      const a = await one.sort(one.pl, 'prop.contact', dir);
+      expect(await two.sort(two.pl, 'prop.contact', dir)).toEqual(a);
+    }
+    // for the DM the same swap does change the order (so the fixtures are not trivially equal)
+    expect(await one.sort(dm, 'prop.contact', 'asc')).not.toEqual(await two.sort(dm, 'prop.contact', 'asc'));
+  });
+
+  it('player: a quest-giver facet sorts the same way (swap, trashed target, selected viewer, co-DM sees the DM order)', async () => {
+    const run = async (hiddenA: string, hiddenB: string, who: string) => {
+      const cid = (await dm.post('/api/campaigns', { name: `Sort facet ${who}`, ruleset: '2014' })).body.id as string;
+      const b = `/api/campaigns/${cid}`;
+      expect((await player.post(`/api/invites/${(await dm.post(`${b}/invites`, { role: 'player' })).body.token}/accept`)).status).toBe(200);
+      const codmTok = (await dm.post(`${b}/invites`, { role: 'codm' })).body.token as string;
+      const coDm = (await join(codmTok, `co${who}`)).client;
+      const npc = async (title: string, visibility: 'all' | 'dm' | 'selected') => {
+        const made = (await dm.post(`${b}/pages`, { type: 'npc', title, visibility })).body;
+        if (visibility === 'selected') expect((await dm.patch(`${b}/pages/${made.id}`, { revision: made.revision, viewers: [playerId] })).status).toBe(200);
+        return made.id as string;
+      };
+      const g = {
+        h1: await npc(hiddenA, 'dm'),
+        h2: await npc(hiddenB, 'dm'),
+        mid: await npc('Middle', 'all'),
+        sel: await npc('Gnoll', 'selected'),
+        gone: await npc('Aaa trashed', 'all'),
+        other: await npc('Nobody sees me', 'dm'),
+      };
+      for (const [title, giver] of [['Q h1', g.h1], ['Q h2', g.h2], ['Q mid', g.mid], ['Q sel', g.sel], ['Q gone', g.gone], ['Q none', null]] as const) {
+        expect((await dm.post(`${b}/pages`, { type: 'quest', title, visibility: 'all', tags: ['row'], facet: giver ? { giverPageId: giver } : {} })).status).toBe(201);
+      }
+      expect((await dm.delete(`${b}/pages/${g.gone}`)).status).toBe(200);
+      const sort = (c: TestClient, dir: 'asc' | 'desc') =>
+        c.post(`${b}/query`, { filter: { tags: ['row'], sort: { field: 'facet.giverPageId', dir } } }).then((r) => (r.body.rows as { title: string }[]).map((x) => x.title));
+      return { sort, coDm };
+    };
+    const one = await run('Aboleth', 'Zombie', 'one');
+    const two = await run('Zombie', 'Aboleth', 'two');
+    // the selected-viewer target (Gnoll) is readable, so it sorts first; hidden and trashed targets sort as empty, by row title
+    expect(await one.sort(player, 'asc')).toEqual(['Q sel', 'Q mid', 'Q gone', 'Q h1', 'Q h2', 'Q none']);
+    expect(await one.sort(player, 'desc')).toEqual(['Q mid', 'Q sel', 'Q gone', 'Q h1', 'Q h2', 'Q none']);
+    for (const dir of ['asc', 'desc'] as const) expect(await two.sort(player, dir)).toEqual(await one.sort(player, dir));
+    // a co-DM sees the DM order, which does depend on the hidden titles
+    expect(await one.sort(one.coDm, 'asc')).toEqual(await one.sort(dm, 'asc'));
+    expect(await one.sort(dm, 'asc')).not.toEqual(await two.sort(dm, 'asc'));
+  });
+
+  it('player: a reveal changes the order', async () => {
+    const w = await hiddenWorld('Aboleth', 'Zombie', 'revealsort');
+    const before = await w.sort(w.pl, 'prop.contact', 'asc');
+    const page = (await dm.get(`${w.b}/pages/${w.target['h1']}`)).body;
+    expect((await dm.patch(`${w.b}/pages/${w.target['h1']}`, { revision: page.revision, visibility: 'all' })).status).toBe(200);
+    const after = await w.sort(w.pl, 'prop.contact', 'asc');
+    expect(after).not.toEqual(before);
+    expect(after).toEqual(['Row hidden one', 'Row visible alpha', 'Row visible mid', 'Row empty', 'Row hidden two']);
+  });
+});
+
 describe('what players may change', () => {
   it('edits their own character without losing the DM’s hidden notes', async () => {
     const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;

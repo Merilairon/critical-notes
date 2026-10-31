@@ -153,3 +153,7 @@ Run: `pnpm --filter @cn/server bench:query --runs 60 --cold-runs 5`, 2,000 pages
 Stage profile (p50): summary query 8 ms (was 80), `queryable()` 32 ms (was 106), title sort in `runQuery` 9 ms, tags sort in `runQuery` 82 ms. Cold first request: 76 to 177 ms (was 152 to 248).
 
 **Result.** Every scenario except the tags sort is now 31 to 60 ms p50. The DM tags sort is 120 ms p50 and the player's 85 to 91 ms: the remaining time is the 82 ms `runQuery` tags sort (I2.5: shared collator and precomputed sort keys), which is outside I2.4. The "under 80 ms for every scenario" criterion therefore needs I2.5 to pass for that one scenario; re-measured after I2.5: see the merged-state section above (PASS).
+
+## After I2.6 (page-link sort by target title)
+
+`runQuery` now takes the page-link field names and, for a sort on one of them, builds an id-to-title map from the pages it is given (once per query) and sorts by the first readable target's title. `bench:query --profile-only --pages 2000` (1-minute load 4.1 to 5.7 from unrelated desktop use, so an upper bound), stage 4.4 now passes the link field list (before it ran the plain id sort): runQuery-only page-link facet sort, npcs, limit 100: p50 1.3 / 1.4 ms, p95 1.7 / 2.1 ms in two runs (earlier run, id sort: 1.2 / 1.8). The whole `queryFor` DM and player totals stay at 31 to 32 ms p50 (earlier 32 / 31). Nothing else moved (tags sort 3.3 to 3.4 ms).

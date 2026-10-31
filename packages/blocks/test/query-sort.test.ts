@@ -90,3 +90,47 @@ describe('runQuery sort ordering', () => {
     }
   });
 });
+
+describe('runQuery sort on a page-link field', () => {
+  const pageLinkFields = new Set(['prop.contact', 'facet.giverPageId']);
+  const targets = [page('t1', 'Room 10'), page('t2', 'Room 2'), page('t3', 'Émile'), page('t4', 'Zed')];
+  const row = (title: string, target: unknown, extra: Partial<QueryablePage> = {}) => page(`r-${title}`, title, { props: { contact: target }, tags: ['row'], ...extra });
+  const rows = [row('r10', 't1'), row('r2', 't2'), row('rE', 't3'), row('rZ', 't4'), row('rNone', null), row('rGone', 'not-a-page'), row('rTie', 't4')];
+  const run = (all: QueryablePage[], dir: 'asc' | 'desc', field = 'prop.contact') =>
+    runQuery(all, queryFilterSchema.parse({ tags: ['row'], sort: { field, dir }, limit: 500 }), null, { pageLinkFields }).map((p) => p.title);
+
+  it('orders by the target title (accents, numbers in strings), empties and unknown targets last in both directions', () => {
+    const all = [...targets, ...rows];
+    expect(run(all, 'asc')).toEqual(['rE', 'r2', 'r10', 'rTie', 'rZ', 'rGone', 'rNone']);
+    expect(run(all, 'desc')).toEqual(['rTie', 'rZ', 'r10', 'r2', 'rE', 'rGone', 'rNone']);
+  });
+
+  it('does not order by the target id', () => {
+    const swapped = [page('b', 'Aaa'), page('a', 'Zzz'), row('x', 'a'), row('y', 'b')];
+    expect(run(swapped, 'asc')).toEqual(['y', 'x']);
+  });
+
+  it('uses the first readable target of a multi-value link', () => {
+    const all = [...targets, row('multi', ['hidden', 't3', 't1']), row('plain', 't2')];
+    expect(run(all, 'asc')).toEqual(['multi', 'plain']);
+  });
+
+  it('sorts facet link fields the same way and leaves other fields on their raw value', () => {
+    const all = [...targets, page('q1', 'Quest A', { facet: { giverPageId: 't4' }, tags: ['row'] }), page('q2', 'Quest B', { facet: { giverPageId: 't3' }, tags: ['row'] })];
+    expect(run(all, 'asc', 'facet.giverPageId')).toEqual(['Quest B', 'Quest A']);
+    expect(run(all, 'asc', 'prop.other')).toEqual(['Quest A', 'Quest B']);
+  });
+
+  it('without the field list, link values sort as plain strings (ids)', () => {
+    const swapped = [page('b', 'Aaa'), page('a', 'Zzz'), row('x', 'a'), row('y', 'b')];
+    const plain = runQuery(swapped, queryFilterSchema.parse({ tags: ['row'], sort: { field: 'prop.contact', dir: 'asc' } }), null).map((p) => p.title);
+    expect(plain).toEqual(['x', 'y']);
+  });
+
+  it('does not depend on titles outside the given pages (hidden titles swapped, same order)', () => {
+    const mk = (hiddenTitle1: string, hiddenTitle2: string) => [targets[3]!, row('v', 't4'), row('h1', 'x1'), row('h2', 'x2'), page('x1', hiddenTitle1), page('x2', hiddenTitle2)];
+    const without = (all: QueryablePage[]) => all.filter((p) => !p.id.startsWith('x'));
+    expect(run(without(mk('Aboleth', 'Zombie')), 'asc')).toEqual(run(without(mk('Zombie', 'Aboleth')), 'asc'));
+    expect(run(without(mk('Aboleth', 'Zombie')), 'asc')).toEqual(['v', 'h1', 'h2']);
+  });
+});
