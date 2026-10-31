@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { apiTokens } from '../src/db/schema';
 import { hashToken, internalAuth } from '../src/auth/session';
 import { Api } from '../src/mcp/api';
-import { createFixture, createSignedInApp, TestClient, type Fixture, type TestApp } from './helpers';
+import { HOMEBREW_WARMUP_TIMEOUT, warmHomebrewValidator, createFixture, createSignedInApp, TestClient, type Fixture, type TestApp } from './helpers';
 import { callTool, makeToken, mcpClient } from './mcp-client';
 
 let fx: Fixture;
@@ -21,7 +21,8 @@ beforeAll(async () => {
   services.templates.upsertBuiltins();
   campaignId = ((await dm.post('/api/campaigns', { name: 'Phandalin', ruleset: '2014' })).body as { id: string }).id;
   mcp = await mcpClient(app, await makeToken(dm));
-});
+  warmHomebrewValidator();
+}, HOMEBREW_WARMUP_TIMEOUT);
 afterAll(() => fx.cleanup());
 
 describe('API tokens', () => {
