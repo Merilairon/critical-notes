@@ -277,3 +277,80 @@ describe('players through MCP', () => {
     expect((await callTool(player, 'list_encounters', { campaignId })).isError).toBe(true);
   });
 });
+
+describe('delete_property asks for a confirmation', () => {
+  const keys = async () => ((await dm.get(`${base()}/properties`)).body as { properties: { key: string }[] }).properties.map((p) => p.key);
+  const make = async (label: string) => ((await dm.post(`${base()}/properties`, { label, type: 'text' })).body as { key: string }).key;
+  const refused = (text: string, label: string) => {
+    expect(text).toContain(`"${label}"`);
+    expect(text).toContain('every page');
+    expect(text).toContain('no undo');
+    expect(text).toContain('confirm: true');
+  };
+
+  it('lists confirm in the schema and keeps the destructive hint', async () => {
+    const tool = (await mcp.listTools()).tools.find((t) => t.name === 'delete_property')!;
+    const confirm = (tool.inputSchema.properties as Record<string, { type?: string; description?: string }>).confirm;
+    expect(confirm).toMatchObject({ type: 'boolean' });
+    expect(confirm.description).toContain('Ask the user first');
+    expect(tool.inputSchema.required ?? []).not.toContain('confirm');
+    expect(tool.annotations).toMatchObject({ destructiveHint: true, readOnlyHint: false });
+    expect(tool.description).toContain('confirm: true');
+  });
+
+  it('deletes nothing when confirm is missing, false or a string', async () => {
+    const key = await make('Weather');
+    for (const args of [{}, { confirm: false }]) {
+      const res = await callTool(mcp, 'delete_property', { campaignId, key, ...args });
+      expect(res.isError).toBe(true);
+      refused(res.text, 'Weather');
+      expect(await keys()).toContain(key);
+    }
+    // The schema rejects the string 'true' (isError result or protocol error); either way nothing is deleted
+    const str = await mcp.callTool({ name: 'delete_property', arguments: { campaignId, key, confirm: 'true' } }).then(
+      (r) => r.isError,
+      () => true,
+    );
+    expect(str).toBe(true);
+    expect(await keys()).toContain(key);
+  });
+
+  it('deletes with confirm true', async () => {
+    const key = await make('Doomed');
+    const res = await callTool(mcp, 'delete_property', { campaignId, key, confirm: true });
+    expect(res.isError).toBe(false);
+    expect(res.data).toEqual({ deleted: key });
+    expect(await keys()).not.toContain(key);
+  });
+
+  it('still says when the property does not exist', async () => {
+    const res = await callTool(mcp, 'delete_property', { campaignId, key: 'nope' });
+    expect(res.isError).toBe(true);
+    expect(res.text).toBe('No property "nope"');
+  });
+
+  it('gives players and outsiders the same refusal whatever confirm says', async () => {
+    const key = await make('Shared');
+    const hidden = ((await dm.post(`${base()}/properties`, { label: 'Secret', type: 'text', dmOnly: true })).body as { key: string }).key;
+    const join = async (campaign: string, username: string) => {
+      const invite = (await dm.post(`/api/campaigns/${campaign}/invites`, { role: 'player' })).body as { token: string };
+      const client = new TestClient(app);
+      await client.post('/api/auth/register', { token: invite.token, username, displayName: username, password: 'a long enough password' });
+      return mcpClient(app, await makeToken(client));
+    };
+    const other = ((await dm.post('/api/campaigns', { name: 'Elsewhere', ruleset: '2014' })).body as { id: string }).id;
+    const member = await join(campaignId, 'mina');
+    const outsider = await join(other, 'otto');
+    for (const [who, client] of [['player', member], ['outsider', outsider]] as const) {
+      for (const confirm of [undefined, false, true]) {
+        const res = await callTool(client, 'delete_property', { campaignId, key, ...(confirm === undefined ? {} : { confirm }) });
+        expect(res.isError, who).toBe(true);
+        expect(res.text, who).not.toContain('permanently');
+        expect(res.text, who).not.toContain('Shared');
+      }
+    }
+    // A player does not learn a DM-only property exists
+    expect((await callTool(member, 'delete_property', { campaignId, key: hidden })).text).toBe(`No property "${hidden}"`);
+    expect(await keys()).toEqual(expect.arrayContaining([key, hidden]));
+  });
+});

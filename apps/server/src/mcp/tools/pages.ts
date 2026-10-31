@@ -1,7 +1,7 @@
 /** Pages: read as Markdown, create, edit, move, delete and restore; custom properties. */
 import type { BlockDocument } from '@cn/blocks';
 import { docToMarkdown, markdownToDoc } from '@cn/blocks/markdown';
-import { PAGE_TYPES, PROPERTY_TYPES, type PageDto, type PageType, type PropertyDefDto, type TrashEntryDto } from '@cn/shared';
+import { isGameMaster, PAGE_TYPES, PROPERTY_TYPES, type CampaignDto, type PageDto, type PageType, type PropertyDefDto, type TrashEntryDto } from '@cn/shared';
 import { z } from 'zod';
 import { ApiError, path } from '../api';
 import type { RestoreResult, RevisionDetail, RevisionListItem } from '../../services/page-history';
@@ -309,12 +309,26 @@ export function pageTools(t: Tools) {
   t.write(
     'delete_property',
     'Delete a custom property',
-    'Deletes a custom property and its value on every page.',
-    z.object({ campaignId, key: z.string().min(1).max(60) }),
-    async ({ campaignId: cid, key }) => {
+    'Permanently deletes a custom property: its definition and its value on every page of the campaign. There is no undo. Ask the user first, name the property, and only call again with confirm: true after they agree; without confirm: true nothing is deleted.',
+    z.object({
+      campaignId,
+      key: z.string().min(1).max(60),
+      confirm: z
+        .boolean()
+        .optional()
+        .describe('Must be true or nothing is deleted. Ask the user first: the definition and its values on every page are lost, with no undo.'),
+    }),
+    async ({ campaignId: cid, key, confirm }) => {
+      // Players and outsiders fall through to the old path, so they get the same refusal whatever `confirm` says.
+      const campaign = await t.api.get<CampaignDto>(path`/api/campaigns/${cid}`);
       const { properties } = await t.api.get<{ properties: PropertyDefDto[] }>(path`/api/campaigns/${cid}/properties`);
       const def = properties.find((p) => p.key === key);
       if (!def) throw new ToolError(`No property "${key}"`);
+      if (isGameMaster(campaign.role) && confirm !== true) {
+        throw new ToolError(
+          `Not deleted: this would permanently delete the property "${def.label}" (${key}), its definition and its value on every page of the campaign. There is no undo. Ask the user whether to go ahead; if they agree, call delete_property again with confirm: true.`,
+        );
+      }
       await t.api.delete(path`/api/campaigns/${cid}/properties/${def.id}`);
       return { data: { deleted: key } };
     },
