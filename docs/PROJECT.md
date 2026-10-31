@@ -721,6 +721,7 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 
 ### [ ] Task I2.7: Query scale (only if campaigns exceed about 5,000 pages)
 **Owner**: Backend Architect · **QA**: Performance Benchmarker
+**Skipped (not needed):** 2026-10-31. `bench:query --pages 5000 --runs 60 --cold-runs 5` on the merged 1.3.1 code (1-minute load 4 to 6 from unrelated desktop use): warm p50 78 to 96 ms in every scenario, DM and player (limit 150); the slowest is the tags sort at 96 ms. The acceptance bar is already met without this task. `queryable()` is 79 ms of that (pages, tags, facets and property joins). Build I2.7 only if real campaigns pass about 5,000 pages and queries slow down.
 **Description**: Do not build before I2.4 and I2.5 are measured. Cache `queryable()` per campaign, invalidated by page writes (the event bus already announces them), or compile the filter to SQL (the original deviation (d) idea, with the Postgres work). Queries are synchronous (about 110 ms of loop time each today), so concurrent users and pages with several query blocks delay saves and live updates. `inArray` over all ids also hits SQLite's 32,766 bound-variable limit near 32,000 pages.
 **Acceptance Criteria**: `bench:query --pages 5000` p50 under 150 ms
 **Depends on**: I2.4, I2.5
