@@ -235,33 +235,35 @@ export function mergePlayerEdit(stored: BlockDocument | null, submittedDoc: Bloc
   };
   const collectHidden = (node: BlockNode) => (droppedForPlayers(node, ctx) ? collectAll(node) : node.content?.forEach(collectHidden));
   stored.content.forEach(collectHidden);
+  const storedById = new Map<string, BlockNode>();
+  const indexStored = (nodes: BlockNode[]) => {
+    for (const n of nodes) {
+      if (droppedForPlayers(n, ctx)) continue;
+      if (typeof n.attrs?.id === 'string' && n.attrs.id) storedById.set(n.attrs.id, n);
+      if (n.content) indexStored(n.content);
+    }
+  };
+  indexStored(stored.content);
   const seenIds = new Set<string>();
   const stripHidden = (node: BlockNode): BlockNode => {
     let out = node;
-    // A repeated id (at any level) keeps the first block only
-    if (typeof node.attrs?.id === 'string' && (hiddenIds.has(node.attrs.id) || seenIds.has(node.attrs.id))) {
-      const { id: _dropped, ...attrs } = node.attrs;
+    const id = node.attrs?.id;
+    // A forged id is dropped: an id of a block the player never saw, a repeated id (the first block keeps it), or the id of a stored block of another type
+    if (typeof id === 'string' && (hiddenIds.has(id) || seenIds.has(id) || (storedById.has(id) && storedById.get(id)!.type !== node.type))) {
+      const { id: _dropped, ...attrs } = node.attrs!;
       out = { ...node, attrs };
-    } else if (typeof node.attrs?.id === 'string') seenIds.add(node.attrs.id);
+    } else if (typeof id === 'string') seenIds.add(id);
     return out.content ? { ...out, content: out.content.map(stripHidden) } : out;
   };
   const merging = (submitted.content ?? []).map(stripHidden);
   // Blocks are matched by id across levels, so a paragraph moved into or out of a container keeps the DM's links
-  const index: MergeIndex = { storedById: new Map(), submittedIds: new Set() };
-  const indexStored = (nodes: BlockNode[]) => {
-    for (const n of nodes) {
-      if (droppedForPlayers(n, ctx)) continue;
-      if (typeof n.attrs?.id === 'string' && n.attrs.id) index.storedById.set(n.attrs.id, n);
-      if (n.content) indexStored(n.content);
-    }
-  };
+  const index: MergeIndex = { storedById, submittedIds: new Set() };
   const indexSubmitted = (nodes: BlockNode[]) => {
     for (const n of nodes) {
       if (typeof n.attrs?.id === 'string' && n.attrs.id) index.submittedIds.add(n.attrs.id);
       if (n.content && isBlockList(n.content)) indexSubmitted(n.content);
     }
   };
-  indexStored(stored.content);
   indexSubmitted(merging);
   return { ...submitted, content: mergeLevel(stored.content, merging, ctx, index) };
 }

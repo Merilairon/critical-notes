@@ -20,7 +20,9 @@ export interface SanitizeResult {
   issues: string[];
 }
 
-const DEFAULTS = { maxNodes: 20000, maxDepth: 40, maxTextLength: 100_000 };
+/** Blocks nested this deep keep no children: the sanitizer truncates them. */
+export const MAX_BLOCK_DEPTH = 40;
+const DEFAULTS = { maxNodes: 20000, maxDepth: MAX_BLOCK_DEPTH, maxTextLength: 100_000 };
 
 export function sanitizeDoc(input: unknown, opts: SanitizeOptions = {}): SanitizeResult {
   const issues: string[] = [];

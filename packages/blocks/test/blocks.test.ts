@@ -589,10 +589,44 @@ describe('mergePlayerEdit across nesting levels (S1.2)', () => {
     expect(merged.content![0]!.content![0]!.attrs?.revealed).toBe(true);
   });
 
+  it('does not graft hidden children into a paragraph that reuses a visible container’s id', () => {
+    const stored = store(callout('c1', p('Shown'), p('SENTINEL kid', { visibility: 'dm' })));
+    const seen = player(stored);
+    const merged = mergePlayerEdit(stored, { ...seen, content: [p('Plain', { id: 'c1' })] }, ctx);
+    expect(JSON.stringify(projectDoc(merged, ctx))).not.toContain('SENTINEL');
+    expect(count(merged, 'SENTINEL kid')).toBe(1);
+  });
+
+  it('keeps the hidden link when the player wraps the paragraph in a container that reuses its id', () => {
+    const stored = store(linkPara('pa', 'a rival'));
+    const seen = player(stored);
+    const merged = mergePlayerEdit(stored, { ...seen, content: [{ type: 'callout', attrs: { id: 'pa' }, content: seen.content }] }, ctx);
+    expect(count(merged, '"pageId":"hid"')).toBe(1);
+  });
+
+  it('gives a block that reuses the id of a hidden block, at any depth, a new id and keeps the hidden block once', () => {
+    const stored = store(p('Shown'), p('SENTINEL hidden', { visibility: 'dm', id: 'hx' }), callout('c1', p('In box', { visibility: 'dm', id: 'hy' })));
+    const seen = player(stored);
+    const forged = callout('c2', callout('c3', p('f1', { id: 'hx' }), p('f2', { id: 'hx' }), p('f3', { id: 'hy' })));
+    const merged = mergePlayerEdit(stored, { ...seen, content: [...seen.content!, forged] }, ctx);
+    expect(count(merged, 'SENTINEL hidden')).toBe(1);
+    expect(count(merged, '"id":"hx"')).toBe(1);
+    expect(count(merged, '"id":"hy"')).toBe(1);
+    expect(JSON.stringify(projectDoc(merged, ctx))).not.toMatch(/SENTINEL/);
+  });
+
+  it('keeps one block when the player submits the same visible id twice at different levels', () => {
+    const stored = store(callout('c1', p('Tip')), linkPara('pa', 'a rival'));
+    const seen = player(stored);
+    const [box, para] = seen.content!;
+    const merged = mergePlayerEdit(stored, { ...seen, content: [{ ...box!, content: [para!, para!] }, para!] }, ctx);
+    expect(count(merged, '"pageId":"hid"')).toBe(1);
+  });
+
   it('never loses a hidden block or link under random moves between levels (brute-force oracle)', () => {
     let seed = 11;
     const rnd = (k: number) => Math.floor(((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32) * k);
-    for (let run = 0; run < 600; run++) {
+    for (let run = 0; run < 3000; run++) {
       let k = 0;
       const mk = (depth: number): unknown[] =>
         Array.from({ length: 1 + rnd(4) }, () => {
@@ -618,9 +652,30 @@ describe('mergePlayerEdit across nesting levels (S1.2)', () => {
         const targets = listsOf(tree).filter((l) => !inside.has(l));
         targets[rnd(targets.length)]!.push(moved);
       }
+      // Forgeries: duplicated ids, ids of blocks the player never saw, a container sent back as a paragraph, a block wrapped in a container with its own id
+      const hiddenIdsOf: string[] = [];
+      const findHidden = (ns: BlockNode[] | undefined) => ns?.forEach((b) => (b.attrs?.visibility === 'dm' ? hiddenIdsOf.push(String(b.attrs.id)) : findHidden(b.content)));
+      findHidden(stored.content);
+      for (let f = 0, forgeries = rnd(4); f < forgeries; f++) {
+        const lists = listsOf(tree);
+        const nonEmpty = lists.filter((l) => l.length);
+        const list = lists[rnd(lists.length)]!;
+        const pick = nonEmpty.length ? nonEmpty[rnd(nonEmpty.length)]! : undefined;
+        const at = pick ? rnd(pick.length) : 0;
+        const kind = rnd(4);
+        if (kind === 0 && pick) list.push(JSON.parse(JSON.stringify(pick[at])));
+        else if (kind === 1 && hiddenIdsOf.length) list.push(p('forged', { id: hiddenIdsOf[rnd(hiddenIdsOf.length)]! }) as N);
+        else if (kind === 2 && pick && pick[at]!['type'] === 'callout') pick[at] = p('now a paragraph', { id: (pick[at]!['attrs'] as N)['id'] }) as N;
+        else if (kind === 3 && pick) pick[at] = callout(String((pick[at]!['attrs'] as N)['id']), pick[at]) as unknown as N;
+      }
       const merged = mergePlayerEdit(stored, { ...seen, content: tree as never }, ctx);
+      expect(JSON.stringify(projectDoc(merged, ctx)), `hidden text visible in run ${run}`).not.toMatch(/"text":"Hn/);
       const wanted = JSON.stringify(stored).match(/H(n\d+_\d+)|"label":"(L\w+)"/g) ?? [];
       for (const w of wanted) {
+        // A link whose label text the player deleted (or swapped out together with what held it) is gone, as in any delete
+        if (w.startsWith('"label"') && !JSON.stringify(tree).includes(`"text":"${w.slice(9, -1)}"`)) continue;
+        // A repeated id is ambiguous: the first block in document order is the one that is matched (the player chose what came first)
+        if (w.startsWith('"label"') && count({ type: 'doc', content: tree } as never, `"id":"${w.slice(10, -1)}"`) > 1) continue;
         const needle = w.startsWith('H') ? `"text":"${w}"` : w;
         expect(count(merged, needle), `${needle} in run ${run}`).toBe(1);
       }
