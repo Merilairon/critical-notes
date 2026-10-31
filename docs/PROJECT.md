@@ -810,6 +810,13 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 **Acceptance Criteria**: a test per race; the Evidence Collector re-runs the untested items
 **Depends on**: none
 
+### [ ] Task S1.5: MCP delete_property asks for a confirmation (owner request, found by H1.3)
+**Owner**: MCP Builder · **QA**: API Tester, Code Reviewer
+**Description**: Added 2026-10-31 at the owner's request. The MCP tool `delete_property` deletes a property definition and its values on every page with no confirmation, while the web app always asks first and there is no undo. Make the tool require an explicit `confirm: true` argument; without it the tool refuses (`isError`, a clear message saying what would be deleted: the property label, and how many pages hold a value if that is cheap to count, and how to confirm) and nothing is deleted. Keep the client-side `destructive` hint. Check the other destructive MCP tools for the same gap (for example `delete_page` has the trash and Undo; `delete_template`, `delete_encounter`, `delete_homebrew_entry`, `remove_inventory_item` have soft or no recovery) and only REPORT them; change nothing but `delete_property`. Update the tool description so the assistant knows to ask the user first, and the MCP section of the docs.
+**Acceptance Criteria**: calling `delete_property` without `confirm: true` (missing, false, a string) deletes nothing and returns the refusal; with `confirm: true` it deletes as before; players and non-owners still get their existing refusals; a test per case; the MCP tool listing and docs are updated; the gate stays green
+**Files**: `apps/server/src/mcp/tools/pages.ts`, tests under `apps/server/test/`, `docs/` MCP notes, `docs/STATUS.md`
+**Depends on**: H1.3
+
 ### 6b.5 Release gate and waves
 
 ### [ ] Task G3.1: Release 1.3.1 certification
@@ -822,6 +829,7 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 | 1 | I2.4, I2.5, N3.6, H1.1, H1.2, H1.3, H1.5, S1.1, S1.3, S1.4 (independent of each other). **Done 2026-10-31**, merged locally, not pushed; full gate green (1004 server and shared tests, 550 web tests, `pnpm e2e` 144 passed and 8 skipped, `pnpm gate:drill` both tests passed). H1.1 is partly resolved (see its note) |
 | 2 | S1.2 (with I1.6), I2.6 (after I2.5; needs the Product Manager decision first). **Done 2026-10-31**, merged locally, not pushed; full gate green after the merge (1044 server and shared tests, 550 web tests, `pnpm e2e` 144 passed and 8 skipped, `pnpm gate:drill` both tests passed) |
 | 3 | I2.7 (after I2.4 and I2.5; only if campaigns pass about 5,000 pages). **Skipped 2026-10-31**: not needed, 5,000 pages measured at 78 to 96 ms p50 against the 150 ms bar |
+| 3b | S1.5 (owner request 2026-10-31, after H1.3), with the changelog notes for 1.3.1 |
 | 4 | G3.1 |
 
 ## 6c. Release 1.5: Characters
