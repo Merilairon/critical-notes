@@ -290,7 +290,7 @@ describe('delete_property asks for a confirmation', () => {
 
   it('lists confirm in the schema and keeps the destructive hint', async () => {
     const tool = (await mcp.listTools()).tools.find((t) => t.name === 'delete_property')!;
-    const confirm = (tool.inputSchema.properties as Record<string, { type?: string; description?: string }>).confirm;
+    const confirm = (tool.inputSchema.properties as Record<string, { type?: string; description?: string }>).confirm!;
     expect(confirm).toMatchObject({ type: 'boolean' });
     expect(confirm.description).toContain('Ask the user first');
     expect(tool.inputSchema.required ?? []).not.toContain('confirm');
