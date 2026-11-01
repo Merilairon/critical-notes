@@ -785,7 +785,7 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 
 ### [x] Task S1.1: Players cannot probe pages through page-link properties
 **Owner**: Backend Architect · **QA**: Application Security Engineer
-**Done:** 2026-10-31, Code Reviewer PASS (second round: the first commit held only the test because a shared `git stash` moved the fix; redone), QA Application Security Engineer: APPROVED (150 interleaved rounds per case over HTTP and MCP: hidden, selected-other, trashed, other-campaign, nonexistent and wrong-type-hidden ids give one identical status and body, timing differences at most 0.09 ms; visible ids and clearing still work; nothing stored). Same error for all, the visibility check runs before the lookup and the type check. Follow-up: `apply-template` is not DM-gated (no player route to a page id found, but no player test).
+**Done:** 2026-10-31, Code Reviewer PASS (second round: the first commit held only the test because a shared `git stash` moved the fix; redone), QA Application Security Engineer: APPROVED (150 interleaved rounds per case over HTTP and MCP: hidden, selected-other, trashed, other-campaign, nonexistent and wrong-type-hidden ids give one identical status and body, timing differences at most 0.09 ms; visible ids and clearing still work; nothing stored). Same error for all, the visibility check runs before the lookup and the type check. Follow-up: no test covers a player calling `apply-template` (task F1.4). Correction 2026-11-01: this note first said the route is not DM-gated; the check is in `TemplateService.applyToPage` (`requireDm`, first line), not in the route, so players get 403 and outsiders 404, and the MCP allowlist has no `apply-template` pattern.
 **Description**: Found in the I1.4/I1.5 security QA (F3): `PATCH` with a page-link property (`props.<key> = <page id>`) returns 200 for a hidden or selected-other page and 400 "Linked page ... not found in this campaign" for a nonexistent, other-campaign or trashed id (`assertPageInCampaign` ignores the viewer). A player with a real id can confirm that a hidden page exists, and the id is stored in the DM's view. For players, validate against the pages they can see and answer the same error for everything else (or clear the value, as the merge does for links); check facet and template pageLink fields too.
 **Acceptance Criteria**: identical response for hidden, nonexistent, other-campaign, trashed and selected-other ids; a visible id still works; sentinel crawl green
 **Depends on**: none
@@ -1065,10 +1065,15 @@ These come from the 1.3.1 certification (G3.1). They are small, independent of t
 **Acceptance Criteria**: `docs/qa/test-health.md` updated with the results and any new cause; no failure in 5 loaded runs; no timeout raised without a written reason; the H1.1 Done note is amended to 'resolved' or says exactly what remains
 **Depends on**: none
 
-### [ ] Task F1.4: Course of action for the apply-template route (Product Manager first)
-**Owner**: Product Manager (decision), then Backend Architect · **QA**: Application Security Engineer
-**Description**: The `apply-template` route is not DM-gated and has no player test (S1.1 follow-up). The Product Manager's memo (2026-11-01) decides what to do; this task carries it out. See the paragraph below this task once the memo is recorded.
-**Acceptance Criteria**: as set by the Product Manager's decision; at least a test that a player calling the route cannot store or learn anything the DM view does not allow
+### [ ] Task F1.4: Test that players cannot apply templates
+**Owner**: Backend Architect · **QA**: API Tester, Application Security Engineer
+**Description**: Decided by the Product Manager 2026-11-01 (memo from reading the code; no test was run): `POST /api/campaigns/:cid/pages/:pid/apply-template` has no `requireDm` in the route, but `TemplateService.applyToPage` calls it on its first line (as `createPage`, `instantiateBlock` and `setDefault` do), so a player gets 403 and an outsider 404 before anything is read or written; a malformed body gets 400 first because validation runs before the gate. Players are not meant to apply templates (the PRD never says so; allowing it would be a new feature needing a player projection of the result). No behaviour change, no patch release, no changelog line: add the missing tests only. If the Product Manager's reading proves wrong, stop and raise it. Optional hardening, not recommended: gate in the route before validation (changes 400 to 403 for players; would be a deliberate change).
+**Acceptance Criteria**:
+- A player gets 403 and a non-member 404 for a valid body; the page's revision, body and properties are unchanged and no `template_usage` row or new property definition exists afterwards
+- A player with an invalid body gets 400 (documents the order: validation before the gate)
+- A co-DM can apply; the MCP allowlist test shows `apply-template` is not allowed
+- Mutation check: removing the `requireDm` line in `applyToPage` fails the new tests
+- Gate green
 **Depends on**: none
 
 ### 6c.9 Release gate and waves
