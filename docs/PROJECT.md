@@ -18,8 +18,9 @@
 | **1.1.0 to 1.2.0** | Post-1.0 follow-ups (shipped 2026-10-22) | Sign out other sessions, player-visible page count, accessibility backlog, keyboard block menu, page titles | Not planned here; see [CHANGELOG.md](../CHANGELOG.md) |
 | **1.3** | Prep and play loop | N1 Page history, N3 Reveal to players, I1 Keep hidden links, I3 Tracker additions, I2 Query views | 22 tasks, 5 waves (§6) |
 | **1.3.1** | Hardening and follow-ups | Rest of the player-merge hardening (I1.6, S1.1, S1.2), stream and history-panel follow-ups (S1.3, S1.4), cheaper queries (I2.4 to I2.7), offline-gap toast (N3.6), test health (H1.1 to H1.3, H1.5) | 15 tasks (14 plus the gate), 4 waves (§6b) |
+| **1.3.2** | Safer deletes | Confirmation for the remaining destructive AI-assistant tools, and restore for deleted property definitions | 2 tasks, 2 waves (§6d); planned 2026-11-01 |
 | **1.4** | Stay in sync | N2, N4, I4, I5, I10 | Assigned, broken down when scheduled (§7) |
-| **1.5** | Characters | N13 sheet, N18 builder, N19 level-up, N20 PDF export (2014 and 2024) | 31 tasks (29 plus 2 stretch), 10 waves (§6c); planned 2026-10-26 |
+| **1.5** | Characters | N13 sheet, N18 builder, N19 level-up, N20 PDF export (2014 and 2024) | 35 tasks (33 plus 2 stretch), 10 waves (§6c); planned 2026-10-26, four carry-over tasks (F1.1 to F1.4) added 2026-11-01 |
 | **Later** | Grow | N5–N12, N14–N17, I6–I18 | Assigned, broken down when scheduled (§7) |
 
 **Technical stack (exact):** pnpm 11 monorepo, TypeScript 6.0.3, Node 24. Server: Hono, Drizzle ORM on better-sqlite3 (Postgres mirror schema), zod 4, `@modelcontextprotocol/server` 2.3.1. Web: Angular 22 (standalone, signals, zoneless, `httpResource`), Tailwind v4, TipTap v3. Tests: Vitest (unit/API), Playwright (`e2e/`, system Chrome, real 5etools data). Delivery: esbuild server bundle, Docker (non-root), docker-compose.
@@ -742,7 +743,7 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 
 ### [x] Task H1.1: Make the load-sensitive tests reliable
 **Owner**: Test Automation Engineer · **QA**: Reality Checker
-**Done:** 2026-10-31, Code Reviewer PASS, QA Reality Checker: PASS with caveats. **Partly resolved.** Fixed at the cause: `homebrew.test.ts`, the homebrew test in `mcp.test.ts` and `transfer.test.ts` 'imports as a new campaign' all paid the lazy ajv compile of the 5etools homebrew schema (2.7 s alone, 14 to 19 s loaded) inside their first save; it is now warmed in `beforeAll` (90 s hook budget with a written reason; the 20 s test timeout is unchanged). Under load the old tests took 10.5 to 11 s, the fixed ones 0.26 to 0.37 s. `pnpm -s test` ran 5 of 5 green at load 20 to 28. Not resolved: the original red failure was never reproduced (five green runs show margin, not proof); `backup-routes` stalled reader was already fixed in 74cd422; `restore-crash` was not reproduced and is unchanged (26 s loaded against a 240 s limit); the I3.3 e2e timeouts have no found cause (artifacts were overwritten; `docs/qa/test-health.md` lists what to keep next time). Watch: backup-routes 'refuses to start on an invalid BACKUP_DIR' takes 7 to 9 s loaded.
+**Done:** 2026-10-31, Code Reviewer PASS, QA Reality Checker: PASS with caveats. **Partly resolved.** Fixed at the cause: `homebrew.test.ts`, the homebrew test in `mcp.test.ts` and `transfer.test.ts` 'imports as a new campaign' all paid the lazy ajv compile of the 5etools homebrew schema (2.7 s alone, 14 to 19 s loaded) inside their first save; it is now warmed in `beforeAll` (90 s hook budget with a written reason; the 20 s test timeout is unchanged). Under load the old tests took 10.5 to 11 s, the fixed ones 0.26 to 0.37 s. `pnpm -s test` ran 5 of 5 green at load 20 to 28. Not resolved: the original red failure was never reproduced (five green runs show margin, not proof); `backup-routes` stalled reader was already fixed in 74cd422; `restore-crash` was not reproduced and is unchanged (26 s loaded against a 240 s limit); the I3.3 e2e timeouts have no found cause (artifacts were overwritten; `docs/qa/test-health.md` lists what to keep next time). Watch: backup-routes 'refuses to start on an invalid BACKUP_DIR' takes 7 to 9 s loaded. The remaining steps are task F1.3 in release 1.5.
 **Description**: These server tests fail now and then when the whole suite runs in parallel and pass alone: `backup-routes.test.ts` ("a stalled reader is cut off after the idle time"), `restore-crash.test.ts` (about 36 s under load), `transfer.test.ts` ("imports as a new campaign"), `homebrew.test.ts` and the homebrew test in `mcp.test.ts` (20 s timeouts). They have each failed in more than one full run in waves 2 and 3. Find the cause of each (shared timers, CPU load, real sleeps, a seed that is too big) and remove it without raising timeouts as the only fix; use injected clocks or smaller fixtures. Also look at the one `pnpm e2e` run that failed with many specs timing out after about a minute and passed on the rerun (I3.3, cause not found).
 **Acceptance Criteria**: `pnpm -s test` run 5 times in a row on a loaded machine with no failure; the cause of each flake is written in the task note; no test timeout raised without a reason
 **Depends on**: none
@@ -820,8 +821,9 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 
 ### 6b.5 Release gate and waves
 
-### [ ] Task G3.1: Release 1.3.1 certification
+### [x] Task G3.1: Release 1.3.1 certification
 **Owner**: Reality Checker · **QA**: **Owner (human)**
+**Done:** 2026-11-01, Reality Checker certification at HEAD 391908e: NEEDS WORK (minor; no code or test blocker): gate green (1049 server, shared and blocks tests, 550 web tests), `pnpm e2e` 144 passed and 8 skipped (the known phone-only skips), phone project 37 passed, `pnpm gate:drill` both tests passed, Docker image built and the full e2e passed against two containers, benchmark matches the doc, no migrations. Findings fixed afterwards (e4cca7a): two stale status lines, the compose `TRUST_PROXY` and `SECURE_COOKIES` line in the changelog. Owner approval given 2026-11-01 (the QA for this task), with the 'update on real data' step done by the owner, the Security wording confirmed, a GitHub security advisory to be published, and `origin/main` confirmed as the default branch. Follow-ups became tasks: release 1.3.2 (S2.1, S2.2) and release 1.5 (F1.1 to F1.4, G4.4 text).
 **Description**: Evidence for every 1.3.1 item that was built; full gate, `pnpm e2e`, phone project, build `apps/server` first and run the restore drill test against the built bundle (`pnpm gate:drill`, must pass, not skipped; H1.2), Docker image.
 **Depends on**: all 1.3.1 tasks except I2.6 and I2.7, which only run if their condition is met (a Product Manager decision; more than about 5,000 pages)
 
@@ -831,7 +833,7 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 | 2 | S1.2 (with I1.6), I2.6 (after I2.5; needs the Product Manager decision first). **Done 2026-10-31**, merged locally, not pushed; full gate green after the merge (1044 server and shared tests, 550 web tests, `pnpm e2e` 144 passed and 8 skipped, `pnpm gate:drill` both tests passed) |
 | 3 | I2.7 (after I2.4 and I2.5; only if campaigns pass about 5,000 pages). **Skipped 2026-10-31**: not needed, 5,000 pages measured at 78 to 96 ms p50 against the 150 ms bar |
 | 3b | S1.5 (owner request 2026-10-31, after H1.3), with the changelog notes for 1.3.1. **Done 2026-10-31**, merged locally, not pushed |
-| 4 | G3.1 |
+| 4 | G3.1. **Done 2026-11-01**, owner approved |
 
 ## 6c. Release 1.5: Characters
 
@@ -1041,6 +1043,34 @@ A character is built under **one ruleset**, recorded on the sheet, and keeps it.
 **Acceptance Criteria**: every statement in the README checked against the running app; the list of what is "not checked" matches C0.3's "choose by hand" list
 **Depends on**: C7.1
 
+### 6c.8b Epic F1: Carried over from release 1.3.1 (added 2026-11-01 at the owner's request)
+
+These come from the 1.3.1 certification (G3.1). They are small, independent of the character work, and run in wave 9 or 10 with the other UI and test tasks.
+
+### [ ] Task F1.1: Make the property delete button readable
+**Owner**: Frontend Developer · **QA**: Accessibility Auditor, Evidence Collector
+**Description**: Found by H1.3: the "Delete property" ✕ in the Properties panel is drawn at 40% opacity at rest, about 1.77:1 against its background, which fails WCAG 1.4.11 (3:1 for interface components). Raise it so the resting icon meets 3:1 in the light and dark themes (without making it louder than the neighbouring controls), keep the hover and keyboard-focus styles, and keep the tap target at 44 px on touch. Check the other icon-only controls in the same panel and the other campaign panels for the same opacity pattern and list (do not fix outside the Properties panel without a note) any that fail.
+**Acceptance Criteria**: the resting ✕ measures at least 3:1 in both themes (measured in the browser, not calculated); axe has no new violation; a unit spec or style check pins the class; the H1.3 spec still passes
+**Depends on**: none
+
+### [ ] Task F1.2: Reload after a DM reveal saves the player's unsaved typing
+**Owner**: Frontend Developer (with the Software Architect for the merge design note) · **QA**: Evidence Collector, Application Security Engineer
+**Description**: Known limit from N3.6/N3.4: a player with unsaved typing on a page gets a toast 'New details on this page | Reload' after the DM reveals a block; clicking Reload dismisses the toast but the save is refused with a 409 (the DM's reveal already raised the revision), the typed text stays on screen and the page shows 'Someone else changed this page. Your last change was not saved.' Make Reload do what a player expects: refetch the page, re-apply the pending non-body changes (properties, sheet fields) on the new revision automatically, and merge the pending body edits by block id (the server already has a block-level player merge; extend its use rather than sending a whole document), so the typed text is saved and the revealed block appears. If a block-level conflict cannot be merged (the same block changed on both sides), keep the typed text, say which block, and offer copy. Players must still never receive DM content: the response of every retried save goes through the player projection.
+**Acceptance Criteria**: browser test: unsaved typing plus a reveal, then Reload: the text is saved, the revealed block shows, no conflict banner; a same-block conflict keeps the text and says so; unit specs for the retry and the merge; the sentinel crawl and the S1.2 merge tests stay green; docs/design/reveal.md section 11 limitation is removed
+**Depends on**: none
+
+### [ ] Task F1.3: Finish H1.1: the remaining test-health steps
+**Owner**: Test Automation Engineer · **QA**: Reality Checker
+**Description**: H1.1 was only partly resolved (see its Done note and `docs/qa/test-health.md`). Do the remaining steps: (1) keep the artifacts of every `pnpm e2e` run (playwright report, traces, server stdout, `dmesg`/`journalctl` tail) in a dated folder outside the overwritten defaults, so the next unexplained minute-long timeout (I3.3) can be diagnosed; run the full suite 5 times and record what the logs show; (2) `restore-crash.test.ts` takes 22 s quiet and 45 s loaded for 23 sequential child processes: split it into one test per kill point (a static list kept in sync with the code by a test) so a failure names its point and runs in parallel, without losing coverage; (3) re-run `e2e/properties-keyboard.spec.ts` at 16 busy loops and record the result; (4) look at 'the server refuses to start on an invalid BACKUP_DIR' (7 to 9 s under load) and make it cheaper or explain it; (5) re-run `pnpm -s test` 5 times at load of 20 or more and record it.
+**Acceptance Criteria**: `docs/qa/test-health.md` updated with the results and any new cause; no failure in 5 loaded runs; no timeout raised without a written reason; the H1.1 Done note is amended to 'resolved' or says exactly what remains
+**Depends on**: none
+
+### [ ] Task F1.4: Course of action for the apply-template route (Product Manager first)
+**Owner**: Product Manager (decision), then Backend Architect · **QA**: Application Security Engineer
+**Description**: The `apply-template` route is not DM-gated and has no player test (S1.1 follow-up). The Product Manager's memo (2026-11-01) decides what to do; this task carries it out. See the paragraph below this task once the memo is recorded.
+**Acceptance Criteria**: as set by the Product Manager's decision; at least a test that a player calling the route cannot store or learn anything the DM view does not allow
+**Depends on**: none
+
 ### 6c.9 Release gate and waves
 
 ### [ ] Task G4.1: Security review of the release
@@ -1063,9 +1093,9 @@ A character is built under **one ruleset**, recorded on the sheet, and keeps it.
 
 ### [ ] Task G4.4: Release 1.5 certification
 **Owner**: Reality Checker · **QA**: **Owner (human)**
-**Description**: Evidence for every 1.5 item that was built: full gate, `pnpm e2e` three times and against Docker, phone project, restore drill with a populated sheet table, upgrade from a populated 1.4 (or 1.3.x) volume, all golden characters, PDF checks, the live visibility checks. Stretch tasks that were not built are moved to §7 with a note.
+**Description**: Evidence for every 1.5 item that was built: full gate, `pnpm e2e` three times and against Docker, phone project, restore drill with a populated sheet table (and the restore drill test against the built bundle: `pnpm gate:drill`, both tests passing, none skipped; H1.2), upgrade from a populated 1.4 (or 1.3.x) volume, all golden characters, PDF checks, the live visibility checks. Stretch tasks that were not built are moved to §7 with a note.
 **Acceptance Criteria**: every success measure in C0.1 MET or the gap accepted by the owner in writing
-**Depends on**: all 1.5 tasks except C3.4 and C6.1, which only run if scheduled
+**Depends on**: all 1.5 tasks except C3.4 and C6.1, which only run if scheduled (F1.1 to F1.4 are 1.5 tasks)
 
 | Wave | Tasks |
 |---|---|
@@ -1077,12 +1107,40 @@ A character is built under **one ruleset**, recorded on the sheet, and keeps it.
 | 6 | C2.2, then C2.3 |
 | 7 | C3.1, C5.3 (then C3.2 once C3.1 is merged: same folder) |
 | 8 | C3.3, C4.1, C5.4, C6.1 (stretch) |
-| 9 | C4.2, C3.4 (stretch), C7.1 |
+| 9 | C4.2, C3.4 (stretch), C7.1, F1.1, F1.2, F1.3, F1.4 |
 | 10 | C7.2, G4.1, G4.2, G4.3, then G4.4 |
 
 **Starting the pipeline.** "Activate Agents Orchestrator. Spec: `docs/PRD.md` (after C0.1). Task list: `docs/PROJECT.md` §6c. Run Release 1.5, wave by wave, and stop after wave 2 for the owner's decisions D8 to D12." Rules for every agent are §4; the §3 flow applies (owner, Code Reviewer, QA, three tries, escalate). Waves 1 and 2 are documents: no code, so their QA agents read and challenge them rather than run a gate.
 
 **Effort and risk.** 31 tasks (29 plus two stretch), the largest release so far. The riskiest tasks, scheduled so a failure shows early: C0.3 (rules correctness, the Game Designer's spec is the ground truth for everything after), C1.2 (the real data may not describe every choice), C5.1 (the engine choice). If wave 2 shows the rules spec cannot be finished for tier A in both rulesets, the Senior Project Manager re-plans to one ruleset first, with the other as the next release, and the owner decides.
+
+## 6d. Release 1.3.2: Safer deletes
+
+Added 2026-11-01 by the Senior Project Manager at the owner's request, from the 1.3.1 certification. **Theme:** what an AI assistant or a stray click deletes can be undone or must be confirmed. It follows 1.3.1 and comes before 1.4. It changes the database (task S2.2), so its changelog needs an Upgrade note.
+
+### [ ] Task S2.1: Confirmation for the other destructive AI-assistant tools
+**Owner**: MCP Builder · **QA**: API Tester, Code Reviewer
+**Description**: S1.5 made `delete_property` require `confirm: true`. Give the three tools it found without recovery the same gate, in the same way (strict boolean `confirm`; without it nothing is deleted and the answer names what would be deleted, that it cannot be undone and how to confirm; only game masters reach the gate, players and outsiders keep their old answers; `destructive: true` kept): `remove_inventory_item` (a hard delete), `delete_template` and `delete_encounter` (soft-deleted in the database but with no restore tool or UI). Re-read the S1.5 Done note for the choices made there (the schema stays strictly typed, so other types are refused by the input check). Templates and encounters have no restore option today; the refusal text must say that deleting them cannot be undone. Update the tool descriptions, the README MCP section and `docs/STATUS.md`.
+**Acceptance Criteria**: for each tool: no `confirm`, `confirm: false` and a non-boolean delete nothing; `confirm: true` deletes as before; players, outsiders and read-only tokens get exactly their old answers; a test per case; the MCP tool listing is updated; the changelog says so; the gate stays green
+**Depends on**: none
+
+### [ ] Task S2.2: Restore for deleted property definitions
+**Owner**: Backend Architect (server, schema), Frontend Developer (UI), MCP Builder (tools) · **QA**: API Tester, Evidence Collector, Database Reliability Engineer
+**Description**: Deleting a property definition now removes it and its value on every page for good (the web app asks first; an AI assistant needs `confirm: true`). Give property definitions the same lifecycle as pages and templates: a soft delete that keeps the definition and the page values, a 'Deleted properties' list for game masters (restore, delete permanently) with the 30-day retention and the purger of `TRASH_RETENTION_DAYS`, restore through the app and through an MCP tool (`restore_property`, with `list_trash`-style listing), an Undo toast after the delete like the page delete. Page values of a deleted definition are hidden from every view, query, search and export while it is deleted and come back on restore; a definition with the same key created while the old one is deleted must not collide (decide and document: restoring renames or is refused with a clear message). Schema change in both `schema.ts` and `schema.pg.ts` with `db:generate`, the parity test and the schema-allowlist test for the restore path. Players never see deleted definitions or their values; add them to the sentinel crawl.
+**Acceptance Criteria**: delete, Undo and restore bring back the definition and every page value (browser and API tests); permanent delete and the 30-day purge remove them for good; no collision case loses data; the backup and restore drill covers a database with a deleted definition; sentinel crawl green; unit and e2e specs; the migration upgrades a populated 1.3.x volume without loss
+**Depends on**: none
+
+### 6d.1 Release gate and waves
+
+| Wave | Tasks |
+|---|---|
+| 1 | S2.1, S2.2 (independent of each other; S2.2's schema is merged alone) |
+| 2 | G3.2 |
+
+### [ ] Task G3.2: Release 1.3.2 certification
+**Owner**: Reality Checker · **QA**: **Owner (human)**
+**Description**: Evidence for every 1.3.2 item that was built; full gate, `pnpm e2e`, phone project, `pnpm gate:drill`, Docker image, and an upgrade from a populated 1.3.1 volume (S2.2 changes the database).
+**Depends on**: S2.1, S2.2
 
 ## 7. Backlog: assigned, broken down when scheduled
 
