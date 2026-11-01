@@ -9,6 +9,8 @@ Before you update, read the entries between your version and the new one, and
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-01
+
 A security and follow-up release. It closes a leak that is present in 1.3.0 and makes queries faster. **Read
 [Security](#security) first.** There are no database migrations in this release (see [Upgrade notes](#upgrade-notes)
 below).
@@ -446,7 +448,8 @@ What to test:
 The changes in 1.0.0 are listed in the draft above, under "Unreleased". A release candidate publishes only the tag
 `1.0.0-rc.1`; it does not move `1.0` or `latest`.
 
-[Unreleased]: https://github.com/Merilairon/critical-notes/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/Merilairon/critical-notes/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/Merilairon/critical-notes/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/Merilairon/critical-notes/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Merilairon/critical-notes/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/Merilairon/critical-notes/compare/v1.1.1...v1.1.2
