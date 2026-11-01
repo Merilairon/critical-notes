@@ -9,6 +9,7 @@ import { loadConfig, type AppConfig } from '../src/config';
 import { openAppDb, type AppDb } from '../src/db';
 import { openIndexDb, type IndexDb } from '../src/reference/index-db';
 import { runIndexer } from '../src/reference/indexer';
+import { homebrewValidator } from '../src/homebrew/schema';
 
 export const fixtureLists = makeEditionLists({ classic: ['TST', 'OLD'], modern: ['XTST'], legacy: ['OLD'] });
 
@@ -62,6 +63,17 @@ export async function createFixture(): Promise<Fixture> {
       rmSync(root, { recursive: true, force: true });
     },
   };
+}
+
+/**
+ * Compiles the 5etools homebrew schema now (production compiles it lazily on the first entity save). It is about 2.5 s of
+ * CPU alone, 6 s when the files of a full run compete, and 16 s while another full run loads the machine, and it hit
+ * whichever test saved the first entity (homebrew, transfer, mcp: 20 s test timeout). A file that saves homebrew calls this
+ * in its beforeAll, whose budget (HOMEBREW_WARMUP_TIMEOUT) is written for this one-time cost, so the tests measure their own work.
+ */
+export const HOMEBREW_WARMUP_TIMEOUT = 90_000;
+export function warmHomebrewValidator(): void {
+  homebrewValidator();
 }
 
 export type TestApp = ReturnType<typeof createApp>['app'];

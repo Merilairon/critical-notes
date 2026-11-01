@@ -2,7 +2,7 @@
 # two `git clone --depth 1` commands in the README). App data lives in the `app-data` volume.
 #   docker compose up -d                              start (http://localhost:3000), pulling the published image
 #   docker compose pull && docker compose up -d       update to the newest release (migrations run on start)
-#   CN_VERSION=1.2.0 docker compose up -d             pin a version (or put CN_VERSION=1.2.0 in .env)
+#   CN_VERSION=1.3.0 docker compose up -d             pin a version (or put CN_VERSION=1.3.0 in .env)
 #   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build   build from this checkout instead
 #   docker compose --profile tools run --rm data-update   pull the latest 5etools data, then:
 #   docker compose restart app                        re-index on start (only changed files are read)
@@ -15,6 +15,9 @@ services:
     environment:
       # The address people open the app at (an https:// address makes session cookies Secure)
       PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
+      # Behind a reverse proxy (README "Configuration"). Empty = off / derived from PUBLIC_URL.
+      TRUST_PROXY: ${TRUST_PROXY:-}
+      SECURE_COOKIES: ${SECURE_COOKIES:-}
       # Backups (README "Backups"). Scheduled backups are ON by default here: one every 24 hours, keeping the newest 7.
       # Set BACKUP_EVERY_HOURS=0 in .env to turn them off. An empty value behaves as unset (the default).
       BACKUP_EVERY_HOURS: ${BACKUP_EVERY_HOURS:-24}

@@ -4,6 +4,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createFixture, createSignedInApp, TestClient, type Fixture, type TestApp } from './helpers';
 import { openEvents } from './events-helpers';
 import { callTool, makeToken, mcpClient } from './mcp-client';
+import { contextFor } from '../src/services/revisions';
+import { viewerOf } from '../src/services/visibility';
 import { UNIDENTIFIED_ITEM_NAME, type InventoryDto } from '@cn/shared';
 
 /**
@@ -14,6 +16,7 @@ const SENTINEL = /sentinel/i;
 
 let fx: Fixture;
 let app: TestApp;
+let services: Awaited<ReturnType<typeof createSignedInApp>>['services'];
 let dm: TestClient;
 let player: TestClient;
 let playerId: string;
@@ -51,7 +54,7 @@ async function invite(role: 'player' | 'codm' = 'player', extra: object = {}) {
 
 beforeAll(async () => {
   fx = await createFixture();
-  ({ app, client: dm } = await createSignedInApp(fx));
+  ({ app, services, client: dm } = await createSignedInApp(fx));
   campaignId = (await dm.post('/api/campaigns', { name: 'Secrets', ruleset: '2014' })).body.id;
   ({ client: player, userId: playerId } = await join(await invite(), 'pat'));
 
@@ -436,6 +439,128 @@ describe('sentinel crawl: nothing DM-only reaches a player', () => {
   });
 });
 
+describe('sorting a query on a page link orders by the target title', () => {
+  /** A fresh campaign (so the shared fixture and the sentinel crawl are untouched): a player, link rows and their targets. */
+  async function world(targets: Record<string, { title: string; visibility?: 'all' | 'dm' }>, rows: Record<string, string | null>, who = 'sorter') {
+    const cid = (await dm.post('/api/campaigns', { name: `Sort ${who}`, ruleset: '2014' })).body.id as string;
+    const b = `/api/campaigns/${cid}`;
+    const tok = (await dm.post(`${b}/invites`, { role: 'player' })).body.token as string;
+    expect((await player.post(`/api/invites/${tok}/accept`)).status).toBe(200);
+    const pl = player;
+    const prop = await dm.post(`${b}/properties`, { label: 'Contact', type: 'pageLink' });
+    expect(prop.status).toBe(201);
+    const target: Record<string, string> = {};
+    for (const [k, t] of Object.entries(targets)) target[k] = (await dm.post(`${b}/pages`, { title: t.title, visibility: t.visibility ?? 'all' })).body.id;
+    for (const [title, t] of Object.entries(rows)) {
+      const made = await dm.post(`${b}/pages`, { title, visibility: 'all', tags: ['row'] });
+      expect(made.status).toBe(201);
+      if (t) expect((await dm.patch(`${b}/pages/${made.body.id}`, { revision: made.body.revision, props: { contact: target[t] } })).status).toBe(200);
+    }
+    const sort = (c: TestClient, field: string, dir: 'asc' | 'desc') =>
+      c.post(`${b}/query`, { filter: { tags: ['row'], sort: { field, dir } } }).then((r) => (r.body.rows as { title: string }[]).map((x) => x.title));
+    return { b, target, pl, sort };
+  }
+
+  it('DM: target title asc and desc, accents and numbers, dead targets last both ways, ties by row title', async () => {
+    const w = await world(
+      { a: { title: 'Room 10' }, b: { title: 'Room 2' }, c: { title: 'Émile' }, d: { title: 'Zed' }, gone: { title: 'Aaa trashed' } },
+      { r10: 'a', r2: 'b', rE: 'c', rZ: 'd', rTie: 'd', rGone: 'gone', rNone: null },
+      'dmsort',
+    );
+    expect((await dm.delete(`${w.b}/pages/${w.target['gone']}`)).status).toBe(200);
+    expect(await w.sort(dm, 'prop.contact', 'asc')).toEqual(['rE', 'r2', 'r10', 'rTie', 'rZ', 'rGone', 'rNone']);
+    expect(await w.sort(dm, 'prop.contact', 'desc')).toEqual(['rTie', 'rZ', 'r10', 'r2', 'rE', 'rGone', 'rNone']);
+  });
+
+  it('DM: a facet page link (quest giver) sorts by the giver title too', async () => {
+    const cid = (await dm.post('/api/campaigns', { name: 'Sort facet', ruleset: '2014' })).body.id as string;
+    const b = `/api/campaigns/${cid}`;
+    const npc = async (title: string) => (await dm.post(`${b}/pages`, { type: 'npc', title, visibility: 'all' })).body.id as string;
+    const zed = await npc('Zed');
+    const amy = await npc('Amy');
+    for (const [title, giver] of [['Q first', zed], ['Q second', amy]] as const) {
+      expect((await dm.post(`${b}/pages`, { type: 'quest', title, visibility: 'all', tags: ['row'], facet: { giverPageId: giver } })).status).toBe(201);
+    }
+    const rows = (await dm.post(`${b}/query`, { filter: { tags: ['row'], sort: { field: 'facet.giverPageId', dir: 'asc' } } })).body.rows as { title: string }[];
+    expect(rows.map((r) => r.title)).toEqual(['Q second', 'Q first']);
+  });
+
+  const hiddenWorld = (hiddenA: string, hiddenB: string, who: string) =>
+    world(
+      { vis: { title: 'Middle' }, h1: { title: hiddenA, visibility: 'dm' }, h2: { title: hiddenB, visibility: 'dm' }, v2: { title: 'Alpha' } },
+      { 'Row visible mid': 'vis', 'Row hidden one': 'h1', 'Row hidden two': 'h2', 'Row visible alpha': 'v2', 'Row empty': null },
+      who,
+    );
+
+  it('player: rows with a hidden target sort last in both directions, in the order of their own titles', async () => {
+    const w = await hiddenWorld('Aboleth', 'Zombie', 'hiddensort');
+    expect(await w.sort(w.pl, 'prop.contact', 'asc')).toEqual(['Row visible alpha', 'Row visible mid', 'Row empty', 'Row hidden one', 'Row hidden two']);
+    expect(await w.sort(w.pl, 'prop.contact', 'desc')).toEqual(['Row visible mid', 'Row visible alpha', 'Row empty', 'Row hidden one', 'Row hidden two']);
+    // the DM sees the real order
+    expect(await w.sort(dm, 'prop.contact', 'asc')).toEqual(['Row hidden one', 'Row visible alpha', 'Row visible mid', 'Row hidden two', 'Row empty']);
+  });
+
+  it('LEAK TEST: swapping the titles of hidden targets does not change the player order', async () => {
+    const one = await hiddenWorld('Aboleth', 'Zombie', 'leakone');
+    const two = await hiddenWorld('Zombie', 'Aboleth', 'leaktwo');
+    for (const dir of ['asc', 'desc'] as const) {
+      const a = await one.sort(one.pl, 'prop.contact', dir);
+      expect(await two.sort(two.pl, 'prop.contact', dir)).toEqual(a);
+    }
+    // for the DM the same swap does change the order (so the fixtures are not trivially equal)
+    expect(await one.sort(dm, 'prop.contact', 'asc')).not.toEqual(await two.sort(dm, 'prop.contact', 'asc'));
+  });
+
+  it('player: a quest-giver facet sorts the same way (swap, trashed target, selected viewer, co-DM sees the DM order)', async () => {
+    const run = async (hiddenA: string, hiddenB: string, who: string) => {
+      const cid = (await dm.post('/api/campaigns', { name: `Sort facet ${who}`, ruleset: '2014' })).body.id as string;
+      const b = `/api/campaigns/${cid}`;
+      expect((await player.post(`/api/invites/${(await dm.post(`${b}/invites`, { role: 'player' })).body.token}/accept`)).status).toBe(200);
+      const codmTok = (await dm.post(`${b}/invites`, { role: 'codm' })).body.token as string;
+      const coDm = (await join(codmTok, `co${who}`)).client;
+      const npc = async (title: string, visibility: 'all' | 'dm' | 'selected') => {
+        const made = (await dm.post(`${b}/pages`, { type: 'npc', title, visibility })).body;
+        if (visibility === 'selected') expect((await dm.patch(`${b}/pages/${made.id}`, { revision: made.revision, viewers: [playerId] })).status).toBe(200);
+        return made.id as string;
+      };
+      const g = {
+        h1: await npc(hiddenA, 'dm'),
+        h2: await npc(hiddenB, 'dm'),
+        mid: await npc('Middle', 'all'),
+        sel: await npc('Gnoll', 'selected'),
+        gone: await npc('Aaa trashed', 'all'),
+        other: await npc('Nobody sees me', 'dm'),
+      };
+      for (const [title, giver] of [['Q h1', g.h1], ['Q h2', g.h2], ['Q mid', g.mid], ['Q sel', g.sel], ['Q gone', g.gone], ['Q none', null]] as const) {
+        expect((await dm.post(`${b}/pages`, { type: 'quest', title, visibility: 'all', tags: ['row'], facet: giver ? { giverPageId: giver } : {} })).status).toBe(201);
+      }
+      expect((await dm.delete(`${b}/pages/${g.gone}`)).status).toBe(200);
+      const sort = (c: TestClient, dir: 'asc' | 'desc') =>
+        c.post(`${b}/query`, { filter: { tags: ['row'], sort: { field: 'facet.giverPageId', dir } } }).then((r) => (r.body.rows as { title: string }[]).map((x) => x.title));
+      return { sort, coDm };
+    };
+    const one = await run('Aboleth', 'Zombie', 'one');
+    const two = await run('Zombie', 'Aboleth', 'two');
+    // the selected-viewer target (Gnoll) is readable, so it sorts first; hidden and trashed targets sort as empty, by row title
+    expect(await one.sort(player, 'asc')).toEqual(['Q sel', 'Q mid', 'Q gone', 'Q h1', 'Q h2', 'Q none']);
+    expect(await one.sort(player, 'desc')).toEqual(['Q mid', 'Q sel', 'Q gone', 'Q h1', 'Q h2', 'Q none']);
+    for (const dir of ['asc', 'desc'] as const) expect(await two.sort(player, dir)).toEqual(await one.sort(player, dir));
+    // a co-DM sees the DM order, which does depend on the hidden titles
+    expect(await one.sort(one.coDm, 'asc')).toEqual(await one.sort(dm, 'asc'));
+    expect(await one.sort(dm, 'asc')).not.toEqual(await two.sort(dm, 'asc'));
+  });
+
+  it('player: a reveal changes the order', async () => {
+    const w = await hiddenWorld('Aboleth', 'Zombie', 'revealsort');
+    const before = await w.sort(w.pl, 'prop.contact', 'asc');
+    const page = (await dm.get(`${w.b}/pages/${w.target['h1']}`)).body;
+    expect((await dm.patch(`${w.b}/pages/${w.target['h1']}`, { revision: page.revision, visibility: 'all' })).status).toBe(200);
+    const after = await w.sort(w.pl, 'prop.contact', 'asc');
+    expect(after).not.toEqual(before);
+    expect(after).toEqual(['Row hidden one', 'Row visible alpha', 'Row visible mid', 'Row empty', 'Row hidden two']);
+  });
+});
+
 describe('what players may change', () => {
   it('edits their own character without losing the DM’s hidden notes', async () => {
     const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
@@ -504,6 +629,119 @@ describe('what players may change', () => {
     expect(JSON.stringify(asDm.body)).toContain(`"pageId":"${ids['hidden']}","label":"a rival"`);
   });
 
+  it('keeps the DM’s link to a hidden page when the player moves its paragraph into a container and back out', async () => {
+    const link = { type: 'paragraph', attrs: { id: 'mv-link' }, content: [{ type: 'text', text: 'Hates ' }, { type: 'pageLink', attrs: { pageId: ids['hidden'], label: 'the baron' } }] };
+    const box = { type: 'callout', attrs: { id: 'mv-box' }, content: [para('Box tip')] };
+    const dmBefore = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
+    expect((await dm.patch(`${base()}/pages/${ids['pc']}`, { revision: dmBefore.revision, body: { ...dmBefore.body, content: [...dmBefore.body.content, link, box] } })).status).toBe(200);
+    const move = async (edit: (content: { attrs?: { id?: string }; content?: unknown[] }[]) => unknown[]) => {
+      const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+      expect(JSON.stringify(mine.body)).not.toContain(ids['hidden']);
+      const res = await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, body: { ...mine.body, content: edit(mine.body.content) } });
+      expect(res.status).toBe(200);
+      expect(JSON.stringify(res.body)).not.toContain(ids['hidden']);
+      return JSON.stringify((await dm.get(`${base()}/pages/${ids['pc']}`)).body.body);
+    };
+    const hiddenLink = `"pageId":"${ids['hidden']}","label":"the baron"`;
+    const into = await move((content) => {
+      const mover = content.find((b) => b.attrs?.id === 'mv-link')!;
+      return content.filter((b) => b !== mover).map((b) => (b.attrs?.id === 'mv-box' ? { ...b, content: [...b.content!, mover] } : b));
+    });
+    expect(into.split(hiddenLink).length - 1).toBe(1);
+    const out = await move((content) => {
+      const boxNow = content.find((b) => b.attrs?.id === 'mv-box')!;
+      const mover = boxNow.content!.find((b) => (b as { attrs?: { id?: string } }).attrs?.id === 'mv-link')!;
+      return [...content.map((b) => (b === boxNow ? { ...b, content: boxNow.content!.filter((c) => c !== mover) } : b)), mover];
+    });
+    expect(out.split(hiddenLink).length - 1).toBe(1);
+  });
+
+  it('refuses malformed or absurdly deep bodies with the same 400 whether or not the page holds hidden data', async () => {
+    const deep = `${'{"type":"callout","content":['.repeat(3000)}{"type":"paragraph"}${']}'.repeat(3000)}`;
+    const shapes: unknown[] = [{ type: 'paragraph', content: [null] }, { type: 'paragraph', content: {} }, { type: 'callout', content: 'x' }, null, [], 'DEEP'];
+    const submit = async (shape: unknown) => {
+      const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+      const json = JSON.stringify({ revision: mine.revision, body: { ...mine.body, content: [...mine.body.content, shape] } }).replace('"DEEP"', deep);
+      const res = await player.app.request(`http://localhost${base()}/pages/${ids['pc']}`, { method: 'PATCH', headers: { origin: 'http://localhost', host: 'localhost', cookie: player.cookie, 'content-type': 'application/json' }, body: json });
+      return { status: res.status, body: await res.json() };
+    };
+    const first = await Promise.all(shapes.map(submit));
+    expect(first.map((r) => r.status)).toEqual(shapes.map(() => 400));
+    const hasHidden = JSON.stringify((await dm.get(`${base()}/pages/${ids['pc']}`)).body.body);
+    expect(hasHidden).toMatch(SENTINEL);
+    const second = await Promise.all(shapes.map(submit));
+    expect(second.map((r) => r.status)).toEqual(shapes.map(() => 400));
+    expect(second.map((r) => r.body)).toEqual(first.map((r) => r.body));
+    expect(new Set(first.map((r) => JSON.stringify(r.body))).size).toBe(1);
+    expect(JSON.stringify(first.map((r) => r.body))).not.toMatch(SENTINEL);
+  });
+
+  it('does not graft the DM’s hidden children into a paragraph that reuses a container’s id', async () => {
+    const box = { type: 'callout', attrs: { id: 'swap-box' }, content: [para('Shown line'), para('SENTINEL swap child', { visibility: 'dm' })] };
+    const before = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
+    expect((await dm.patch(`${base()}/pages/${ids['pc']}`, { revision: before.revision, body: { ...before.body, content: [...before.body.content, box] } })).status).toBe(200);
+    const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+    const content = mine.body.content.map((b: { attrs?: { id?: string } }) => (b.attrs?.id === 'swap-box' ? { type: 'paragraph', attrs: { id: 'swap-box' }, content: [{ type: 'text', text: 'Now a paragraph' }] } : b));
+    const res = await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, body: { ...mine.body, content } });
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(res.body)).not.toMatch(SENTINEL);
+    expect(JSON.stringify((await player.get(`${base()}/pages/${ids['pc']}`)).body)).not.toMatch(SENTINEL);
+    expect(JSON.stringify((await dm.get(`${base()}/pages/${ids['pc']}`)).body.body)).toContain('SENTINEL swap child');
+  });
+
+  it('keeps the DM’s hidden child once and shows players nothing when a container’s id is forged inside another block', async () => {
+    const wrappers: [string, (inner: unknown) => unknown][] = [
+      ['paragraph', (inner) => ({ type: 'paragraph', content: [inner] })],
+      ['heading', (inner) => ({ type: 'heading', attrs: { level: 2 }, content: [inner] })],
+      ['bulletList', (inner) => ({ type: 'bulletList', content: [inner] })],
+      ['listItem', (inner) => ({ type: 'bulletList', content: [{ type: 'listItem', content: [inner] }] })],
+      ['tableCell', (inner) => ({ type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [inner] }] }] })],
+    ];
+    for (const [name, wrap] of wrappers) {
+      const boxId = `fg-${name}`;
+      const box = { type: 'callout', attrs: { id: boxId }, content: [para('Shown line'), para(`SENTINEL forged ${name}`, { visibility: 'dm' })] };
+      const before = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
+      expect((await dm.patch(`${base()}/pages/${ids['pc']}`, { revision: before.revision, body: { ...before.body, content: [...before.body.content, box] } })).status).toBe(200);
+      const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+      const forged = { type: 'callout', attrs: { id: boxId }, content: [] };
+      const content = mine.body.content.map((b: { attrs?: { id?: string } }) => (b.attrs?.id === boxId ? wrap(forged) : b));
+      const res = await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, body: { ...mine.body, content } });
+      expect(res.status, name).toBe(200);
+      expect(JSON.stringify(res.body), name).not.toMatch(SENTINEL);
+      expect(JSON.stringify((await player.get(`${base()}/pages/${ids['pc']}`)).body), name).not.toMatch(SENTINEL);
+      const stored = JSON.stringify((await dm.get(`${base()}/pages/${ids['pc']}`)).body.body);
+      expect(stored.split(`SENTINEL forged ${name}`).length - 1, name).toBe(1);
+    }
+  });
+
+  it('refuses a body whose hidden content would be cut off by the depth limit, with the same 400 at every depth over it', async () => {
+    const hiddenChain = { type: 'callout', attrs: { id: 'dh' }, content: [{ type: 'callout', content: [{ type: 'callout', content: [{ type: 'callout', content: [para('SENTINEL deep child')] }] }] }] };
+    const box = { type: 'callout', attrs: { id: 'dc', visibility: 'inherit' }, content: [para('Visible in dc'), { ...hiddenChain, attrs: { id: 'dh', visibility: 'dm' } }] };
+    const before = (await dm.get(`${base()}/pages/${ids['pc']}`)).body;
+    expect((await dm.patch(`${base()}/pages/${ids['pc']}`, { revision: before.revision, body: { ...before.body, content: [...before.body.content, box] } })).status).toBe(200);
+    // The player moves dc under `levels` new callouts
+    const nest = async (levels: number) => {
+      const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+      const rest = mine.body.content.filter((b: { attrs?: { id?: string } }) => b.attrs?.id !== 'dc');
+      const dc = mine.body.content.find((b: { attrs?: { id?: string } }) => b.attrs?.id === 'dc');
+      const json = JSON.stringify({ revision: mine.revision, body: { ...mine.body, content: [...rest, 'DEEP'] } }).replace(
+        '"DEEP"',
+        `${'{"type":"callout","content":['.repeat(levels)}${JSON.stringify(dc)}${']}'.repeat(levels)}`,
+      );
+      const res = await player.app.request(`http://localhost${base()}/pages/${ids['pc']}`, { method: 'PATCH', headers: { origin: 'http://localhost', host: 'localhost', cookie: player.cookie, 'content-type': 'application/json' }, body: json });
+      return { status: res.status, body: await res.json() };
+    };
+    const results = new Map<number, { status: number; body: unknown }>();
+    // The one that is accepted goes last: it changes the page
+    for (const levels of [35, 36, 38, 40, 41, 45, 90, 34]) results.set(levels, await nest(levels));
+    // dc ends up `levels` deep and its hidden chain reaches 5 below it; a paragraph deeper than 39 would lose its text: 35 to 38 are refused only because of what the merge adds, 40 and over because of what the player sent
+    expect([...results].map(([levels, r]) => [levels, r.status === 200])).toEqual([[35, false], [36, false], [38, false], [40, false], [41, false], [45, false], [90, false], [34, true]]);
+    const refused = [...results.values()].filter((r) => r.status === 400);
+    expect(new Set(refused.map((r) => JSON.stringify(r.body))).size).toBe(1);
+    expect(JSON.stringify([...results.values()].map((r) => r.body))).not.toMatch(SENTINEL);
+    expect(JSON.stringify((await dm.get(`${base()}/pages/${ids['pc']}`)).body.body)).toContain('SENTINEL deep child');
+  });
+
   it('does not store a player’s forged pageEmbed to a hidden page', async () => {
     const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
     const forged = { type: 'pageEmbed', attrs: { pageId: ids['hidden'], mode: 'card' } };
@@ -514,6 +752,56 @@ describe('what players may change', () => {
     const backlinks = (await dm.get(`${base()}/pages/${ids['hidden']}/backlinks`)).body;
     const fromPc = (backlinks.backlinks as { id: string; kinds: string[] }[]).find((b) => b.id === ids['pc']);
     expect(fromPc?.kinds ?? []).not.toContain('embed');
+  });
+
+  it('answers a page-link property to a hidden, selected-other, missing, other-campaign or trashed page identically', async () => {
+    const other = await dm.post('/api/campaigns', { name: 'Elsewhere', ruleset: '2014' });
+    const foreign = (await dm.post(`/api/campaigns/${other.body.id}/pages`, { title: 'Foreign', visibility: 'all' })).body.id as string;
+    const tries = [ids['hidden']!, ids['selectedOther']!, ids['trashed']!, foreign, 'no-such-page-id'];
+    const results: { status: number; body: string }[] = [];
+    for (const id of tries) {
+      const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+      const res = await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, props: { contact: id } });
+      results.push({ status: res.status, body: JSON.stringify(res.body).split(id).join('<id>') });
+    }
+    expect(results[0]!.status).toBe(400);
+    for (const r of results) expect(r).toEqual(results[0]);
+    // Nothing was stored: the DM sees no link on the character
+    expect((await dm.get(`${base()}/pages/${ids['pc']}`)).body.props.contact ?? null).toBeNull();
+    // A visible page still works, including one shared with this player alone
+    for (const id of [ids['town']!, ids['selectedMe']!]) {
+      const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+      const ok = await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, props: { contact: id } });
+      expect(ok.status).toBe(200);
+      expect(ok.body.props.contact).toBe(id);
+    }
+    const mine = (await player.get(`${base()}/pages/${ids['pc']}`)).body;
+    expect((await player.patch(`${base()}/pages/${ids['pc']}`, { revision: mine.revision, props: { contact: null } })).status).toBe(200);
+  });
+
+  it('answers a hidden page of the wrong type for a facet link like a missing page (visibility is checked before type)', async () => {
+    // No player-editable page has a facet pageLink field today (a PC has none), so this pins the order at the service
+    // seam: a type check first would tell a player that a hidden faction exists
+    const faction = (await dm.post(`${base()}/pages`, { type: 'faction', title: 'SENTINEL hidden faction', visibility: 'dm' })).body.id as string;
+    const npc = (await dm.post(`${base()}/pages`, { type: 'npc', title: 'Facet probe', visibility: 'all' })).body;
+    const visible = services.visibility.visiblePageIds(campaignId, viewerOf(playerId, 'player'));
+    expect(visible.has(faction)).toBe(false);
+    const ctx = contextFor(playerId, { source: 'web' }, 'edit');
+    const answer = (id: string) => {
+      try {
+        services.pages.update(campaignId, npc.id, { revision: npc.revision, facet: { factionPageId: id } }, ctx, visible);
+      } catch (err) {
+        return `${(err as { status?: number }).status} ${(err as Error).message}`.split(id).join('<id>');
+      }
+      return 'stored';
+    };
+    const missing = answer('no-such-page-id');
+    expect(missing).toMatch(/not found in this campaign/);
+    expect(answer(faction)).toBe(missing);
+    // A hidden page of the WRONG type is the case that pins the order: a type check first would answer "must be a faction"
+    expect(answer(ids['hidden']!)).toBe(missing);
+    // The DM's own write still gets the type error: the order only matters for players
+    expect(() => services.pages.update(campaignId, npc.id, { revision: npc.revision, facet: { factionPageId: ids['town']! } }, contextFor(playerId, { source: 'web' }, 'edit'))).toThrow(/must be a faction/);
   });
 
   it('refuses an over-long paragraph the same way whether or not the page holds hidden links', async () => {

@@ -35,6 +35,10 @@ Do not tag until every line is true. Run the commands in a clean checkout of the
 
 - [ ] `pnpm -s typecheck && pnpm -s lint && pnpm -s test` passes.
 - [ ] `pnpm build` passes, and the restore drill passes: `pnpm --filter @cn/server drill`.
+- [ ] The restore drill test passes against the **built bundle**, not skipped: `pnpm gate:drill`. It builds `apps/server`
+      first and runs `apps/server/test/restore-drill.test.ts`. The bundle test ("the same drill passes against the built
+      bundle (dist/)") is skipped by a plain `pnpm test` when `apps/server/dist/` does not exist, so a green `pnpm test`
+      does not prove it. Read the output: both tests must show a check mark, none "skipped".
 - [ ] `pnpm e2e` passes (it needs the 5etools data clone: `pnpm data:clone`).
 - [ ] The Docker image works on an empty volume. Build it (`docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build`),
       then run the browser tests against it with `E2E_BASE=http://localhost:3000 pnpm exec playwright test` (a fresh

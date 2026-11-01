@@ -1,5 +1,5 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { afterNextRender, ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, Injector, input, output, signal, untracked, viewChild } from '@angular/core';
+import { afterNextRender, ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, Injector, input, output, signal, untracked, viewChild } from '@angular/core';
 import { docText, type BlockDocument } from '@cn/blocks';
 import { FACET_FIELDS, facetTypeFor, PAGE_TYPE_LABELS, type PageDto, type PageType } from '@cn/shared';
 import { firstValueFrom } from 'rxjs';
@@ -118,8 +118,11 @@ export class HistoryPanel {
    * took it: it refuses while it holds typing that is not saved yet, and the panel then says so instead of offering an Undo.
    */
   readonly adopt = input.required<(page: PageDto, why: 'restored' | 'stale') => boolean>();
-  /** True from the moment a restore starts writing until it ends: the editor holds back its autosave meanwhile. */
-  readonly busy = output<boolean>();
+  /**
+   * Called with true from the moment a restore starts writing and with false when it ends: the editor holds back its autosave
+   * meanwhile. A callback, not an output, because a restore keeps running when the panel is closed and must still report its end.
+   */
+  readonly onBusy = input<(busy: boolean) => void>(() => undefined);
   readonly closed = output<void>();
 
   private readonly http = inject(HttpClient);
@@ -154,8 +157,10 @@ export class HistoryPanel {
   private readonly pageId = computed(() => this.page().id);
   private generation = 0;
   private lastPageId = '';
+  private destroyed = false;
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => (this.destroyed = true));
     // First load, then a quiet reload after every editor save. Async work runs untracked.
     effect(() => {
       this.refresh();
@@ -169,6 +174,8 @@ export class HistoryPanel {
           this.done.set(false);
           this.clearResult();
         }
+        // A restore reloads the list itself when it ends: the editor's saves during it (flush, adopt) must not each reload it again
+        if (this.lastPageId === pageId && (this.busyRev() !== null || this.busyUndo())) return;
         void this.loadFirst(this.loading() || this.lastPageId !== pageId).finally(() => (this.lastPageId = pageId));
       });
     });
@@ -184,6 +191,8 @@ export class HistoryPanel {
   }
 
   private focusAfterRender(fn: () => HTMLElement | null | undefined) {
+    // A closed panel (a restore may outlive it) has nothing to focus, and its injector is gone
+    if (this.destroyed) return;
     afterNextRender(() => fn()?.focus(), { injector: this.injector });
   }
 
@@ -210,6 +219,7 @@ export class HistoryPanel {
 
   /** Reloads the first page. `quiet` keeps what is on screen (no loading state); ticks are kept by revision where the row still exists. */
   protected async loadFirst(initial: boolean) {
+    if (this.destroyed) return;
     const gen = ++this.generation;
     if (initial) {
       this.loading.set(true);
@@ -449,7 +459,7 @@ export class HistoryPanel {
       return;
     }
     const before = prepared.revision;
-    this.busy.emit(true);
+    this.onBusy()(true);
     try {
       // Flushing pending edits can add, or fold into, a history row. The version to go back to is the newest row as the server has it
       // now, fetched here on its own: the shared list may be mid-reload (the editor's save bumps `refresh`) and superseded.
@@ -480,7 +490,7 @@ export class HistoryPanel {
     } catch (err) {
       await this.fail(err, rev, pressed);
     } finally {
-      this.busy.emit(false);
+      this.onBusy()(false);
     }
   }
 

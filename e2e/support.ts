@@ -29,10 +29,14 @@ export async function newPage(browser: Browser, storageState: string | undefined
 
 /** Records the page's browser errors in `errors`. A native confirm()/alert() is an error too: the app has its own dialog (`confirmDialog`). */
 export function watch(page: Page, errors: string[]): Page {
-  page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  // Chrome's benign "ResizeObserver loop completed with undelivered notifications" (a layout notice, not a failure); matched exactly
+  const benign = (text: string) => /^ResizeObserver loop (completed with undelivered notifications|limit exceeded)\.?$/.test(text.trim());
+  page.on('pageerror', (e) => {
+    if (!benign(e.message)) errors.push(`pageerror: ${e.message}`);
+  });
   page.on('console', (m) => {
     // Refused requests the app handles (401 before signing in, 403/404 by design) are not errors
-    if (m.type() === 'error' && !/status of 40[0349]/.test(m.text())) errors.push(`console: ${m.text()}`);
+    if (m.type() === 'error' && !/status of 40[0349]/.test(m.text()) && !benign(m.text())) errors.push(`console: ${m.text()}`);
   });
   page.on('dialog', (d) => {
     // The browser's own "leave this page?" prompt (an editor with pending changes) is accepted as before: dismissing it

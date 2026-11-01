@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Release 1.0 shipped (v1.0.0, 2026-10-22); 1.1.0 to 1.2.0 shipped as post-1.0 follow-ups (not in this file); release 1.3 shipped (v1.3.0, 2026-10-26); release 1.3.1 (hardening and follow-ups, §6b) is planned next; 1.4 and later are assigned but not yet broken down |
+| Status | Release 1.0 shipped (v1.0.0, 2026-10-22); 1.1.0 to 1.2.0 shipped as post-1.0 follow-ups (not in this file); release 1.3 shipped (v1.3.0, 2026-10-26); release 1.3.1 (hardening and follow-ups, §6b) is built, merged to `main` and certified by the Reality Checker as NEEDS WORK (minor: docs and the release steps only) on 2026-10-31; its version bump, tag and the owner's approval (G3.1) are still to do; release 1.5 (Characters: sheet, builder, level-up, PDF; §6c) is planned, nothing built; 1.4 and later are assigned but not yet broken down |
 | Date | 2026-10-13, updated 2026-10-26 |
 | Specification | [PRD.md](PRD.md) (what and why). This file is the task list (who and how). |
 | Engineering state | [STATUS.md](STATUS.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [PLAN.md](PLAN.md) |
@@ -18,8 +18,10 @@
 | **1.1.0 to 1.2.0** | Post-1.0 follow-ups (shipped 2026-10-22) | Sign out other sessions, player-visible page count, accessibility backlog, keyboard block menu, page titles | Not planned here; see [CHANGELOG.md](../CHANGELOG.md) |
 | **1.3** | Prep and play loop | N1 Page history, N3 Reveal to players, I1 Keep hidden links, I3 Tracker additions, I2 Query views | 22 tasks, 5 waves (§6) |
 | **1.3.1** | Hardening and follow-ups | Rest of the player-merge hardening (I1.6, S1.1, S1.2), stream and history-panel follow-ups (S1.3, S1.4), cheaper queries (I2.4 to I2.7), offline-gap toast (N3.6), test health (H1.1 to H1.3, H1.5) | 15 tasks (14 plus the gate), 4 waves (§6b) |
+| **1.3.2** | Safer deletes | Confirmation for the remaining destructive AI-assistant tools, and restore for deleted property definitions | 2 tasks, 2 waves (§6d); planned 2026-11-01 |
 | **1.4** | Stay in sync | N2, N4, I4, I5, I10 | Assigned, broken down when scheduled (§7) |
-| **Later** | Grow | N5–N17, I6–I18 | Assigned, broken down when scheduled (§7) |
+| **1.5** | Characters | N13 sheet, N18 builder, N19 level-up, N20 PDF export (2014 and 2024) | 35 tasks (33 plus 2 stretch), 10 waves (§6c); planned 2026-10-26, four carry-over tasks (F1.1 to F1.4) added 2026-11-01 |
+| **Later** | Grow | N5–N12, N14–N17, I6–I18 | Assigned, broken down when scheduled (§7) |
 
 **Technical stack (exact):** pnpm 11 monorepo, TypeScript 6.0.3, Node 24. Server: Hono, Drizzle ORM on better-sqlite3 (Postgres mirror schema), zod 4, `@modelcontextprotocol/server` 2.3.1. Web: Angular 22 (standalone, signals, zoneless, `httpResource`), Tailwind v4, TipTap v3. Tests: Vitest (unit/API), Playwright (`e2e/`, system Chrome, real 5etools data). Delivery: esbuild server bundle, Docker (non-root), docker-compose.
 
@@ -41,7 +43,7 @@ Agents are referred to by their name in the repository; the file is in brackets.
 | **UX Architect** (`design/design-ux-architect`) | The "ArchitectUX" step for each epic with UI: flows, layouts, Tailwind patterns developers follow. |
 | **UI Designer** (`design/design-ui-designer`) | Visual consistency of new screens (Account, Admin, Trash, History) in light and dark themes. |
 | **UX Researcher** (`design/design-ux-researcher`) | Runs the "first evening" tests (PRD §4) and validates demand before big bets (N13). |
-| **Game Designer** (`game-development/game-designer`) | D&D rules expert for combat and generators (I3, N4): exact 2014/2024 rules, what players may see. |
+| **Game Designer** (`game-development/game-designer`) | D&D rules expert for combat, generators and characters (I3, N4, N13/N18/N19): exact 2014/2024 rules, what players may see. Owns the character rules spec and the golden characters' expected numbers (§6c). |
 | **Narrative Designer** (`game-development/narrative-designer`) | Session recaps and story structure (N12), the "table moment" of reveals (N3). |
 
 ### Engineering
@@ -652,7 +654,7 @@ Follow-ups from the I1.2 security review. Same function (`mergePlayerEdit` in `p
 ### [x] Task G2.1: Release 1.3 certification
 **Owner**: Reality Checker · **QA**: **Owner (human)**
 **Done:** 2026-10-26, QA Reality Checker: CERTIFIED WITH CAVEATS on the second run (the first run found four blockers: the 1.3 docs, I1.5 data loss on bold labels, H1.4 tracker stream access after removal, and the real-data upgrade; all closed, with I1.4 and I1.5 and H1.4 pulled into 1.3 by the owner), owner approval: given on 2026-10-26 with S1.2 (a moved paragraph loses a hidden link) shipped as a documented known issue. Evidence: gate 985 + 528, full e2e 137 passed and 8 skipped on three runs and against Docker, restore drill on the built bundle, upgrade from a populated 1.2.0 volume, 52 of 52 live visibility checks. **Shipped as v1.3.0:** release commit b8d350c, CI green on the pull request and on `main`, release workflow green, image `ghcr.io/merilairon/critical-notes:1.3.0` pulled without credentials, `linux/amd64` and `linux/arm64`, runs as `node`, `/api/health` shows 1.3.0, GitHub Release published. Process notes: 33 agent commits lacked the DCO sign-off and were signed off by the owner's decision before the first push (tree hash unchanged); the E2E workflow stayed queued because no self-hosted runner is registered, so the browser suite was run locally. Not tested: arm64 hardware (the arm64 image builds under emulation only).
-**Description**: Evidence for every 1.3 item; full gate, `pnpm e2e`, phone project, Docker image.
+**Description**: Evidence for every 1.3 item; full gate, build `apps/server` first and run the restore drill test against the built bundle (`pnpm gate:drill`, must pass, not skipped; H1.2), `pnpm e2e`, phone project, Docker image.
 **Depends on**: all 1.3 tasks
 
 | Wave | Tasks |
@@ -690,62 +692,72 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 **Depends on**: I1.4
 **Note**: if this proves to need a stable link identity in the document format, stop and raise it with the Software Architect instead of widening the diff.
 
-### [ ] Task I1.6: Keep a block's id when one common attribute is invalid (found by N3.4 QA)
+### [x] Task I1.6: Keep a block's id when one common attribute is invalid (found by N3.4 QA)
 **Owner**: Minimal Change Engineer · **QA**: Application Security Engineer
+**Done:** 2026-10-31 (with S1.2), Code Reviewer PASS, QA Application Security Engineer: APPROVED. `blockAttrs` parses `id`, `visibility` and `revealed` separately and falls back per field. Over HTTP as the DM, attrs `{id:'bX', visibility:'all'}` read back as `id: 'bX'`, `visibility: 'inherit'` (v1.3.0 re-ids the block); a bad `revealed` keeps the id, a bad `id` keeps the rest; a live reveal of such a block fires `block-revealed` again (v1.3.0 fired none). Unit test per attribute, an HTTP test in `apps/server/test/pages-d.test.ts`.
 **Description**: In `packages/blocks/src/sanitize.ts`, `blockAttrs` parses the common attributes (`id`, `visibility`, `revealed`) as one object, so one invalid value (for example `visibility: 'all'`; the valid values are `inherit` and `dm`) drops all three: the block is given a new id and `visibility: 'inherit'`. For an API or AI-assistant client this silently re-ids the block, so a reveal never produces a live event and block references go stale. Parse each attribute separately and fall back per field, so the id survives. Repro: PATCH a block with `attrs: {id: 'bX', visibility: 'all'}` and read it back.
 **Acceptance Criteria**: the repro keeps `id: 'bX'` and falls back to `visibility: 'inherit'`; a unit test per attribute; the I1.x merge tests, the sentinel crawl and the N3.2 detector tests stay green
 **Depends on**: I1.5
 
 ### 6b.2 Epic I2b: Cheaper queries (from the I2.3 benchmark)
 
-### [ ] Task I2.4: Query reads no page bodies
+### [x] Task I2.4: Query reads no page bodies
 **Owner**: Backend Architect · **QA**: Performance Benchmarker
+**Done:** 2026-10-31, Code Reviewer PASS, QA Performance Benchmarker: PASS (merged with I2.5; three runs at 2,000 pages, 1-minute load 4.9 to 5.9 from unrelated desktop use, so the numbers are an upper bound). `livePageSummaries()` selects summary columns only; all five callers audited (tree, queryable, move, remove, projectForPlayers). Every scenario is at most 37 ms p50 (limit 80), summary query 7 ms (was 80). Numbers in `docs/qa/query-benchmark.md`.
 **Description**: `PageService.livePages()` is `select *`, so every query (and the page tree and other callers around pages.ts 454, 602 and 657) reads and parses every body; a query result never contains one (I2.3: about 80 of 110 ms at 2,000 pages). Select only the summary columns (a body-less `livePageSummaries()` for `queryable()` and `tree()`; keep the full select where a body is needed; check each caller first). No behaviour change.
 **Acceptance Criteria**: `bench:query` shows every scenario under 80 ms p50 at 2,000 pages, recorded in `docs/qa/query-benchmark.md`; the existing query, visibility and tree tests pass
 **Depends on**: I2.3
 
-### [ ] Task I2.5: Cheaper query sorting
+### [x] Task I2.5: Cheaper query sorting
 **Owner**: Backend Architect · **QA**: Performance Benchmarker
+**Done:** 2026-10-31, Code Reviewer PASS (mutation checks: flipped empties-last and `numeric:false` both fail the new tests), QA Performance Benchmarker: PASS. Tags sort 4.0 ms in the stage profile (limit 15, was 85), title sort 0.5 ms (limit 5). Note: titles equal ignoring case and accents now keep input order instead of the old `localeCompare` tie order (the task text asks for the shared collator).
 **Description**: In `packages/blocks/src/query.ts`, build one module-level `Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })` and reuse it; compute each page's sort key once before sorting so `fieldValue` is not called twice per comparison and tags are joined once (do not lowercase tags: `sensitivity: 'base'` also ignores accents); use the same collator for the title tie-break. Same order as today (tests with accents, numbers in strings, empty values last both ways, tags).
 **Acceptance Criteria**: a sort on `tags` at 2,000 pages under 15 ms in the stage profile (was 85 ms), title sort under 5 ms, ordering-equivalence tests pass
 **Depends on**: I2.3
 
-### [ ] Task I2.6: Page-link sort by target title (needs a decision)
+### [x] Task I2.6: Page-link sort by target title (needs a decision)
 **Owner**: Product Manager (decision), then Backend Architect · **QA**: Code Reviewer
+**Done:** 2026-10-31, Code Reviewer PASS, QA Application Security Engineer: APPROVED (live: 40 player queries across two worlds with the hidden targets' titles swapped were byte-identical; hidden, trashed, selected-for-someone-else and missing targets sort as empty, last both ways; a reveal changes the order on the next query; co-DM equals DM; other channels (embedded query block, MCP search, saved block, ETag) leak nothing). Implemented per the decision below: `runQuery` takes the page-link field names and builds the title map from the rows it receives (the visible set for players); hidden link values are also cleared before the sort, a second independent layer. Verified by the owner: the web client already shows an unreadable target blank and sorts it last; the PRD is silent on link sort order; multi-value links do not exist (handled defensively). Page-link sort costs 1.5 ms in the stage profile at 2,000 pages. Known gap: the client's header sort uses `localeCompare` with the same options as the server's collator (same ICU algorithm; they could differ only if the browser and server locales differ).
+**Decision (Product Manager, 2026-10-31): yes, sort by the target's title.** The PRD is silent on link sort order; the UUID order is effectively random, so no one is expected to depend on it. Rule: the title map holds only pages the viewer can read (DM: live pages of this campaign; player: the visible set, the same one the displayed column uses). Hidden, deleted, trashed, missing and other-campaign targets get no entry and sort as empty, last in both directions. Titles are compared with the shared collator of I2.5 (keys computed once); ties and empties fall back to the row's own title, never to the target id. Only keys whose schema type is page-link count (`runQuery` is given the link field names; no guessing from UUID-shaped strings); a multi-value link uses its first readable target. The displayed column must agree: a target the viewer cannot read shows blank and sorts as empty. Why it is safe for players: a map built from all pages would leak the relative order of hidden titles, so it is built from the visible set only, and a swapped-title test pins that. Reverse this decision by asking the Product Manager; it is a behaviour change to the order of existing page-link sorts. (The memo was written without access to the PRD, the web query UI and the server `queryable()`; the implementer verifies those points and reports any that change the rule.)
 **Description**: Sorting a query on a page-link facet or `pageLink` property orders by the target page's id (a UUID), which no reader expects. Decide whether it should sort by the target's title (needs a title map in `runQuery`; for players a hidden target sorts as empty). This is a behaviour change.
 **Acceptance Criteria**: the decision is recorded in §7; if yes, implemented with tests for DM and player
 **Depends on**: I2.5
 
 ### [ ] Task I2.7: Query scale (only if campaigns exceed about 5,000 pages)
 **Owner**: Backend Architect · **QA**: Performance Benchmarker
+**Skipped (not needed):** 2026-10-31. `bench:query --pages 5000 --runs 60 --cold-runs 5` on the merged 1.3.1 code (1-minute load 4 to 6 from unrelated desktop use): warm p50 78 to 96 ms in every scenario, DM and player (limit 150); the slowest is the tags sort at 96 ms. The acceptance bar is already met without this task. `queryable()` is 79 ms of that (pages, tags, facets and property joins). Build I2.7 only if real campaigns pass about 5,000 pages and queries slow down.
 **Description**: Do not build before I2.4 and I2.5 are measured. Cache `queryable()` per campaign, invalidated by page writes (the event bus already announces them), or compile the filter to SQL (the original deviation (d) idea, with the Postgres work). Queries are synchronous (about 110 ms of loop time each today), so concurrent users and pages with several query blocks delay saves and live updates. `inArray` over all ids also hits SQLite's 32,766 bound-variable limit near 32,000 pages.
 **Acceptance Criteria**: `bench:query --pages 5000` p50 under 150 ms
 **Depends on**: I2.4, I2.5
 
 ### 6b.3 Epic N3b: Say what changed after a gap
 
-### [ ] Task N3.6: Say what changed after a long offline gap (follow-up of N3.4)
+### [x] Task N3.6: Say what changed after a long offline gap (follow-up of N3.4)
 **Owner**: Frontend Developer · **QA**: Evidence Collector
+**Done:** 2026-10-31, Code Reviewer PASS after two rounds (a stale or null baseline made every block look new; fixed in `page-editor.ts`, with a spec), QA Evidence Collector: PASS on a quiet machine (five runs, toast 1501 ms after the refetch every time, no toast when unchanged, one toast on replay, no toast during navigation, no content or counts in the text, live region, Show reachable by keyboard, focus or hover pauses the timer). Narrative Designer recommendation (not built): no summary for reveals on closed pages; recorded in `docs/design/reveal.md` section 11. Known existing limitation (N3.4, not changed): Reload on a page with unsaved typing ends in a save conflict because the DM's reveal already raised the revision; follow-up: refetch and retry non-body changes on a 409, merge body edits by block id.
 **Description**: When the stream reconnects without a usable `Last-Event-ID` (no event received before the gap, or the server ring has moved on) the client refetches silently. Compare the refetched open page with the previous one (block ids newly present, which the client already can compute) and toast 'New details on this page | Show' for it; for other pages keep the existing 'You have {n} new pages' summary, and decide with the Narrative Designer whether a 'something changed on {n} pages you can see' summary is wanted for block reveals on pages that are not open (needs a per-page revision comparison). Never put content or secret counts in the toast.
 **Acceptance Criteria**: offline reveal on the open page shows a toast after reconnect; no toast when nothing changed; no duplicate toast when events are replayed; a unit test per case
 **Depends on**: N3.4
 
 ### 6b.4 Epic H1: Test health and follow-ups
 
-### [ ] Task H1.1: Make the load-sensitive tests reliable
+### [x] Task H1.1: Make the load-sensitive tests reliable
 **Owner**: Test Automation Engineer · **QA**: Reality Checker
+**Done:** 2026-10-31, Code Reviewer PASS, QA Reality Checker: PASS with caveats. **Partly resolved.** Fixed at the cause: `homebrew.test.ts`, the homebrew test in `mcp.test.ts` and `transfer.test.ts` 'imports as a new campaign' all paid the lazy ajv compile of the 5etools homebrew schema (2.7 s alone, 14 to 19 s loaded) inside their first save; it is now warmed in `beforeAll` (90 s hook budget with a written reason; the 20 s test timeout is unchanged). Under load the old tests took 10.5 to 11 s, the fixed ones 0.26 to 0.37 s. `pnpm -s test` ran 5 of 5 green at load 20 to 28. Not resolved: the original red failure was never reproduced (five green runs show margin, not proof); `backup-routes` stalled reader was already fixed in 74cd422; `restore-crash` was not reproduced and is unchanged (26 s loaded against a 240 s limit); the I3.3 e2e timeouts have no found cause (artifacts were overwritten; `docs/qa/test-health.md` lists what to keep next time). Watch: backup-routes 'refuses to start on an invalid BACKUP_DIR' takes 7 to 9 s loaded. The remaining steps are task F1.3 in release 1.5.
 **Description**: These server tests fail now and then when the whole suite runs in parallel and pass alone: `backup-routes.test.ts` ("a stalled reader is cut off after the idle time"), `restore-crash.test.ts` (about 36 s under load), `transfer.test.ts` ("imports as a new campaign"), `homebrew.test.ts` and the homebrew test in `mcp.test.ts` (20 s timeouts). They have each failed in more than one full run in waves 2 and 3. Find the cause of each (shared timers, CPU load, real sleeps, a seed that is too big) and remove it without raising timeouts as the only fix; use injected clocks or smaller fixtures. Also look at the one `pnpm e2e` run that failed with many specs timing out after about a minute and passed on the rerun (I3.3, cause not found).
 **Acceptance Criteria**: `pnpm -s test` run 5 times in a row on a loaded machine with no failure; the cause of each flake is written in the task note; no test timeout raised without a reason
 **Depends on**: none
 
-### [ ] Task H1.2: Run the restore drill against the built bundle in the release gate
+### [x] Task H1.2: Run the restore drill against the built bundle in the release gate
 **Owner**: DevOps Automator · **QA**: Reality Checker
+**Done:** 2026-10-31, Code Reviewer PASS, QA Reality Checker: PASS. New `pnpm gate:drill` builds `apps/server` and runs `restore-drill.test.ts` verbose; `docs/RELEASE.md` and the G2.1/G3.1 text name the step. Run: both tests passed, none skipped (sources 14 to 15 s, built bundle 11 to 12 s); negative control with `dist/` removed shows the bundle test skipped. Note: the G1.5 certification should name `pnpm gate:drill` too.
 **Description**: `restore-drill.test.ts` has one test, "the same drill passes against the built bundle (dist/)", which is skipped unless `apps/server/dist/` exists, so it is skipped in normal runs. Make the release gate (G2.1, `RELEASE.md`) build first and run it, and say so in the gate checklist.
 **Acceptance Criteria**: `docs/RELEASE.md` and G2.1 list the step; one documented run with the bundle built shows the test passing, not skipped
 **Depends on**: none
 
-### [ ] Task H1.3: Keyboard check of the Properties panel
+### [x] Task H1.3: Keyboard check of the Properties panel
 **Owner**: Accessibility Auditor · **QA**: Evidence Collector
+**Done:** 2026-10-31, Evidence Collector QA: PASS after two fix rounds. Finding in `docs/qa/properties-keyboard.md`: in the web app a property definition cannot be deleted without the app's own dialog (Cancel focused first, Esc cancels); no single key or click deletes; Enter, Tab, Enter or Space with the dialog open does. No product code changed. **Open product decisions:** the MCP tool `delete_property` deletes the definition and every value with no in-app confirmation (client-side `destructive` hint only); there is no undo or trash for property definitions; the delete button's rest contrast is about 1.77:1 (fails 1.4.11). New `e2e/properties-keyboard.spec.ts` (6 of 6 green, 2 under 12 busy loops, mutation check fails on the direct assertion). Known limit: the spec timed out under 16 busy loops before it was slimmed (not re-run at that load).
 **Description**: During the I2.2 browser QA a custom property ("Mood") disappeared while a script kept sending Tab, arrow and Enter keys with focus on the Properties panel. Find out whether a stray Enter can delete a custom property without a confirmation, and whether a mouse click can. Deleting a property definition drops its values on every page, so it needs the app's own confirmation dialog (as the other destructive actions have since 1.1.1) and an Undo or trash path if one exists.
 **Acceptance Criteria**: the finding in `docs/qa/` or the task note; if a property can be removed without confirmation, a fix with a test; keyboard-only operation of the panel documented
 **Depends on**: none
@@ -757,8 +769,9 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 **Acceptance Criteria**: tests for a removed member, a disabled user, a logged-out session and a demoted co-DM on the tracker stream; the sentinel crawl stays green
 **Depends on**: none
 
-### [ ] Task H1.5: Tidy the tracker's death-save edge cases
+### [x] Task H1.5: Tidy the tracker's death-save edge cases
 **Owner**: Backend Architect · **QA**: API Tester
+**Done:** 2026-10-31, Code Reviewer PASS, QA API Tester: PASS (live instance, 21 of 21 checks, player projection leaks nothing). Decisions in `docs/design/tracker-rules.md` section 1b: failures on a stable combatant make it dying again; death saves on a creature that does not make them are ignored; `update` on the lair row drops hp, hpMax, tempHp, ac and deathSaves; hp below 0 is clamped to 0. A stored `dying` object on a monster written before this change stays visible to the DM until edited (no migration; never shown to players).
 **Description**: Small gaps found in the I3.2 QA and the I3.3 design review, none leaks anything: `deathSaveAdjust` with failures on a stable combatant keeps `status: 'stable'` with the failures counted (the UI offers Clear counts); `deathSave` and `update {hp: 0}` on a monster that does not make death saves still create a `dying` object (never shown to players); `update` can set `hp` and `ac` on the lair row (the UI hides those controls, the reducer does not refuse); `hp` below 0 is allowed by `update`. Decide each with the Game Designer (refuse, ignore or keep) and add a test per decision.
 **Acceptance Criteria**: each of the four cases has a decision in `docs/design/tracker-rules.md` and a test
 **Depends on**: none
@@ -770,47 +783,373 @@ Added 2026-10-25 by the Senior Project Manager. These are the open items from th
 **Acceptance Criteria**: the file passes 20 times in a row, also while another e2e run loads the machine; a planted `dying` leak on a flagged monster fails the spec
 **Depends on**: none
 
-### [ ] Task S1.1: Players cannot probe pages through page-link properties
+### [x] Task S1.1: Players cannot probe pages through page-link properties
 **Owner**: Backend Architect · **QA**: Application Security Engineer
+**Done:** 2026-10-31, Code Reviewer PASS (second round: the first commit held only the test because a shared `git stash` moved the fix; redone), QA Application Security Engineer: APPROVED (150 interleaved rounds per case over HTTP and MCP: hidden, selected-other, trashed, other-campaign, nonexistent and wrong-type-hidden ids give one identical status and body, timing differences at most 0.09 ms; visible ids and clearing still work; nothing stored). Same error for all, the visibility check runs before the lookup and the type check. Follow-up: no test covers a player calling `apply-template` (task F1.4). Correction 2026-11-01: this note first said the route is not DM-gated; the check is in `TemplateService.applyToPage` (`requireDm`, first line), not in the route, so players get 403 and outsiders 404, and the MCP allowlist has no `apply-template` pattern.
 **Description**: Found in the I1.4/I1.5 security QA (F3): `PATCH` with a page-link property (`props.<key> = <page id>`) returns 200 for a hidden or selected-other page and 400 "Linked page ... not found in this campaign" for a nonexistent, other-campaign or trashed id (`assertPageInCampaign` ignores the viewer). A player with a real id can confirm that a hidden page exists, and the id is stored in the DM's view. For players, validate against the pages they can see and answer the same error for everything else (or clear the value, as the merge does for links); check facet and template pageLink fields too.
 **Acceptance Criteria**: identical response for hidden, nonexistent, other-campaign, trashed and selected-other ids; a visible id still works; sentinel crawl green
 **Depends on**: none
 
-### [ ] Task S1.2: A moved paragraph keeps the DM's hidden link
+### [x] Task S1.2: A moved paragraph keeps the DM's hidden link
 **Owner**: Minimal Change Engineer · **QA**: Application Security Engineer
+**Done:** 2026-10-31 (with I1.6), Code Reviewer PASS after three rounds, QA Application Security Engineer: APPROVED (live comparison with v1.3.0 at b8d350c, about 40 scenarios). `mergePlayerEdit` sanitizes the player's body first, matches stored blocks by id across all levels (only when the types agree), and keeps the hidden children of a container whose forged copy is removed; malformed shapes (`content:[null]`, `content:{}`, 3,000-level nesting, anything the sanitizer would truncate) get one uniform 400 "The page body is malformed" before the merge and on the merge result; `MAX_BLOCK_DEPTH` is shared with the sanitizer. Three rounds were needed: round 1 found that reusing a container's id for a paragraph grafted hidden text into visible text, round 2 that cross-level matching opened a new graft through wrappers (paragraph, heading, list, table); a 3,000-run fuzz with every wrapper kind now has 0 leak, loss or duplicate runs and fails 91 runs without the sanitize step. **Security: the id-swap leak is present in the released v1.3.0** (a player editing their own page could read DM-only text; hidden links were lost on moves; malformed bodies gave 500): changelog security note required (a draft is in the QA report). Residual, low: a depth oracle (a 400 near the depth limit tells a player that a visible container holds DM-only descendants down to some depth; existence and depth only, never content); MCP `update_page` with markdown still loses hidden links on a move (matches by content, not id; integrity only, same as 1.3.0); a forged hidden id comes back with a new random id while a nonexistent id is echoed (needs a known block id; same as 1.3.0); house rules and block templates bypass the sanitizer.
 **Description**: F4 from the I1.4/I1.5 security QA: `mergeLevel` matches a stored block by id at the same nesting level only, so a player moving a paragraph that holds a hidden link into a container (or out of one) loses the link without trace. Match stored blocks by id across levels, or restore the link to the block with that id wherever it ended up. Also malformed player shapes (F5: `content: [null]`, `content: {}` give 500; the merge recursion overflows around 3,000 levels of nesting): refuse with a uniform 400 before the merge.
 **Acceptance Criteria**: tests for move into and out of a container and for the malformed shapes; no leak; I1.6 (attribute re-id) can be done in the same pass
 **Depends on**: none
 
-### [ ] Task S1.3: Tracker and campaign stream follow-ups
+### [x] Task S1.3: Tracker and campaign stream follow-ups
 **Owner**: Realtime Collaboration Engineer · **QA**: Application Security Engineer
+**Done:** 2026-10-31, Code Reviewer PASS after one round (tracker route slot leak on a throw; tracker web clients looped on eviction), QA Application Security Engineer: APPROVED (live: 1400 raw requests and 300 open/close cycles, capacity stayed exact). Tracker streams now go through `admit()`; the campaign stream ends with a `bye` event with reason `access`; the MCP `path` helper rejects `.` and `..` for every tool; new `tracker-stream.ts` client helper (evicted and access stop and show a paused notice, restart reconnects with jitter, a refused connection shows a notice). Residual: the forced-throw slot release is covered by a unit test only; the tracker client notice was not browser-tested; access loss on an idle stream shows within one heartbeat (25 s).
 **Description**: From the H1.4 QA: tracker streams are not counted in the per-user, per-campaign and global stream caps (one player opened 40); the campaign stream closes without `bye` on access loss (clients reconnect and get 404/401); the tracker delivery guard in `routes/play.ts` has no test of its own (set a long heartbeat so the delivery path closes the stream first); the MCP client `path` helper leaves `.` and `..` unencoded (N1.5; reject them for all tools).
 **Acceptance Criteria**: tracker streams go through `admit()`; tests for each; sentinel crawl green
 **Depends on**: none
 
-### [ ] Task S1.4: History panel follow-ups
+### [x] Task S1.4: History panel follow-ups
 **Owner**: Frontend Developer · **QA**: Evidence Collector
+**Done:** 2026-10-31, Code Reviewer PASS (mutation checks), QA Evidence Collector: PASS (browser: restore-warnings box, DM-only properties, dark mode at 200% zoom and text zoom emulated, forced colours emulated, one history reload per restore, late save for an old page). Hardening added after review: preview, share and add-subpage wait for a running restore. Not tested: real Windows forced colours, Chrome text-only zoom. Typing made during a restore is kept but not saved (the app says so; existing design). Observation: during a pending save the URL can show the new page while the editor still shows the old one until the save ends.
 **Description**: From the N1.4 QA: a save for the old page that resolves after a page change can overwrite the new page in the editor (guard `page.set` by page id; this also existed for timer saves); closing and reopening the panel during a restore can race a PATCH against the POST; the list reloads up to three times per restore; the restore-warnings box, DM-only properties in 'Other changes', dark mode at 200% text and forced colours on a real OS were not browser-tested.
 **Acceptance Criteria**: a test per race; the Evidence Collector re-runs the untested items
 **Depends on**: none
 
+### [x] Task S1.5: MCP delete_property asks for a confirmation (owner request, found by H1.3)
+**Owner**: MCP Builder · **QA**: API Tester, Code Reviewer
+**Done:** 2026-10-31, Code Reviewer PASS (own mutation checks; players and outsiders byte-identical to main over 18 cases), QA API Tester: PASS on safety, with the criterion amended: live over `/mcp` with real tokens, `confirm` missing or false returns the refusal naming the property, the effect (definition and values on every page, no undo) and how to confirm; true deletes; strings, numbers and null are rejected by the input check and delete nothing (the tester asked for a looser schema so those get the property-specific text too; the owner kept the strict boolean). Players, outsiders and read-only tokens get exactly the old answers; DM and co-DM behave the same. **Audit of the other destructive MCP tools (not changed):** `remove_inventory_item` is a hard delete with no recovery; `delete_template` and `delete_encounter` are soft-deleted in the database but have no restore tool or UI; `delete_page` and `delete_homebrew_entry` are recoverable; page edits are in the history. Follow-up for the owner: the same `confirm: true` gate for those three, or a restore for templates and encounters.
+**Description**: Added 2026-10-31 at the owner's request. The MCP tool `delete_property` deletes a property definition and its values on every page with no confirmation, while the web app always asks first and there is no undo. Make the tool require an explicit `confirm: true` argument; without it the tool refuses (`isError`, a clear message saying what would be deleted: the property label, and how many pages hold a value if that is cheap to count, and how to confirm) and nothing is deleted. Keep the client-side `destructive` hint. Check the other destructive MCP tools for the same gap (for example `delete_page` has the trash and Undo; `delete_template`, `delete_encounter`, `delete_homebrew_entry`, `remove_inventory_item` have soft or no recovery) and only REPORT them; change nothing but `delete_property`. Update the tool description so the assistant knows to ask the user first, and the MCP section of the docs.
+**Acceptance Criteria**: calling `delete_property` without `confirm: true` (missing or false) deletes nothing and returns the refusal; a value of another type (string, number, null) is refused by the tool's input check and deletes nothing (amended 2026-10-31 after QA: the strictly typed boolean schema was kept on purpose, so those values get the generic validation message, not the property-specific one); with `confirm: true` it deletes as before; players and non-owners still get their existing refusals; a test per case; the MCP tool listing and docs are updated; the gate stays green
+**Files**: `apps/server/src/mcp/tools/pages.ts`, tests under `apps/server/test/`, `docs/` MCP notes, `docs/STATUS.md`
+**Depends on**: H1.3
+
 ### 6b.5 Release gate and waves
 
-### [ ] Task G3.1: Release 1.3.1 certification
+### [x] Task G3.1: Release 1.3.1 certification
 **Owner**: Reality Checker · **QA**: **Owner (human)**
-**Description**: Evidence for every 1.3.1 item that was built; full gate, `pnpm e2e`, phone project, the restore drill against the built bundle (H1.2), Docker image.
+**Done:** 2026-11-01, Reality Checker certification at HEAD 391908e: NEEDS WORK (minor; no code or test blocker): gate green (1049 server, shared and blocks tests, 550 web tests), `pnpm e2e` 144 passed and 8 skipped (the known phone-only skips), phone project 37 passed, `pnpm gate:drill` both tests passed, Docker image built and the full e2e passed against two containers, benchmark matches the doc, no migrations. Findings fixed afterwards (e4cca7a): two stale status lines, the compose `TRUST_PROXY` and `SECURE_COOKIES` line in the changelog. Owner approval given 2026-11-01 (the QA for this task), with the 'update on real data' step done by the owner, the Security wording confirmed, a GitHub security advisory to be published, and `origin/main` confirmed as the default branch. Follow-ups became tasks: release 1.3.2 (S2.1, S2.2) and release 1.5 (F1.1 to F1.4, G4.4 text).
+**Description**: Evidence for every 1.3.1 item that was built; full gate, `pnpm e2e`, phone project, build `apps/server` first and run the restore drill test against the built bundle (`pnpm gate:drill`, must pass, not skipped; H1.2), Docker image.
 **Depends on**: all 1.3.1 tasks except I2.6 and I2.7, which only run if their condition is met (a Product Manager decision; more than about 5,000 pages)
 
 | Wave | Tasks |
 |---|---|
-| 1 | I2.4, I2.5, N3.6, H1.1, H1.2, H1.3, H1.5, S1.1, S1.3, S1.4 (independent of each other) |
-| 2 | S1.2 (with I1.6), I2.6 (after I2.5; needs the Product Manager decision first) |
-| 3 | I2.7 (after I2.4 and I2.5; only if campaigns pass about 5,000 pages) |
-| 4 | G3.1 |
+| 1 | I2.4, I2.5, N3.6, H1.1, H1.2, H1.3, H1.5, S1.1, S1.3, S1.4 (independent of each other). **Done 2026-10-31**, merged locally, not pushed; full gate green (1004 server and shared tests, 550 web tests, `pnpm e2e` 144 passed and 8 skipped, `pnpm gate:drill` both tests passed). H1.1 is partly resolved (see its note) |
+| 2 | S1.2 (with I1.6), I2.6 (after I2.5; needs the Product Manager decision first). **Done 2026-10-31**, merged locally, not pushed; full gate green after the merge (1044 server and shared tests, 550 web tests, `pnpm e2e` 144 passed and 8 skipped, `pnpm gate:drill` both tests passed) |
+| 3 | I2.7 (after I2.4 and I2.5; only if campaigns pass about 5,000 pages). **Skipped 2026-10-31**: not needed, 5,000 pages measured at 78 to 96 ms p50 against the 150 ms bar |
+| 3b | S1.5 (owner request 2026-10-31, after H1.3), with the changelog notes for 1.3.1. **Done 2026-10-31**, merged locally, not pushed |
+| 4 | G3.1. **Done 2026-11-01**, owner approved |
+
+## 6c. Release 1.5: Characters
+
+Planned 2026-10-26 by the Senior Project Manager at the owner's request. **Plan only: nothing is built, no code or schema has changed.** The owner asked for four things: a character sheet, a PDF export in the familiar D&D layout, a character builder that follows the rules, and a level-up that follows the rules, all respecting the campaign's ruleset (2014 or 2024). This promotes PRD N13 ("Character sheet depth", P3) to P1 and splits it into N13 sheet, N18 builder, N19 level-up and N20 PDF export (C0.1 writes them into the PRD). The owner's request outranks the PRD's "validate demand first" risk; the demand check shrinks to the first-evening test in G4.3.
+
+**Release number.** Placed as 1.5 because 1.4 (N2, N4, I4, I5, I10) is already assigned; the owner may swap them (decision D8). Release 1.3.1 is independent and may ship first.
+
+### Definition of "follows the rules" (scope boundary for every task)
+
+Without a boundary this epic has no end (about 12 classes, 100+ subclasses, two rulesets, hundreds of feats and spells). The boundary:
+
+| Tier | Content | What the app does |
+|---|---|---|
+| **A: enforced** | The core books of the campaign's ruleset (2014: PHB; 2024: XPHB) plus the SRD content inside them | Every choice is validated: the builder offers only legal options; level-up cannot skip a step; derived numbers (proficiency, modifiers, saves, skills, HP, spell slots, spells prepared) are computed, not typed |
+| **B: structured** | Other official sources enabled in the campaign whose data has the same shape (supplement classes, species, feats, subclasses) | Validated wherever the data is structured; a choice the data does not describe becomes a "choose by hand" step with a visible warning |
+| **C: manual** | Homebrew and unstructured content (class forms are I12, out of scope) | Accepted as typed; shown with a "not checked" badge |
+
+A character is built under **one ruleset**, recorded on the sheet, and keeps it. Changing the campaign's edition later does not rewrite characters (a mapping is I14, later). The Game Designer's rules spec (C0.3) defines every rule inside tier A for both rulesets; examples it must cover, to be verified against the books and not assumed: ability scores come from the species in 2014 and from the background in 2024; the 2024 background also gives an origin feat; subclass levels differ (2014 varies by class, 2024 uses one level); Ability Score Improvement is its own feat in 2024; the 2024 epic boon level; prepared-spell counts and swapping differ; starting equipment is chosen differently. Edition differences live only in `packages/fivetools/src/ruleset` (§4: no edition string comparisons elsewhere).
+
+**GM override.** The DM is the referee (as in the tracker rules): a player cannot save an illegal build, but a GM can override any rule check; the sheet then shows a "GM override" note and the page history records it (decision D11).
+
+**Out of scope (ideas go to the Product Manager):** NPC and monster builders; the official WotC PDF or its art, logos and fonts; form-fillable PDFs; automatic combat or attack rolls; converting a character between rulesets (I14); homebrew class forms (I12); level down; leveling the whole party at once; languages other than English; rest automation (stretch C3.4 only).
+
+### 6c.0 Epic C0: Scope, rules, design and legal (first; nothing is built before these pass)
+
+### [ ] Task C0.1: PRD update and success criteria
+**Owner**: Product Manager · **QA**: Senior Project Manager
+**Description**: Promote N13 to P1, add N18 (builder), N19 (level-up) and N20 (PDF export) to PRD §9 with value, effort and priority; add release 1.5 to §11; add the scope boundary above and the out-of-scope list to the PRD; state the success measures: (1) a new player builds a legal level-1 character in under 15 minutes without outside help, (2) every golden character (C1.4) matches the books in both rulesets, (3) the PDF opens and prints cleanly on A4 and US Letter in Chrome, Firefox and a system viewer, (4) no DM-only content in any sheet response or PDF.
+**Acceptance Criteria**: PRD updated; the "Unclear demand for deep character sheets" risk marked as accepted by the owner's request with the G4.3 mitigation; no other PRD text changed
+**Reference**: PRD §9 N13, §11, §12
+
+### [ ] Task C0.2: Legal brief for the sheet and the PDF
+**Owner**: Legal Compliance Checker · **QA**: Product Manager
+**Description**: The official character sheet's layout, artwork, logos and fonts belong to Wizards of the Coast. Advise what the PDF may look like (an original layout with the familiar sections, no WotC art, logo, fonts or wording of the printed form), whether printing rules text from the user's own 5etools data on a PDF they export is within the project's "bring your own data" position (README "Licensing", DATA_NOTES §9), what the SRD 5.1/5.2 (CC-BY-4.0) allows without the data, font licenses (embed only SIL OFL or similar fonts; add them to `THIRD_PARTY_NOTICES.md`) and the attribution line the PDF footer needs. Not legal advice; states so.
+**Acceptance Criteria**: `docs/legal/character-sheet.md` with a clear allowed / not allowed list for the layout, the text, the fonts and the footer; names what the owner must confirm (D12)
+**Reference**: PRD §12 (legal position of reading 5etools data)
+
+### [ ] Task C0.3: Character rules specification (2014 and 2024)
+**Owner**: Game Designer · **QA**: Product Manager, Code Reviewer
+**Description**: One document for the rules engine and the UI. For both rulesets: creation order and what each step grants; ability score methods (standard array, point buy, rolled) and caps; species and background effects; proficiencies, expertise and saves; hit points at level 1 and per level (average, rolled, manual); proficiency bonus; spell slots including multiclass slots and pact magic; cantrips, spells known and spells prepared per class; feats and their prerequisites; Ability Score Improvement and epic boon levels; subclass levels; multiclass prerequisites and the proficiencies a multiclass gains; starting equipment and starting gold; the level-up checklist per class level; which values are derived and which are chosen. Each rule gets a source (book and page, "owner to fill" as in I3.1), is paraphrased in a few words (no rules text copied, §4 Data rule), and is marked "same in both", "2014 only" or "2024 only". A table maps each rule to the 5etools data field that carries it, taken from the real data and `DATA_NOTES.md`, and lists what the data does not carry (those become tier B/C "choose by hand" steps). Ends with a verification checklist the QA agents use.
+**Acceptance Criteria**: `docs/design/character-rules.md`; every tier A rule has a source; a list of 20 reference characters per ruleset to build (feeds C1.4); the Product Manager has accepted the list of "choose by hand" cases
+**Reference**: PRD §9 N18, N19
+
+### [ ] Task C0.4: Architecture and data model
+**Owner**: Software Architect · **QA**: Database Reliability Engineer, Security Architect
+**Description**: `docs/design/character-sheet.md`: (1) the data model: where the structured sheet lives (new table next to `character_facets`, or inside it), the build ruleset, the choices log and the level-up log; which values are stored and which derived; versioning of the sheet JSON; (2) how the existing `pc` facet fields (`classes`, `hpMax`, `ac`, `abilities`, `speed`, `passivePerception`) stay the single source for the tracker, party view and encounter difficulty (the sheet writes them in the same transaction); (3) where the rules engine lives (pure functions in `@cn/fivetools` and `@cn/shared`, used by server and browser) and that the server is the authority; (4) how equipment relates to the inventory feature (one source, no duplicate item lists); (5) page history, undo of a level-up, and how a sheet is covered by campaign export/import and ownership transfer; (6) the player projection and who may read, create and edit a sheet (D9); (7) the PDF pipeline (engine from C5.1, fonts, page size, size and time budgets, rate limit); (8) the MCP surface (C6.1); (9) the threats: leaking DM-only data through the sheet or the PDF, oversized fields, crafted names in PDF text, request flooding the renderer.
+**Acceptance Criteria**: design approved by both QA agents; every open question is in §8 for the owner; no edition string comparison outside the ruleset folder
+**Depends on**: C0.3, C5.1
+
+### [ ] Task C0.5: Builder, level-up and sheet UX
+**Owner**: UX Architect · **QA**: UI Designer
+**Description**: `docs/design/character-builder-ui.md`: the builder as a stepper whose steps follow the ruleset (not one fixed order), a live "rule check" panel (errors block, warnings inform, GM override), choices that depend on earlier choices, a draft that can be left and resumed; the level-up flow (what changed at this level, then only the choices that level needs, then a summary with the HP result, then Confirm); the structured sheet on the PC page (view and edit, what a player can and cannot edit); the PDF button and its options (page size, which pages); phone layout following `docs/design/phone-layout.md` (320 px, 44 px targets, no sideways scroll); keyboard and screen-reader behaviour of the stepper and the rule-check panel; light and dark themes from existing tokens.
+**Acceptance Criteria**: flows and screen sketches for creation (both rulesets), level-up (plain, multiclass, subclass, ASI/feat, spells) and the sheet; every state (loading, error, stale, rule violation, override) has a design; an accessibility section the Accessibility Auditor can test against
+**Depends on**: C0.3 · **Design**: this task
+
+### [ ] Task C0.6: PDF layout specification
+**Owner**: UI Designer · **QA**: Legal Compliance Checker, Game Designer
+**Description**: `docs/design/character-sheet-pdf.md`: the page grid for A4 and US Letter, page 1 (identity, ability scores with saves and skills, proficiency, initiative, AC, HP and hit dice, speed, attacks, features and traits, proficiencies and languages, equipment), page 2 (background, personality, appearance, allies, extra features; and in 2014 or 2024 the sections that differ: species traits, origin feat, weapon mastery), page 3 (spellcasting: ability, save DC, attack bonus, slots, spell list by level). Rules for text that does not fit (smaller type down to a floor, then a continuation page), fonts (embedded, OFL), black-and-white print, a footer with the attribution from C0.2, and a font-coverage fallback for unusual characters. An original design that follows the familiar arrangement, not the WotC form.
+**Acceptance Criteria**: dimensions in points for every box; text overflow rules; the legal checks from C0.2 ticked; a list of which fields differ by ruleset
+**Depends on**: C0.2, C0.3, C5.1
+
+### [ ] Task C0.7: Owner decisions D8 to D12
+**Owner**: **Owner (human)**, prepared by Product Manager · **QA**: none
+**Description**: Decide D8 to D12 in §8 (release placement, who creates characters, PDF engine, rule strictness, content sources and the legal position of the PDF). The options and a recommendation are already in the table.
+**Depends on**: C0.2, C0.4, C5.1
+
+### 6c.1 Epic C5 (first part): PDF engine spike
+
+### [ ] Task C5.1: PDF engine spike
+**Owner**: Backend Architect · **QA**: DevOps Automator, Performance Benchmarker
+**Description**: Build the same one-page sample sheet three ways and measure on the real Docker image (non-root, `linux/amd64` and `arm64`): (a) a pure JavaScript PDF library on the server (for example pdf-lib or pdfkit); (b) the browser's own printing from an Angular print view (`window.print`); (c) a headless browser on the server. Measure: image size added, memory, time for a three-page sheet, new native dependencies, behaviour of embedded fonts and unusual characters, determinism (same input, same bytes apart from the date), and whether it can be tested without a browser. Recommend one. Expected recommendation (to be proved or rejected): (a), because a headless browser doubles the image and (b) is not a file the server can control.
+**Acceptance Criteria**: `docs/qa/pdf-engine-spike.md` with the table and a recommendation; the spike code is thrown away or kept under `apps/server/scripts/` and not wired in; licenses of the candidate libraries checked against Apache-2.0 compatibility (M1.1 method)
+**Reference**: PRD §3 (self-hosting, small image)
+
+### 6c.2 Epic C1: Rules engine (shared, pure, no I/O)
+
+### [ ] Task C1.1: Ruleset character basics
+**Owner**: Backend Architect · **QA**: Game Designer, Code Reviewer
+**Description**: Add a `character` section to the `Ruleset` (`packages/fivetools/src/ruleset/`, beside `encounter`) with the derived numbers: ability modifier, proficiency bonus by level, saving throws and skills (with proficiency, expertise and half-proficiency), passive scores, initiative, hit point calculation, spell save DC and attack bonus, spell slots for single-class and multiclass casters and pact magic, and the per-ruleset differences from C0.3. Extend `RulesetFeatures` where a new difference needs a flag.
+**Acceptance Criteria**: table-driven unit tests for levels 1 to 20 in both rulesets; no edition string comparison outside the ruleset folder (lint); numbers match the rules spec's checklist
+**Files**: `packages/fivetools/src/ruleset/`, tests
+**Depends on**: C0.3
+
+### [ ] Task C1.2: Rules content readers
+**Owner**: Backend Architect · **QA**: Game Designer
+**Description**: Read the 5etools class, subclass, class feature, species, background, feat, spell and equipment data into a typed options model: "what choices does this class offer at level N", prerequisites, granted proficiencies, spellcasting progression, starting equipment. Handle the 2014 and 2024 data shapes and reprints through the existing `edition` module; homebrew entities with the same shape work the same way; content the data does not describe is returned as a "choose by hand" marker (tier B/C), never guessed.
+**Acceptance Criteria**: for every class in the core book of each ruleset, level 1 to 20 gives a complete, ordered list of grants and choices (a test against the real data, skipped without the clone as the e2e suite is); unknown shapes produce markers, not exceptions; no rules text is stored in test fixtures (§4)
+**Files**: `packages/fivetools/src/` (new `character/` folder), tests
+**Depends on**: C1.1
+
+### [ ] Task C1.3: Build validator and level-up engine
+**Owner**: Backend Architect · **QA**: Game Designer, Code Reviewer
+**Description**: Pure functions: `validateBuild(build, ruleset, content)` returns the derived sheet, errors (block) and warnings (inform); `planLevelUp(sheet, classUid)` lists the choices the next level needs and the multiclass prerequisites; `applyLevelUp(sheet, choices)` returns the new sheet, including HP, new features, slots, spells and any ASI or feat. Same code runs in the browser for live feedback and on the server as the authority. GM override is an explicit input, recorded in the result.
+**Acceptance Criteria**: each rule in C0.3 has a passing and a failing test; invalid input never throws (returns errors); a level-up of an already-illegal legacy sheet reports what is wrong instead of crashing
+**Files**: `packages/fivetools/src/character/`, tests
+**Depends on**: C1.1, C1.2
+
+### [ ] Task C1.4: Golden characters
+**Owner**: Test Automation Engineer · **QA**: Game Designer, Reality Checker
+**Description**: Build the 20 reference characters per ruleset from C0.3 (all core classes at level 1, 5 and 20 where they differ in kind, two multiclass casters, a pact caster, a character with a feat, a character whose subclass starts at level 1 in 2014) as stored builds with expected derived numbers written by the Game Designer from the books. The suite runs the builder and the level-up path from level 1 to the target level and compares every derived number.
+**Acceptance Criteria**: all pass; a planted rule bug (wrong slot table, wrong proficiency bonus, ASI at the wrong level) fails at least one golden character (mutation check by the Reality Checker); fixtures hold choices and numbers only, no rules text
+**Depends on**: C1.3
+
+### 6c.3 Epic C2: Storage and API
+
+### [ ] Task C2.1: Schema for the sheet
+**Owner**: Backend Architect · **QA**: Database Reliability Engineer
+**Description**: Add the storage decided in C0.4 to `apps/server/src/db/schema.ts` and `schema.pg.ts`; generate both migrations; shared zod schema for the sheet in `packages/shared/src/` (limits on every string and array); existing characters keep working without a sheet (legacy sheet: the old facet fields stay valid). If D9 says players may create characters, add the campaign setting here.
+**Acceptance Criteria**: migrations for SQLite and Postgres, parity test green; a populated copy of `var/` upgrades without loss; the schema-allowlist test (backup) is reviewed and updated if the migration needs it; backup and restore drill still passes
+**Files**: `apps/server/src/db/schema.ts`, `schema.pg.ts`, `drizzle/`, `drizzle-pg/`, `packages/shared/src/`
+**Depends on**: C0.4, C0.7
+
+### [ ] Task C2.2: Character endpoints
+**Owner**: Backend Architect · **QA**: API Tester, Application Security Engineer
+**Description**: Under `/api/campaigns/:cid`: create a character (page plus sheet in one transaction), read and update a sheet (validated by C1.3), `POST .../level-up/preview` and `.../level-up` (apply, with the current revision to refuse stale writes), `GET .../options` (what the builder may offer, from the content readers). The GM check, the player-own-character rule, the player projection (DM-only fields never returned), history revisions with the server-side `WriteContext`, an audit line without content, and writes to the `pc` facet fields in the same transaction. Body size and field limits; a rate limit on preview.
+**Acceptance Criteria**: permission matrix tested (owner, co-DM, player on own character, player on another's, player on a hidden character, outsider, anonymous); an illegal build is refused with a readable list of errors for players and accepted with an override note for a GM; the new routes join the sentinel crawl in `visibility.test.ts` with a sentinel in a GM-only field; the stale-revision case returns 409 with the current sheet; gate green
+**Files**: new `apps/server/src/routes/characters.ts`, `services/characters.ts`, `app.ts`, `test/visibility.test.ts`
+**Depends on**: C1.3, C2.1
+
+### [ ] Task C2.3: Keep the rest of the app in step
+**Owner**: Backend Architect · **QA**: API Tester
+**Description**: The tracker (adding a character reads current HP, AC, initiative bonus from the sheet; ending combat still writes HP back), the party view, encounter difficulty (levels come from `classes`), the inventory (sheet equipment and attacks read the inventory instead of keeping a copy), campaign export/import and ownership transfer (the sheet travels with its character). Define and test what happens when a character is edited by the tracker and the sheet at once.
+**Acceptance Criteria**: each consumer has a test with a sheet-backed character and a legacy one; export then import gives an identical sheet; nothing in the player projection of the party or tracker changes (existing sentinel tests unchanged and green)
+**Depends on**: C2.2
+
+### 6c.4 Epic C3: Sheet and builder UI
+
+### [ ] Task C3.1: Character sheet view
+**Owner**: Frontend Developer · **QA**: Evidence Collector, Accessibility Auditor
+**Description**: The structured sheet on the PC page, built to `docs/design/character-builder-ui.md`: abilities, saves, skills, proficiencies, attacks, features, spells with slots, equipment from the inventory, personality and notes; read-only for others, editable for the owner and GM as designed; derived values shown with the rule that produced them on hover or focus (so a player can see why the number is what it is). Phone layout per the M6 guidance. Existing page body and blocks stay below it.
+**Acceptance Criteria**: browser check at 1280, 390 and 320 px in both themes; axe 0 violations; a legacy character without a sheet still shows its old form and a "Build this character" prompt; unit specs next to the components; no `innerHTML`
+**Files**: `apps/web/src/app/campaign/` (new `character/` folder), `page-editor.html`
+**Depends on**: C2.2 · **Design**: C0.5
+
+### [ ] Task C3.2: Character builder
+**Owner**: Frontend Developer · **QA**: Evidence Collector, Accessibility Auditor
+**Description**: The stepper from the design, for both rulesets: only legal options are offered, the rule-check panel updates live from the shared validator, a draft can be saved and resumed, GM override is available to game masters only and visible afterwards, the server's answer is shown inline when it disagrees. Offers sources by D12.
+**Acceptance Criteria**: a level-1 character of each core class can be completed in each ruleset in the browser; an illegal choice is impossible for a player and flagged for a GM; keyboard-only completion; screen-reader names and live announcements for rule-check changes; 390 px layout; focus handling as in the Trash and History panels (no focus lost to BODY)
+**Depends on**: C2.2, C3.1 · **Design**: C0.5
+
+### [ ] Task C3.3: Build from an existing character
+**Owner**: Frontend Developer (flow), Backend Architect (adoption endpoint) · **QA**: Evidence Collector, API Tester
+**Description**: Characters made before 1.5 have classes, HP, AC and abilities but no sheet. "Build this character" starts the builder with those values filled in, reports which of them are not legal under the ruleset (shown as warnings, not silent changes) and lets the owner fix them or, for a GM, keep them with an override.
+**Acceptance Criteria**: a populated 1.4 campaign's characters can all be adopted; nothing is lost if the user leaves halfway; the old fields stay as they were until the user confirms
+**Depends on**: C3.2
+
+### [ ] Task C3.4 (stretch): Rests and resources
+**Owner**: Frontend Developer · **QA**: Evidence Collector, Game Designer
+**Description**: Spend and recover spell slots, hit dice and a few common class resources with Short rest and Long rest buttons, as the ruleset defines recovery. Only if all other C-tasks are done and the owner agrees; otherwise moved to the backlog.
+**Depends on**: C3.1
+
+### 6c.5 Epic C4: Level up
+
+### [ ] Task C4.1: Level-up wizard
+**Owner**: Frontend Developer · **QA**: Evidence Collector, Accessibility Auditor
+**Description**: "Level up" on the sheet for the owner and the GM, built to the design: choose the class (the current one, or a new one with its prerequisites checked), see what the new level grants, make only the choices it needs (subclass, ASI or feat, spells, expertise, fighting style, class-specific picks), choose the HP method, review, confirm. Works in both rulesets and for multiclass. A GM can override a prerequisite with the note from D11.
+**Acceptance Criteria**: levels 1 to 20 reachable for every golden character through the UI (a sampled subset in the browser, the rest through the endpoint tests); a level that grants nothing to choose confirms in one step; the summary equals the server's result; keyboard and screen-reader pass; 390 px
+**Depends on**: C3.1, C2.2 · **Design**: C0.5
+
+### [ ] Task C4.2: Undo a level-up and edit safety
+**Owner**: Backend Architect (server), Frontend Developer (UI) · **QA**: API Tester, Evidence Collector
+**Description**: "Undo level-up" for the latest level-up (a new history revision, as page history does, not a rewrite); stale-sheet handling when the tracker or another browser changed HP meanwhile (409, reload, keep what the user chose); a warning when a level-up starts while the character is in a running combat.
+**Acceptance Criteria**: undo restores the previous sheet and the `pc` facet fields exactly; undo of an older level-up is refused with a clear message; the stale and combat cases are tested in the browser
+**Depends on**: C4.1
+
+### 6c.6 Epic C5 (second part): PDF export
+
+### [ ] Task C5.2: PDF renderer
+**Owner**: Backend Architect · **QA**: Evidence Collector, Game Designer
+**Description**: A pure function `renderSheetPdf(sheet, options)` with the engine chosen in D10, to the layout in C0.6: A4 or US Letter, one to three pages, the ruleset-specific sections, embedded fonts, text fitting rules with a continuation page, a font fallback for unusual characters, the attribution footer, document title and language set. Reads only the structured sheet, never the page body or any block.
+**Acceptance Criteria**: the golden characters of both rulesets render; QA converts every page to an image and checks it against the layout spec (no clipped or overlapping text, fields in the right boxes), including a 40-feature character and a name of 80 characters; output is valid (checked with a PDF parser) and under 1 MB for a normal sheet; two renders of the same sheet are identical apart from the date
+**Files**: new `apps/server/src/pdf/` (or `packages/`, per C0.4), fonts, `THIRD_PARTY_NOTICES.md`
+**Depends on**: C0.6, C2.1, D10
+
+### [ ] Task C5.3: Export endpoint and button
+**Owner**: Backend Architect (endpoint), Frontend Developer (button and options) · **QA**: API Tester, Application Security Engineer, Evidence Collector
+**Description**: `GET /api/campaigns/:cid/pages/:pid/sheet.pdf?size=a4|letter` with the same read permission as the sheet (a player gets only their own and visible characters; a GM any), the player projection applied before rendering, a sanitised file name, `Content-Disposition: attachment`, `Cache-Control: no-store`, an audit line, a rate limit and a time limit on rendering, not on the MCP allowlist. Button "Download PDF" on the sheet with a page-size choice remembered per browser.
+**Acceptance Criteria**: permission matrix as in C2.2; a sentinel in a GM-only field, in the page body and in a DM-only block never appears in the response bytes (the test renders without stream compression so the check is real); the route is in the sentinel crawl; names with quotes, newlines, emoji and right-to-left text give a valid PDF and a safe header; renders of 20 sheets in parallel do not block other requests for more than 200 ms (event-loop check as in the I2.3 benchmark)
+**Files**: `apps/server/src/routes/characters.ts`, `apps/web/src/app/campaign/character/`, `test/visibility.test.ts`
+**Depends on**: C5.2, C2.2
+
+### [ ] Task C5.4: Print and accessibility check of the PDF
+**Owner**: Accessibility Auditor · **QA**: Evidence Collector
+**Description**: Open and print-preview a golden sheet from each ruleset in Chrome, Firefox (pdf.js) and one system viewer on A4 and US Letter; check margins, black-and-white legibility, minimum text size, selectable text, reading order, document title and language; state plainly what is not accessible (a full PDF/UA tagged document is not promised in 1.5).
+**Acceptance Criteria**: `docs/qa/character-pdf-check.md` with screenshots kept out of the repository if they show rules text (§4); defects filed as tasks to the renderer's owner; the README states the accessibility limit
+**Depends on**: C5.3
+
+### 6c.7 Epic C6: AI assistants (stretch)
+
+### [ ] Task C6.1 (stretch): MCP tools for characters
+**Owner**: MCP Builder · **QA**: API Tester, Application Security Engineer
+**Description**: `get_character_sheet` (read, same projection as the web) and `level_up_character` (write; goes through the same validator, so an assistant cannot create an illegal character); allowlist exactly the routes needed; the PDF route stays off the allowlist.
+**Acceptance Criteria**: tools appear for the right token scopes; a player token reaches only that player's character; the crawl is extended; a write that breaks a rule returns the validator's error list
+**Depends on**: C2.2
+
+### 6c.8 Tests and documentation
+
+### [ ] Task C7.1: Character e2e tests
+**Owner**: Test Automation Engineer · **QA**: Reality Checker
+**Description**: `e2e/characters.spec.ts`: a GM builds a level-1 character in a 2014 campaign and another in a 2024 campaign; level-ups 1 to 3 including the subclass choice and a feat or ASI; a multiclass level; a player builds and levels their own character and cannot see GM-only fields; the PDF downloads (valid header, expected page count, the character name present); phone project run; adoption of a legacy character. Keep to the 8 sign-ups per minute limit (share one player account).
+**Acceptance Criteria**: passes in `pnpm e2e` and against the Docker image (`E2E_BASE`); three consecutive full runs without a flake; no screenshots or traces with rules text kept
+**Depends on**: C4.1, C5.3, C3.3
+
+### [ ] Task C7.2: Documentation
+**Owner**: Technical Writer · **QA**: Product Manager, Code Reviewer
+**Description**: README "Characters" (what the builder enforces, the three tiers, GM override, the PDF and its accessibility limit, paper sizes), `docs/STATUS.md` (behaviour and limits, as for every release), CHANGELOG and upgrade notes (the migration; what happens to existing characters), in-app help text for the rule-check panel, the `THIRD_PARTY_NOTICES.md` font entries.
+**Acceptance Criteria**: every statement in the README checked against the running app; the list of what is "not checked" matches C0.3's "choose by hand" list
+**Depends on**: C7.1
+
+### 6c.8b Epic F1: Carried over from release 1.3.1 (added 2026-11-01 at the owner's request)
+
+These come from the 1.3.1 certification (G3.1). They are small, independent of the character work, and run in wave 9 or 10 with the other UI and test tasks.
+
+### [ ] Task F1.1: Make the property delete button readable
+**Owner**: Frontend Developer · **QA**: Accessibility Auditor, Evidence Collector
+**Description**: Found by H1.3: the "Delete property" ✕ in the Properties panel is drawn at 40% opacity at rest, about 1.77:1 against its background, which fails WCAG 1.4.11 (3:1 for interface components). Raise it so the resting icon meets 3:1 in the light and dark themes (without making it louder than the neighbouring controls), keep the hover and keyboard-focus styles, and keep the tap target at 44 px on touch. Check the other icon-only controls in the same panel and the other campaign panels for the same opacity pattern and list (do not fix outside the Properties panel without a note) any that fail.
+**Acceptance Criteria**: the resting ✕ measures at least 3:1 in both themes (measured in the browser, not calculated); axe has no new violation; a unit spec or style check pins the class; the H1.3 spec still passes
+**Depends on**: none
+
+### [ ] Task F1.2: Reload after a DM reveal saves the player's unsaved typing
+**Owner**: Frontend Developer (with the Software Architect for the merge design note) · **QA**: Evidence Collector, Application Security Engineer
+**Description**: Known limit from N3.6/N3.4: a player with unsaved typing on a page gets a toast 'New details on this page | Reload' after the DM reveals a block; clicking Reload dismisses the toast but the save is refused with a 409 (the DM's reveal already raised the revision), the typed text stays on screen and the page shows 'Someone else changed this page. Your last change was not saved.' Make Reload do what a player expects: refetch the page, re-apply the pending non-body changes (properties, sheet fields) on the new revision automatically, and merge the pending body edits by block id (the server already has a block-level player merge; extend its use rather than sending a whole document), so the typed text is saved and the revealed block appears. If a block-level conflict cannot be merged (the same block changed on both sides), keep the typed text, say which block, and offer copy. Players must still never receive DM content: the response of every retried save goes through the player projection.
+**Acceptance Criteria**: browser test: unsaved typing plus a reveal, then Reload: the text is saved, the revealed block shows, no conflict banner; a same-block conflict keeps the text and says so; unit specs for the retry and the merge; the sentinel crawl and the S1.2 merge tests stay green; docs/design/reveal.md section 11 limitation is removed
+**Depends on**: none
+
+### [ ] Task F1.3: Finish H1.1: the remaining test-health steps
+**Owner**: Test Automation Engineer · **QA**: Reality Checker
+**Description**: H1.1 was only partly resolved (see its Done note and `docs/qa/test-health.md`). Do the remaining steps: (1) keep the artifacts of every `pnpm e2e` run (playwright report, traces, server stdout, `dmesg`/`journalctl` tail) in a dated folder outside the overwritten defaults, so the next unexplained minute-long timeout (I3.3) can be diagnosed; run the full suite 5 times and record what the logs show; (2) `restore-crash.test.ts` takes 22 s quiet and 45 s loaded for 23 sequential child processes: split it into one test per kill point (a static list kept in sync with the code by a test) so a failure names its point and runs in parallel, without losing coverage; (3) re-run `e2e/properties-keyboard.spec.ts` at 16 busy loops and record the result; (4) look at 'the server refuses to start on an invalid BACKUP_DIR' (7 to 9 s under load) and make it cheaper or explain it; (5) re-run `pnpm -s test` 5 times at load of 20 or more and record it.
+**Acceptance Criteria**: `docs/qa/test-health.md` updated with the results and any new cause; no failure in 5 loaded runs; no timeout raised without a written reason; the H1.1 Done note is amended to 'resolved' or says exactly what remains
+**Depends on**: none
+
+### [ ] Task F1.4: Test that players cannot apply templates
+**Owner**: Backend Architect · **QA**: API Tester, Application Security Engineer
+**Description**: Decided by the Product Manager 2026-11-01 (memo from reading the code; no test was run): `POST /api/campaigns/:cid/pages/:pid/apply-template` has no `requireDm` in the route, but `TemplateService.applyToPage` calls it on its first line (as `createPage`, `instantiateBlock` and `setDefault` do), so a player gets 403 and an outsider 404 before anything is read or written; a malformed body gets 400 first because validation runs before the gate. Players are not meant to apply templates (the PRD never says so; allowing it would be a new feature needing a player projection of the result). No behaviour change, no patch release, no changelog line: add the missing tests only. If the Product Manager's reading proves wrong, stop and raise it. Optional hardening, not recommended: gate in the route before validation (changes 400 to 403 for players; would be a deliberate change).
+**Acceptance Criteria**:
+- A player gets 403 and a non-member 404 for a valid body; the page's revision, body and properties are unchanged and no `template_usage` row or new property definition exists afterwards
+- A player with an invalid body gets 400 (documents the order: validation before the gate)
+- A co-DM can apply; the MCP allowlist test shows `apply-template` is not allowed
+- Mutation check: removing the `requireDm` line in `applyToPage` fails the new tests
+- Gate green
+**Depends on**: none
+
+### 6c.9 Release gate and waves
+
+### [ ] Task G4.1: Security review of the release
+**Owner**: Application Security Engineer · **QA**: Penetration Tester
+**Description**: Review every new route for projection, IDOR and permissions; the PDF path for injection, resource exhaustion (huge fields, many pages, parallel renders) and header safety; the level-up for race conditions (two level-ups at once); an authorized test of a running candidate (local instance only).
+**Acceptance Criteria**: written report in `docs/security/`; no open High or Medium finding; the sentinel crawl complete for every new route
+**Depends on**: C5.3, C4.2, C3.3
+
+### [ ] Task G4.2: Accessibility pass on the new screens
+**Owner**: Accessibility Auditor · **QA**: Evidence Collector
+**Description**: WCAG 2.1 AA on the sheet, the builder, the level-up wizard and the rule-check panel: keyboard path, focus, live regions, contrast in both themes, text at 200%, 320 px; the stepper and the rule-check panel with a screen reader if one can be run.
+**Acceptance Criteria**: axe 0 violations in every state; defects fixed or filed with an owner; what was not tested is listed
+**Depends on**: C4.2, C3.3
+
+### [ ] Task G4.3: First-evening test
+**Owner**: UX Researcher · **QA**: Product Manager
+**Description**: Three people who play but did not follow this project build a level-1 character in the ruleset they know, then level it to 3, then print the PDF. Record time, errors, places they got stuck, and whether the PDF is what they would bring to a table.
+**Acceptance Criteria**: `docs/qa/character-first-evening.md`; the success measure from C0.1 (under 15 minutes, no outside help) met or the gap filed as tasks before certification
+**Depends on**: C5.4, C4.2
+
+### [ ] Task G4.4: Release 1.5 certification
+**Owner**: Reality Checker · **QA**: **Owner (human)**
+**Description**: Evidence for every 1.5 item that was built: full gate, `pnpm e2e` three times and against Docker, phone project, restore drill with a populated sheet table (and the restore drill test against the built bundle: `pnpm gate:drill`, both tests passing, none skipped; H1.2), upgrade from a populated 1.4 (or 1.3.x) volume, all golden characters, PDF checks, the live visibility checks. Stretch tasks that were not built are moved to §7 with a note.
+**Acceptance Criteria**: every success measure in C0.1 MET or the gap accepted by the owner in writing
+**Depends on**: all 1.5 tasks except C3.4 and C6.1, which only run if scheduled (F1.1 to F1.4 are 1.5 tasks)
+
+| Wave | Tasks |
+|---|---|
+| 1 | C0.1, C0.2, C0.3, C5.1 (independent of each other) |
+| 2 | C0.4, C0.5, C0.6 (after wave 1), then C0.7 (owner decisions D8 to D12) |
+| 3 | C1.1, C2.1 (schema merged alone by the Git Workflow Master) |
+| 4 | C1.2, C5.2 |
+| 5 | C1.3, then C1.4 |
+| 6 | C2.2, then C2.3 |
+| 7 | C3.1, C5.3 (then C3.2 once C3.1 is merged: same folder) |
+| 8 | C3.3, C4.1, C5.4, C6.1 (stretch) |
+| 9 | C4.2, C3.4 (stretch), C7.1, F1.1, F1.2, F1.3, F1.4 |
+| 10 | C7.2, G4.1, G4.2, G4.3, then G4.4 |
+
+**Starting the pipeline.** "Activate Agents Orchestrator. Spec: `docs/PRD.md` (after C0.1). Task list: `docs/PROJECT.md` §6c. Run Release 1.5, wave by wave, and stop after wave 2 for the owner's decisions D8 to D12." Rules for every agent are §4; the §3 flow applies (owner, Code Reviewer, QA, three tries, escalate). Waves 1 and 2 are documents: no code, so their QA agents read and challenge them rather than run a gate.
+
+**Effort and risk.** 31 tasks (29 plus two stretch), the largest release so far. The riskiest tasks, scheduled so a failure shows early: C0.3 (rules correctness, the Game Designer's spec is the ground truth for everything after), C1.2 (the real data may not describe every choice), C5.1 (the engine choice). If wave 2 shows the rules spec cannot be finished for tier A in both rulesets, the Senior Project Manager re-plans to one ruleset first, with the other as the next release, and the owner decides.
+
+## 6d. Release 1.3.2: Safer deletes
+
+Added 2026-11-01 by the Senior Project Manager at the owner's request, from the 1.3.1 certification. **Theme:** what an AI assistant or a stray click deletes can be undone or must be confirmed. It follows 1.3.1 and comes before 1.4. It changes the database (task S2.2), so its changelog needs an Upgrade note.
+
+### [ ] Task S2.1: Confirmation for the other destructive AI-assistant tools
+**Owner**: MCP Builder · **QA**: API Tester, Code Reviewer
+**Description**: S1.5 made `delete_property` require `confirm: true`. Give the three tools it found without recovery the same gate, in the same way (strict boolean `confirm`; without it nothing is deleted and the answer names what would be deleted, that it cannot be undone and how to confirm; only game masters reach the gate, players and outsiders keep their old answers; `destructive: true` kept): `remove_inventory_item` (a hard delete), `delete_template` and `delete_encounter` (soft-deleted in the database but with no restore tool or UI). Re-read the S1.5 Done note for the choices made there (the schema stays strictly typed, so other types are refused by the input check). Templates and encounters have no restore option today; the refusal text must say that deleting them cannot be undone. Update the tool descriptions, the README MCP section and `docs/STATUS.md`.
+**Acceptance Criteria**: for each tool: no `confirm`, `confirm: false` and a non-boolean delete nothing; `confirm: true` deletes as before; players, outsiders and read-only tokens get exactly their old answers; a test per case; the MCP tool listing is updated; the changelog says so; the gate stays green
+**Depends on**: none
+
+### [ ] Task S2.2: Restore for deleted property definitions
+**Owner**: Backend Architect (server, schema), Frontend Developer (UI), MCP Builder (tools) · **QA**: API Tester, Evidence Collector, Database Reliability Engineer
+**Description**: Deleting a property definition now removes it and its value on every page for good (the web app asks first; an AI assistant needs `confirm: true`). Give property definitions the same lifecycle as pages and templates: a soft delete that keeps the definition and the page values, a 'Deleted properties' list for game masters (restore, delete permanently) with the 30-day retention and the purger of `TRASH_RETENTION_DAYS`, restore through the app and through an MCP tool (`restore_property`, with `list_trash`-style listing), an Undo toast after the delete like the page delete. Page values of a deleted definition are hidden from every view, query, search and export while it is deleted and come back on restore; a definition with the same key created while the old one is deleted must not collide (decide and document: restoring renames or is refused with a clear message). Schema change in both `schema.ts` and `schema.pg.ts` with `db:generate`, the parity test and the schema-allowlist test for the restore path. Players never see deleted definitions or their values; add them to the sentinel crawl.
+**Acceptance Criteria**: delete, Undo and restore bring back the definition and every page value (browser and API tests); permanent delete and the 30-day purge remove them for good; no collision case loses data; the backup and restore drill covers a database with a deleted definition; sentinel crawl green; unit and e2e specs; the migration upgrades a populated 1.3.x volume without loss
+**Depends on**: none
+
+### 6d.1 Release gate and waves
+
+| Wave | Tasks |
+|---|---|
+| 1 | S2.1, S2.2 (independent of each other; S2.2's schema is merged alone) |
+| 2 | G3.2 |
+
+### [ ] Task G3.2: Release 1.3.2 certification
+**Owner**: Reality Checker · **QA**: **Owner (human)**
+**Description**: Evidence for every 1.3.2 item that was built; full gate, `pnpm e2e`, phone project, `pnpm gate:drill`, Docker image, and an upgrade from a populated 1.3.1 volume (S2.2 changes the database).
+**Depends on**: S2.1, S2.2
 
 ## 7. Backlog: assigned, broken down when scheduled
 
-The Senior Project Manager breaks these into tasks at the start of their release.
+The Senior Project Manager breaks these into tasks at the start of their release. N13 (character sheet depth) moved to release 1.5 (§6c) on 2026-10-26.
 
 | PRD | Item | Lead | With | QA |
 |---|---|---|---|---|
@@ -827,7 +1166,7 @@ The Senior Project Manager breaks these into tasks at the start of their release
 | N10 | Real-time co-editing and presence | Realtime Collaboration Engineer | Software Architect, Frontend Developer | Test Automation Engineer, Reality Checker |
 | N11 | SRD-only mode | Legal Compliance Checker (first) → Backend Architect | Product Manager | Reality Checker |
 | N12 | Session recap helper | MCP Builder | Narrative Designer | API Tester |
-| N13 | Deeper character sheets | UX Researcher (validate demand first) → Game Designer | Frontend Developer | Evidence Collector |
+| N13 | Deeper character sheets: planned in release 1.5 as N13, N18, N19 and N20 (§6c) | Game Designer (rules) → Backend Architect | Frontend Developer | Evidence Collector |
 | N14 | Postgres at run time, several processes | Database Reliability Engineer | Backend Architect, Software Architect | Performance Benchmarker, API Tester |
 | N15 | Offline reading | Frontend Developer | Realtime Collaboration Engineer | Evidence Collector |
 | N16 | Translations | Internationalization Engineer | Frontend Developer | Evidence Collector |
@@ -860,6 +1199,11 @@ The Senior Project Manager breaks these into tasks at the start of their release
 
 | D6 | Templates in the trash (PRD §8 M4: "templates get the same" as homebrew). M4.2 built the API only (`GET /api/templates/trash`, `POST /api/templates/:id/restore`). Options: (a) accept the API for 1.0 and note it in the README/STATUS; (b) add a small restore list to the template manager UI (one Frontend Developer task, QA Evidence Collector); and separately, purge trashed templates after 30 days like pages or keep them for good. Recommended: (b) for the UI, keep templates unpurged | M4.6, G1.4 | Product Manager | Decided 2026-10-18: add a small restore UI (task M4.6) and purge templates like pages: 30 days, plus Delete permanently (task M4.7) |
 | D7 | M6 (phone-width player and table flows) is PRD P0 "before 1.0". Does it land before the 1.0 tag, or move to 1.0.x or 1.1? If it moves, the PRD release scope changes and the changelog keeps its "not part of this release" paragraph; if it lands, the paragraph is removed before the tag | M6.1-M6.5, M5.6, G1.4 | Product Manager | Decided 2026-10-19: M6 lands before the 1.0 tag (must have). The changelog's "not part of this release" paragraph is removed when M6 is done |
+| D8 | Release placement of Characters. Options: (a) release 1.5 after 1.3.1, with 1.4 unchanged; (b) swap, Characters as 1.4; (c) split by ruleset (2024 first, 2014 next). Recommended (a): 1.4 is already assigned and the Game Designer's spec (C0.3) shows whether (c) is needed | C0.7, wave 3 | Product Manager | Open |
+| D9 | Who creates characters. Options: (a) only the GM, who assigns it; (b) the GM, and a player for themselves (at most 3 per player per campaign, a campaign setting the GM can switch off). Recommended (b): the builder is most useful to the player; the server enforces the cap and the GM keeps the off switch (schema in C2.1) | C2.1, C3.2 | Product Manager, Software Architect | Open |
+| D10 | PDF engine, after the C5.1 measurements. Options: (a) pure JavaScript library on the server; (b) the browser's print dialog; (c) headless browser on the server. Recommended (a), unless C5.1 shows a licence or size problem: small image, testable, the server controls the bytes and the projection | C5.2, C0.6 | Backend Architect, DevOps Automator | Open (needs C5.1) |
+| D11 | How strict the rules are. Options: (a) block illegal builds for everyone; (b) block for players, GM can override with a visible note and a history entry; (c) warn only. Recommended (b), the same "DM is the referee" principle as the tracker | C1.3, C2.2 | Game Designer | Open |
+| D12 | Content sources and the PDF's legal position. (1) Builder offers the campaign ruleset's core sources plus the campaign's enabled sources; the other edition only behind the existing cross-edition switch, labelled; (2) the PDF is an original layout, no WotC art, logo or fonts, carries an attribution footer, and prints rules text only from the user's own data. Recommended: as stated, after the C0.2 brief | C0.6, C5.2 | Legal Compliance Checker | Open (needs C0.2) |
 
 ### Risks
 | Risk | Impact | Mitigation | Owner |
@@ -870,6 +1214,11 @@ The Senior Project Manager breaks these into tasks at the start of their release
 | Agents add features beyond the task | Slower releases, untested code | Scope rule in §4; Code Reviewer rejects extras; ideas go to the Product Manager | Senior Project Manager |
 | Agent output looks done but isn't | False progress | Evidence-based QA; Reality Checker defaults to NEEDS WORK | Reality Checker |
 | Backups expose password and token hashes | Account takeover if a backup leaks | Admin-only download; documented storage advice (M3.1, M3.6) | Database Reliability Engineer |
+| The character sheet PDF copies the WotC form (layout, art, wording) or prints rules text the user may not export | Legal exposure | Original layout, C0.2 brief, C0.6 sign-off by the Legal Compliance Checker, attribution footer | Legal Compliance Checker |
+| "Follows the rules" is unbounded (about 12 classes, 100+ subclasses, two rulesets) | Release never ends, or silent rule bugs | Three tiers (§6c), Game Designer's spec as ground truth, golden characters with a mutation check (C1.4), unknown data becomes "choose by hand" | Senior Project Manager |
+| A wrong rule in the builder looks authoritative | Players trust a wrong sheet | Derived numbers show the rule behind them, "not checked" badge for tier B/C, GM override is visible, README lists what is not enforced | Game Designer |
+| The sheet or the PDF leaks DM-only content, or the renderer is used to exhaust the server | Secret leak, denial of service | PDF built only from the projected sheet (never the page body), sentinel crawl and byte-level check, rate and time limits, G4.1 review | Application Security Engineer |
+| The PDF engine adds weight to the Docker image or needs native libraries | Slower pulls, harder self-hosting | C5.1 measures first; a headless browser is the option of last resort | DevOps Automator |
 
 ## 9. Setting up the agents
 

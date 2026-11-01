@@ -5,6 +5,7 @@
  */
 import type { BlockDocument, BlockNode } from './doc';
 import { blockType, type ProjectContext } from './registry';
+import { sanitizeDoc } from './sanitize';
 
 export function isHiddenFromPlayers(node: BlockNode): boolean {
   const def = blockType(node.type);
@@ -47,8 +48,18 @@ export function droppedForPlayers(node: BlockNode, ctx: ProjectContext): boolean
 const isBlockList = (nodes: BlockNode[]) => nodes.some((n) => blockType(n.type)?.kind === 'block');
 
 /** Hidden blocks inside a visible block (not descending into the hidden ones). */
-function hiddenDescendants(node: BlockNode, ctx: ProjectContext): BlockNode[] {
-  return (node.content ?? []).flatMap((c) => (droppedForPlayers(c, ctx) ? [c] : hiddenDescendants(c, ctx)));
+function hiddenDescendants(node: BlockNode, ctx: ProjectContext, moved: ReadonlySet<string>): BlockNode[] {
+  return (node.content ?? []).flatMap((c) => {
+    if (droppedForPlayers(c, ctx)) return [c];
+    // A visible block the player moved elsewhere takes its hidden children with it
+    return typeof c.attrs?.id === 'string' && moved.has(c.attrs.id) ? [] : hiddenDescendants(c, ctx, moved);
+  });
+}
+
+/** Stored blocks the player can see, by id, at every nesting level; and the ids of the blocks the merge visits in the submitted tree. */
+interface MergeIndex {
+  storedById: Map<string, BlockNode>;
+  submittedIds: Set<string>;
 }
 
 /**
@@ -137,11 +148,10 @@ function clearRevealed(node: BlockNode): BlockNode {
   return out.content ? { ...out, content: out.content.map(clearRevealed) } : out;
 }
 
-function mergeLevel(stored: BlockNode[], submitted: BlockNode[], ctx: ProjectContext): BlockNode[] {
+function mergeLevel(stored: BlockNode[], submitted: BlockNode[], ctx: ProjectContext, index: MergeIndex): BlockNode[] {
   // Blocks the player never saw, keyed by the id of the visible block they followed ('' = the start)
   const anchored = new Map<string, BlockNode[]>();
   const anchorOf = new Map<BlockNode, string>();
-  const visibleById = new Map<string, BlockNode>();
   let anchor = '';
   for (const n of stored) {
     if (droppedForPlayers(n, ctx)) {
@@ -152,10 +162,8 @@ function mergeLevel(stored: BlockNode[], submitted: BlockNode[], ctx: ProjectCon
     const id = n.attrs?.id;
     if (typeof id === 'string' && id) {
       anchor = id;
-      visibleById.set(id, n);
     }
   }
-  const submittedIds = new Set(submitted.map((n) => n.attrs?.id).filter((id): id is string => typeof id === 'string' && !!id));
   const usedIds = new Set<string>();
   const out: BlockNode[] = [...(anchored.get('') ?? [])];
   const placed = new Set(['']);
@@ -167,11 +175,11 @@ function mergeLevel(stored: BlockNode[], submitted: BlockNode[], ctx: ProjectCon
       id = '';
     }
     if (id) usedIds.add(id);
-    const before = id ? visibleById.get(id) : undefined;
+    const before = id ? index.storedById.get(id) : undefined;
     // Containers the player edited keep their hidden children too
     let merged = n;
     if (before && JSON.stringify(projectNodes([before], ctx)) === JSON.stringify([n])) merged = before;
-    else if (before?.content && isBlockList(before.content)) merged = { ...n, content: mergeLevel(before.content, n.content ?? [], ctx) };
+    else if (before && (isBlockList(before.content ?? []) || isBlockList(n.content ?? []))) merged = { ...n, content: mergeLevel(before.content ?? [], n.content ?? [], ctx, index) };
     else if (before) {
       // No stored blocks to match against (inline content, or an empty container): everything the player added is new, so it starts unrevealed
       const restored = before.content ? restoreHiddenLinks(before, n, ctx) : n;
@@ -180,7 +188,7 @@ function mergeLevel(stored: BlockNode[], submitted: BlockNode[], ctx: ProjectCon
     // Block types put back what their own projection took out (a query block's DM-only columns)
     if (before && merged !== before) merged = blockType(n.type)?.restoreHidden?.(before, merged, ctx) ?? merged;
     // Players cannot change `revealed`: a stored block keeps its flag, a new block starts unrevealed
-    if (!before) merged = clearRevealed(merged);
+    if (!before) merged = n.content && isBlockList(n.content) ? { ...clearRevealed({ ...n, content: undefined }), content: mergeLevel([], n.content, ctx, index) } : clearRevealed(merged);
     else if (!!merged.attrs?.revealed !== !!before.attrs?.revealed) merged = { ...merged, attrs: { ...merged.attrs, revealed: !!before.attrs?.revealed } };
     out.push(merged);
     if (id && anchored.has(id) && !placed.has(id)) {
@@ -196,7 +204,7 @@ function mergeLevel(stored: BlockNode[], submitted: BlockNode[], ctx: ProjectCon
       continue;
     }
     const id = n.attrs?.id;
-    if (typeof id === 'string' && id && !submittedIds.has(id)) out.push(...hiddenDescendants(n, ctx));
+    if (typeof id === 'string' && id && !index.submittedIds.has(id)) out.push(...hiddenDescendants(n, ctx, index.submittedIds));
   }
   return out;
 }
@@ -218,7 +226,11 @@ export function mergePlayerEdit(stored: BlockDocument | null, submittedDoc: Bloc
     if (node.type === 'pageEmbed' && node.attrs?.pageId && !ctx.canSeePage(String(node.attrs.pageId))) return [];
     return [node.content ? { ...node, content: node.content.flatMap(flattenHiddenLinks) } : node];
   };
-  const submitted = { ...submittedDoc, content: submittedDoc.content?.flatMap(flattenHiddenLinks) };
+  // Sanitize first, as the server does when it stores the result: a block inside inline content is flattened and a child the parent does not allow
+  // is removed before any id is matched, so the merge only ever sees positions where blocks can really sit (a forged copy of a stored container
+  // inside a paragraph cannot take the container's hidden children, and a stored block whose copy is removed is kept by the deleted-block rule).
+  const clean = sanitizeDoc(submittedDoc).doc;
+  const submitted = { ...clean, content: clean.content?.flatMap(flattenHiddenLinks) };
   if (!stored?.content?.length) return { ...submitted, content: submitted.content?.map(clearRevealed) };
   // The player never held an id of a block they cannot see, so any submitted block carrying one (at any depth) gets a new id on save
   const hiddenIds = new Set<string>();
@@ -228,13 +240,35 @@ export function mergePlayerEdit(stored: BlockDocument | null, submittedDoc: Bloc
   };
   const collectHidden = (node: BlockNode) => (droppedForPlayers(node, ctx) ? collectAll(node) : node.content?.forEach(collectHidden));
   stored.content.forEach(collectHidden);
+  const storedById = new Map<string, BlockNode>();
+  const indexStored = (nodes: BlockNode[]) => {
+    for (const n of nodes) {
+      if (droppedForPlayers(n, ctx)) continue;
+      if (typeof n.attrs?.id === 'string' && n.attrs.id) storedById.set(n.attrs.id, n);
+      if (n.content) indexStored(n.content);
+    }
+  };
+  indexStored(stored.content);
+  const seenIds = new Set<string>();
   const stripHidden = (node: BlockNode): BlockNode => {
     let out = node;
-    if (typeof node.attrs?.id === 'string' && hiddenIds.has(node.attrs.id)) {
-      const { id: _dropped, ...attrs } = node.attrs;
+    const id = node.attrs?.id;
+    // A forged id is dropped: an id of a block the player never saw, a repeated id (the first block keeps it), or the id of a stored block of another type
+    if (typeof id === 'string' && (hiddenIds.has(id) || seenIds.has(id) || (storedById.has(id) && storedById.get(id)!.type !== node.type))) {
+      const { id: _dropped, ...attrs } = node.attrs!;
       out = { ...node, attrs };
-    }
+    } else if (typeof id === 'string') seenIds.add(id);
     return out.content ? { ...out, content: out.content.map(stripHidden) } : out;
   };
-  return { ...submitted, content: mergeLevel(stored.content, (submitted.content ?? []).map(stripHidden), ctx) };
+  const merging = (submitted.content ?? []).map(stripHidden);
+  // Blocks are matched by id across levels, so a paragraph moved into or out of a container keeps the DM's links
+  const index: MergeIndex = { storedById, submittedIds: new Set() };
+  const indexSubmitted = (nodes: BlockNode[]) => {
+    for (const n of nodes) {
+      if (typeof n.attrs?.id === 'string' && n.attrs.id) index.submittedIds.add(n.attrs.id);
+      if (n.content && isBlockList(n.content)) indexSubmitted(n.content);
+    }
+  };
+  indexSubmitted(merging);
+  return { ...submitted, content: mergeLevel(stored.content, merging, ctx, index) };
 }

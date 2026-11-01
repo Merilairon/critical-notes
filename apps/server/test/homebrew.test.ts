@@ -6,7 +6,7 @@ import { fetchUrlText, isBlockedAddress } from '../src/homebrew/fetch-url';
 import { validateHomebrewDocument } from '../src/homebrew/schema';
 import { newId } from '../src/lib/ids';
 import { hashPassword } from '../src/lib/password';
-import { createFixture, createSignedInApp, TestClient, type Fixture, type TestApp } from './helpers';
+import { HOMEBREW_WARMUP_TIMEOUT, warmHomebrewValidator, createFixture, createSignedInApp, TestClient, type Fixture, type TestApp } from './helpers';
 
 let fx: Fixture;
 let app: TestApp;
@@ -54,7 +54,8 @@ beforeAll(async () => {
   fx = await createFixture();
   ({ app, client: dm } = await createSignedInApp(fx));
   campaignId = (await dm.post('/api/campaigns', { name: 'Brew Test', ruleset: '2014' })).body.id;
-}, 30_000);
+  warmHomebrewValidator();
+}, HOMEBREW_WARMUP_TIMEOUT);
 afterAll(() => fx.cleanup());
 
 describe('homebrew sources', () => {

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { and, asc, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
-import { docLinks, mergePlayerEdit, projectDoc, queryFilterSchema, runQuery, sanitizeDoc, type BlockDocument, type BlockNode, type ProjectContext, type QueryablePage, type QueryFilterInput } from '@cn/blocks';
+import { docLinks, MAX_BLOCK_DEPTH, mergePlayerEdit, projectDoc, queryFilterSchema, runQuery, sanitizeDoc, type BlockDocument, type BlockNode, type ProjectContext, type QueryablePage, type QueryFilterInput } from '@cn/blocks';
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { generateKeyBetween } from 'fractional-indexing';
 import {
@@ -77,7 +77,7 @@ export interface PageChange {
   after: PageState;
 }
 
-export function toSummary(p: PageRow): PageSummaryDto {
+export function toSummary(p: Pick<PageRow, 'id' | 'parentId' | 'sortKey' | 'type' | 'title' | 'icon' | 'visibility' | 'updatedAt'>): PageSummaryDto {
   return {
     id: p.id,
     parentId: p.parentId,
@@ -233,9 +233,20 @@ export class PageService {
     return rows.length;
   }
 
-  private livePages(campaignId: string) {
+  /** Live pages of a campaign without their bodies (no caller needs one; a body is read per page by `row`/`get`). */
+  private livePageSummaries(campaignId: string) {
     return this.db
-      .select()
+      .select({
+        id: pages.id,
+        parentId: pages.parentId,
+        sortKey: pages.sortKey,
+        type: pages.type,
+        title: pages.title,
+        icon: pages.icon,
+        visibility: pages.visibility,
+        createdAt: pages.createdAt,
+        updatedAt: pages.updatedAt,
+      })
       .from(pages)
       .where(and(eq(pages.campaignId, campaignId), isNull(pages.deletedAt)))
       .orderBy(asc(pages.sortKey))
@@ -243,7 +254,7 @@ export class PageService {
   }
 
   tree(campaignId: string): PageSummaryDto[] {
-    return this.livePages(campaignId).map(toSummary);
+    return this.livePageSummaries(campaignId).map(toSummary);
   }
 
   private row(campaignId: string, pageId: string): PageRow {
@@ -323,19 +334,23 @@ export class PageService {
       .all();
   }
 
-  private assertPageInCampaign(campaignId: string, pageId: string | null | undefined, expectedType?: PageType) {
+  /** With `visible` (a player's write) a page outside that set is answered exactly like a missing one, so the error is no oracle. */
+  private assertPageInCampaign(campaignId: string, pageId: string | null | undefined, expectedType?: PageType, visible?: ReadonlySet<string>) {
     if (!pageId) return;
+    if (visible && !visible.has(pageId)) throw badRequest(`Linked page ${pageId} not found in this campaign`);
     const row = this.db.select({ id: pages.id, type: pages.type }).from(pages).where(and(eq(pages.id, pageId), eq(pages.campaignId, campaignId), isNull(pages.deletedAt))).get();
     if (!row) throw badRequest(`Linked page ${pageId} not found in this campaign`);
     if (expectedType && row.type !== expectedType) throw badRequest(`Linked page must be a ${expectedType}`);
   }
 
-  private validateFacet(campaignId: string, facetType: FacetType, input: unknown): Record<string, unknown> {
+  private validateFacet(campaignId: string, facetType: FacetType, input: unknown, visible?: ReadonlySet<string>, submitted?: ReadonlySet<string>): Record<string, unknown> {
     const parsed = FACET_SCHEMAS[facetType].safeParse(input ?? {});
     if (!parsed.success) throw badRequest('Invalid page properties', parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })));
     const data = parsed.data as Record<string, unknown>;
     for (const field of FACET_FIELDS[facetType]) {
-      if (field.type === 'pageLink') this.assertPageInCampaign(campaignId, data[field.key] as string | null, field.pageType);
+      // A player is checked only on the links they submitted; links the DM stored are merged in and stay untouched on purpose.
+      // Unreachable by players today: they edit only PC pages and a PC facet has no pageLink field.
+      if (field.type === 'pageLink') this.assertPageInCampaign(campaignId, data[field.key] as string | null, field.pageType, submitted?.has(field.key) ? visible : undefined);
     }
     return data;
   }
@@ -384,7 +399,7 @@ export class PageService {
     return this.get(campaignId, id);
   }
 
-  update(campaignId: string, pageId: string, input: UpdatePageInput, ctx: WriteContext): PageDto {
+  update(campaignId: string, pageId: string, input: UpdatePageInput, ctx: WriteContext, playerVisible?: ReadonlySet<string>): PageDto {
     const current = this.row(campaignId, pageId);
     if (current.revision !== input.revision) {
       throw conflict('This page was changed by someone else', { current: this.get(campaignId, pageId) });
@@ -395,7 +410,7 @@ export class PageService {
     let facet: Record<string, unknown> | null = null;
     if (newFacetType && (input.facet !== undefined || newFacetType !== oldFacetType)) {
       const base = newFacetType === oldFacetType ? (this.facetOf(nextType, pageId) ?? {}) : {};
-      facet = this.validateFacet(campaignId, newFacetType, { ...base, ...(input.facet ?? {}) });
+      facet = this.validateFacet(campaignId, newFacetType, { ...base, ...(input.facet ?? {}) }, playerVisible, new Set(Object.keys(input.facet ?? {})));
     }
     const storedBody = input.body !== undefined ? this.sanitizeBody(input.body) : undefined;
     const viewersBefore = this.onCommitted ? this.viewerIds(pageId) : [];
@@ -403,7 +418,7 @@ export class PageService {
     this.db.transaction((tx) => {
       // The state this write overwrites, before anything changes; the properties join the page and its revision in one commit
       const pre = this.preState(tx, campaignId, pageId);
-      if (input.props) this.properties.setValues(campaignId, pageId, input.props, (id) => this.assertPageInCampaign(campaignId, id));
+      if (input.props) this.properties.setValues(campaignId, pageId, input.props, (id) => this.assertPageInCampaign(campaignId, id, undefined, playerVisible));
       const patch: Partial<typeof pages.$inferInsert> = { updatedAt: Date.now(), revision: current.revision + 1 };
       if (input.title !== undefined) patch.title = input.title;
       if (input.icon !== undefined) patch.icon = input.icon;
@@ -452,7 +467,7 @@ export class PageService {
     if (parentId) {
       this.assertPageInCampaign(campaignId, parentId);
       // Prevent cycles: the new parent must not be the page itself or one of its descendants
-      const all = this.livePages(campaignId);
+      const all = this.livePageSummaries(campaignId);
       const parentOf = new Map(all.map((p) => [p.id, p.parentId]));
       for (let cur: string | null | undefined = parentId; cur; cur = parentOf.get(cur)) {
         if (cur === pageId) throw badRequest('Cannot move a page into itself');
@@ -600,7 +615,7 @@ export class PageService {
   /** Soft-deletes a page and its descendants. Returns the deleted ids. */
   remove(campaignId: string, pageId: string): string[] {
     this.row(campaignId, pageId);
-    const all = this.livePages(campaignId);
+    const all = this.livePageSummaries(campaignId);
     const children = new Map<string | null, string[]>();
     for (const p of all) children.set(p.parentId, [...(children.get(p.parentId) ?? []), p.id]);
     const ids: string[] = [];
@@ -655,7 +670,7 @@ export class PageService {
 
   /** The DM's "preview as player": what a player who is shown every shared page receives. */
   projectForPlayers(campaignId: string, page: PageDto): PageDto {
-    const shared = new Set(this.livePages(campaignId).filter((p) => p.visibility === 'all').map((p) => p.id));
+    const shared = new Set(this.livePageSummaries(campaignId).filter((p) => p.visibility === 'all').map((p) => p.id));
     return this.projectPage(campaignId, page, shared);
   }
 
@@ -687,6 +702,14 @@ export class PageService {
     });
   }
 
+  /** Query field names whose schema type is page-link (facet fields and custom properties), for sorting by target title. */
+  private pageLinkFields(defs: { key: string; type: string }[]): Set<string> {
+    const out = new Set<string>();
+    for (const fields of Object.values(FACET_FIELDS)) for (const f of fields) if (f.type === 'pageLink') out.add(`facet.${f.key}`);
+    for (const d of defs) if (d.type === 'pageLink') out.add(`prop.${d.key}`);
+    return out;
+  }
+
   /** Query rows over what the viewer sees (players cannot filter on hidden fields either). */
   queryFor(campaignId: string, viewer: Viewer, filterInput: QueryFilterInput, ctxPageId: string | null, visible: ReadonlySet<string>): QueryRowDto[] {
     if (viewer.gm) return this.query(campaignId, filterInput, ctxPageId);
@@ -712,10 +735,28 @@ export class PageService {
         };
       });
     const byId = new Map(rows.map((r) => [r.id, r]));
-    return runQuery(rows, parsed.data, ctxPageId && canSeePage(ctxPageId) ? ctxPageId : null).map((p) => {
+    return runQuery(rows, parsed.data, ctxPageId && canSeePage(ctxPageId) ? ctxPageId : null, { pageLinkFields: this.pageLinkFields(defs) }).map((p) => {
       const full = byId.get(p.id)!;
       return { ...full.summary, createdAt: full.createdAt, tags: full.tags, facet: full.facet, props: full.props };
     });
+  }
+
+  /**
+   * A body must be a tree of block objects that the sanitizer keeps whole: a block at the sanitizer's depth limit loses its
+   * children, so nothing may sit below it. Run on what the player submits (independent of what is stored) and again on the
+   * merge result, because a moved container brings hidden descendants the player cannot see, and those must never be truncated away.
+   */
+  private checkPlayerShape(body: unknown) {
+    const malformed = () => badRequest('The page body is malformed');
+    const stack: [unknown, number][] = [[body, 0]];
+    for (let item = stack.pop(); item; item = stack.pop()) {
+      const [node, depth] = item;
+      if (!node || typeof node !== 'object' || Array.isArray(node) || depth > MAX_BLOCK_DEPTH + 1) throw malformed();
+      const content = (node as { content?: unknown }).content;
+      if (content === undefined) continue;
+      if (!Array.isArray(content)) throw malformed();
+      for (const c of content) stack.push([c, depth + 1]);
+    }
   }
 
   /**
@@ -761,9 +802,11 @@ export class PageService {
     const dmFields = new Set(facetType ? FACET_DM_ONLY_FIELDS[facetType] : []);
     if (input.facet && Object.keys(input.facet).some((k) => dmFields.has(k) || k === 'playerUserId')) throw badRequest('Those details are for the DM');
     const projectCtx = this.playerContext(this.properties.list(campaignId), visible);
+    if (input.body) this.checkPlayerShape(input.body);
     if (input.body) this.checkPlayerTextSize(current.body as BlockDocument | null, input.body as BlockDocument, projectCtx);
     const body = input.body ? (mergePlayerEdit(current.body as BlockDocument | null, input.body as BlockDocument, projectCtx) as BlockDoc) : undefined;
-    const saved = this.update(campaignId, pageId, { ...input, ...(body ? { body } : {}) }, ctx);
+    if (body) this.checkPlayerShape(body);
+    const saved = this.update(campaignId, pageId, { ...input, ...(body ? { body } : {}) }, ctx, visible);
     return this.projectPage(campaignId, saved, visible);
   }
 
@@ -786,7 +829,7 @@ export class PageService {
 
   /** All live pages of a campaign in queryable form (facets, tags, props). */
   queryable(campaignId: string): (QueryablePage & { summary: PageSummaryDto })[] {
-    const rows = this.livePages(campaignId);
+    const rows = this.livePageSummaries(campaignId);
     const ids = rows.map((r) => r.id);
     const tags = new Map<string, string[]>();
     if (ids.length) for (const t of this.db.select().from(pageTags).where(inArray(pageTags.pageId, ids)).all()) tags.set(t.pageId, [...(tags.get(t.pageId) ?? []), t.tag]);
@@ -819,7 +862,7 @@ export class PageService {
     if (!parsed.success) throw badRequest('Invalid query', parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })));
     const all = this.queryable(campaignId).filter((p) => canSee(p.id));
     const byId = new Map(all.map((p) => [p.id, p]));
-    return runQuery(all, parsed.data, ctxPageId).map((p) => {
+    return runQuery(all, parsed.data, ctxPageId, { pageLinkFields: this.pageLinkFields(this.properties.list(campaignId)) }).map((p) => {
       const full = byId.get(p.id)!;
       return { ...full.summary, createdAt: full.createdAt, tags: full.tags, facet: full.facet, props: full.props };
     });
